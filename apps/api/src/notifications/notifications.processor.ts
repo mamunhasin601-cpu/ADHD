@@ -1,51 +1,44 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
-import { Job } from 'bullmq';
+import type { Job } from 'bullmq';
 import { NotificationsService, TaskReminderJobData } from './notifications.service';
 import { TASK_REMINDERS_QUEUE, JOBS } from './notifications.constants';
 
-/**
- * BullMQ Processor — воркер, который забирает задачи из Redis-очереди
- * и отправляет push-уведомления.
- *
- * Ключевое для надёжности:
- * - Каждый job имеет attempts: 3 с exponential backoff
- * - Все результаты (успех/ошибка) пишутся в NotificationLog
- * - Processor изолирован от HTTP-слоя — работает независимо
- */
 @Processor(TASK_REMINDERS_QUEUE)
 export class NotificationsProcessor extends WorkerHost {
   private readonly logger = new Logger(NotificationsProcessor.name);
 
-  constructor(private readonly notificationsService: NotificationsService) {
+  constructor(private readonly notifications: NotificationsService) {
     super();
   }
 
   async process(job: Job<TaskReminderJobData>): Promise<void> {
-    this.logger.log(`Обрабатываю job [${job.name}] id=${job.id} taskId=${job.data.taskId}`);
+    if (job.name !== JOBS.TASK_REMINDER) return;
 
-    if (job.name === JOBS.TASK_REMINDER) {
-      await this.handleTaskReminder(job.data);
-    } else {
-      this.logger.warn(`Неизвестный тип job: ${job.name}`);
+    const { taskId, userId, taskTitle } = job.data;
+
+    // Доп. страховка от задвоения (помимо детерминированного jobId при постановке в очередь)
+    const alreadySent = await this.notifications.wasRecentlyDelivered(taskId);
+    if (alreadySent) {
+      this.logger.debug(`Напоминание по задаче ${taskId} уже было доставлено недавно — пропуск`);
+      return;
     }
-  }
 
-  private async handleTaskReminder(data: TaskReminderJobData): Promise<void> {
-    const { taskId, userId, taskTitle } = data;
-
-    const delivered = await this.notificationsService.sendPushNotification(
+    const result = await this.notifications.sendPushNotification(
       userId,
-      '⏰ Время начинать!',
-      `Задача: ${taskTitle}`,
+      'Пора начинать',
+      taskTitle,
     );
 
-    // Записываем результат независимо от успеха/ошибки — для мониторинга
-    await this.notificationsService.logNotification(userId, taskId, delivered);
+    const delivered = result.status === 'sent';
+    await this.notifications.logNotification(userId, taskId, delivered);
 
-    if (!delivered) {
-      // Бросаем ошибку — BullMQ выполнит retry согласно настройкам job
-      throw new Error(`Push не доставлен для задачи ${taskId}`);
+    // no-token / device-not-registered — ретраить бессмысленно (токен уже очищен/отсутствует)
+    if (result.status === 'error') {
+      // Бросаем ошибку — BullMQ применит retry/backoff, заданные при постановке в очередь (3 попытки)
+      throw new Error(
+        `Push не доставлен пользователю ${userId} по задаче ${taskId}: ${result.message}`,
+      );
     }
   }
 }

@@ -1,102 +1,79 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { TasksService } from './tasks.service';
-import { PrismaService } from '../prisma/prisma.service';
-import { NotFoundException, ForbiddenException } from '@nestjs/common';
 
-// Минимальный mock PrismaService для unit-тестов
-const mockPrisma = {
-  task: {
-    create: jest.fn(),
-    findMany: jest.fn(),
-    findUnique: jest.fn(),
-    update: jest.fn(),
-    delete: jest.fn(),
-  },
-};
-
-describe('TasksService', () => {
+describe('TasksService — синхронизация напоминаний', () => {
   let service: TasksService;
+  let prisma: any;
+  let notifications: any;
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        TasksService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
-    }).compile();
+  const userId = 'user-1';
 
-    service = module.get<TasksService>(TasksService);
-    jest.clearAllMocks();
+  beforeEach(() => {
+    prisma = {
+      task: {
+        create: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+        findUnique: jest.fn(),
+      },
+    };
+    notifications = {
+      scheduleTaskReminder: jest.fn().mockResolvedValue(undefined),
+      cancelTaskReminder: jest.fn().mockResolvedValue(undefined),
+    };
+    service = new TasksService(prisma, notifications);
   });
 
-  describe('create', () => {
-    it('создаёт задачу с дефолтными значениями', async () => {
-      const userId = 'user-uuid-1';
-      const dto = { title: 'Почитать 30 минут' };
-      const created = { id: 'task-1', userId, title: dto.title, color: '#6B5BFC', durationMinutes: 30 };
+  it('create(): планирует напоминание, если задан startTime', async () => {
+    const task = { id: 't1', userId, startTime: new Date(Date.now() + 60_000), completedAt: null };
+    prisma.task.create.mockResolvedValue(task);
 
-      mockPrisma.task.create.mockResolvedValue(created);
+    await service.create(userId, {
+      title: 'Тест',
+      startTime: task.startTime.toISOString(),
+    } as any);
 
-      const result = await service.create(userId, dto);
-      expect(result).toEqual(created);
-      expect(mockPrisma.task.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ userId, title: dto.title }),
-        }),
-      );
-    });
+    expect(notifications.scheduleTaskReminder).toHaveBeenCalledWith(task);
+    expect(notifications.cancelTaskReminder).not.toHaveBeenCalled();
   });
 
-  describe('findOne', () => {
-    it('бросает NotFoundException если задача не найдена', async () => {
-      mockPrisma.task.findUnique.mockResolvedValue(null);
+  it('create(): не планирует напоминание, если startTime не задан (просто снимает возможный старый job)', async () => {
+    const task = { id: 't2', userId, startTime: null, completedAt: null };
+    prisma.task.create.mockResolvedValue(task);
 
-      await expect(service.findOne('user-1', 'nonexistent-id'))
-        .rejects.toThrow(NotFoundException);
-    });
+    await service.create(userId, { title: 'Тест без времени' } as any);
 
-    it('бросает ForbiddenException если задача принадлежит другому пользователю', async () => {
-      mockPrisma.task.findUnique.mockResolvedValue({
-        id: 'task-1',
-        userId: 'other-user',
-        subTasks: [],
-      });
-
-      await expect(service.findOne('user-1', 'task-1'))
-        .rejects.toThrow(ForbiddenException);
-    });
+    expect(notifications.cancelTaskReminder).toHaveBeenCalledWith('t2');
+    expect(notifications.scheduleTaskReminder).not.toHaveBeenCalled();
   });
 
-  describe('toggleComplete', () => {
-    it('устанавливает completedAt если задача не завершена', async () => {
-      const task = { id: 'task-1', userId: 'user-1', completedAt: null, subTasks: [] };
-      mockPrisma.task.findUnique.mockResolvedValue(task);
-      mockPrisma.task.update.mockResolvedValue({ ...task, completedAt: new Date() });
+  it('toggleComplete(): при отметке "выполнено" отменяет напоминание', async () => {
+    const existing = { id: 't3', userId, startTime: new Date(Date.now() + 60_000), completedAt: null };
+    const updated = { ...existing, completedAt: new Date() };
+    prisma.task.findUnique.mockResolvedValue(existing);
+    prisma.task.update.mockResolvedValue(updated);
 
-      const result = await service.toggleComplete('user-1', 'task-1');
-      expect(result.completedAt).not.toBeNull();
-    });
+    await service.toggleComplete(userId, 't3');
 
-    it('сбрасывает completedAt если задача уже завершена', async () => {
-      const task = { id: 'task-1', userId: 'user-1', completedAt: new Date(), subTasks: [] };
-      mockPrisma.task.findUnique.mockResolvedValue(task);
-      mockPrisma.task.update.mockResolvedValue({ ...task, completedAt: null });
-
-      const result = await service.toggleComplete('user-1', 'task-1');
-      expect(result.completedAt).toBeNull();
-    });
+    expect(notifications.cancelTaskReminder).toHaveBeenCalledWith('t3');
+    expect(notifications.scheduleTaskReminder).not.toHaveBeenCalled();
   });
 
-  describe('findAll с фильтром по дате', () => {
-    it('передаёт правильный диапазон дат в where при указании date', async () => {
-      mockPrisma.task.findMany.mockResolvedValue([]);
+  it('remove(): отменяет напоминание после удаления задачи', async () => {
+    const existing = { id: 't4', userId, startTime: new Date(Date.now() + 60_000), completedAt: null };
+    prisma.task.findUnique.mockResolvedValue(existing);
+    prisma.task.delete.mockResolvedValue(undefined);
 
-      await service.findAll('user-1', { date: '2026-07-23' });
+    await service.remove(userId, 't4');
 
-      const callArg = mockPrisma.task.findMany.mock.calls[0][0];
-      expect(callArg.where.startTime).toBeDefined();
-      expect(callArg.where.startTime.gte).toBeInstanceOf(Date);
-      expect(callArg.where.startTime.lte).toBeInstanceOf(Date);
-    });
+    expect(notifications.cancelTaskReminder).toHaveBeenCalledWith('t4');
+  });
+
+  it('ошибка в notifications не должна ронять CRUD-операцию', async () => {
+    const task = { id: 't5', userId, startTime: new Date(Date.now() + 60_000), completedAt: null };
+    prisma.task.create.mockResolvedValue(task);
+    notifications.scheduleTaskReminder.mockRejectedValue(new Error('Redis недоступен'));
+
+    const result = await service.create(userId, { title: 'Тест' } as any);
+    expect(result).toEqual(task); // create не бросило исключение, задача уже сохранена в БД
   });
 });

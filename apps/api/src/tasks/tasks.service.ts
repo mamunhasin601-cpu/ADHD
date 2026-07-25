@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateTaskDto } from './dto/create-task.dto';
@@ -8,13 +8,15 @@ import type { Task } from '@prisma/client';
 
 @Injectable()
 export class TasksService {
+  private readonly logger = new Logger(TasksService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
   ) {}
 
   async create(userId: string, dto: CreateTaskDto): Promise<Task> {
-    return this.prisma.task.create({
+    const task = await this.prisma.task.create({
       data: {
         userId,
         title: dto.title,
@@ -27,6 +29,9 @@ export class TasksService {
       },
       include: { subTasks: true },
     });
+
+    await this.syncReminder(task);
+    return task;
   }
 
   async findAll(userId: string, query: GetTasksQueryDto): Promise<Task[]> {
@@ -73,7 +78,7 @@ export class TasksService {
   async update(userId: string, taskId: string, dto: UpdateTaskDto): Promise<Task> {
     await this.findOne(userId, taskId); // проверяем принадлежность
 
-    return this.prisma.task.update({
+    const task = await this.prisma.task.update({
       where: { id: taskId },
       data: {
         ...(dto.title !== undefined && { title: dto.title }),
@@ -90,23 +95,63 @@ export class TasksService {
       },
       include: { subTasks: true },
     });
+
+    await this.syncReminder(task);
+    return task;
   }
 
   async remove(userId: string, taskId: string): Promise<void> {
     await this.findOne(userId, taskId); // проверяем принадлежность
     await this.prisma.task.delete({ where: { id: taskId } });
+    await this.safeCancelReminder(taskId);
   }
 
   /** Отметить задачу как выполненную / невыполненную */
   async toggleComplete(userId: string, taskId: string): Promise<Task> {
     const task = await this.findOne(userId, taskId);
 
-    return this.prisma.task.update({
+    const updated = await this.prisma.task.update({
       where: { id: taskId },
       data: {
         completedAt: task.completedAt ? null : new Date(),
       },
       include: { subTasks: true },
     });
+
+    await this.syncReminder(updated);
+    return updated;
+  }
+
+  /**
+   * Единая точка синхронизации напоминания с текущим состоянием задачи:
+   * выполненная задача или задача без startTime — напоминание отменяется,
+   * иначе — (пере)планируется на актуальное startTime.
+   *
+   * ВАЖНО (ограничение): scheduleTaskReminder планирует ровно один пуш на конкретный
+   * startTime. Для повторяющихся задач (isRecurring + recurrenceRule) это покрывает
+   * только ближайшее вхождение — перепланирование следующих вхождений RRULE
+   * требует отдельного механизма (например, суточной cron-job) и сюда не входит.
+   *
+   * Ошибки очереди не должны валить CRUD-операцию (например, Redis временно недоступен) —
+   * задача в БД уже сохранена, поэтому здесь ошибки только логируются.
+   */
+  private async syncReminder(task: Task): Promise<void> {
+    try {
+      if (task.completedAt || !task.startTime) {
+        await this.notifications.cancelTaskReminder(task.id);
+      } else {
+        await this.notifications.scheduleTaskReminder(task);
+      }
+    } catch (err) {
+      this.logger.error(`Не удалось синхронизировать напоминание для задачи ${task.id}:`, err);
+    }
+  }
+
+  private async safeCancelReminder(taskId: string): Promise<void> {
+    try {
+      await this.notifications.cancelTaskReminder(taskId);
+    } catch (err) {
+      this.logger.error(`Не удалось отменить напоминание для задачи ${taskId}:`, err);
+    }
   }
 }

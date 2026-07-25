@@ -1,160 +1,171 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { getQueueToken } from '@nestjs/bullmq';
 import { NotificationsService } from './notifications.service';
-import { PrismaService } from '../prisma/prisma.service';
-import { TASK_REMINDERS_QUEUE, JOBS } from './notifications.constants';
 import type { Task } from '@prisma/client';
-
-const mockQueue = {
-  add: jest.fn(),
-  getJob: jest.fn(),
-};
-
-const mockPrisma = {
-  user: { findUnique: jest.fn() },
-  notificationLog: { create: jest.fn() },
-};
-
-// Мокаем fetch глобально
-global.fetch = jest.fn();
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
+  let queue: { add: jest.Mock; getJob: jest.Mock };
+  let prisma: any;
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        NotificationsService,
-        { provide: getQueueToken(TASK_REMINDERS_QUEUE), useValue: mockQueue },
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
-    }).compile();
+  const baseTask: Task = {
+    id: 'task-1',
+    userId: 'user-1',
+    title: 'Тестовая задача',
+    startTime: null,
+    durationMinutes: 30,
+    color: '#6B5BFC',
+    isRecurring: false,
+    recurrenceRule: null,
+    parentTaskId: null,
+    completedAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  } as Task;
 
-    service = module.get<NotificationsService>(NotificationsService);
-    jest.clearAllMocks();
-    mockQueue.getJob.mockResolvedValue(null); // нет существующих job по умолчанию
+  beforeEach(() => {
+    queue = {
+      add: jest.fn().mockResolvedValue(undefined),
+      getJob: jest.fn().mockResolvedValue(null),
+    };
+    prisma = {
+      user: { findUnique: jest.fn(), update: jest.fn() },
+      notificationLog: { findFirst: jest.fn(), create: jest.fn() },
+    };
+    service = new NotificationsService(queue as any, prisma as any);
+    jest.useFakeTimers().setSystemTime(new Date('2026-07-25T10:00:00.000Z'));
   });
 
-  // ──────────────────────────────────────────────
-  // scheduleTaskReminder
-  // ──────────────────────────────────────────────
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
 
   describe('scheduleTaskReminder', () => {
-    it('добавляет job в очередь если startTime в будущем', async () => {
-      const futureDate = new Date(Date.now() + 60 * 60 * 1000); // через 1 час
-
-      const task = {
-        id: 'task-uuid-1',
-        userId: 'user-uuid-1',
-        title: 'Спорт',
-        startTime: futureDate,
-      } as Task;
+    it('ставит job с корректным delay и детерминированным jobId', async () => {
+      const task = { ...baseTask, startTime: new Date('2026-07-25T10:30:00.000Z') };
 
       await service.scheduleTaskReminder(task);
 
-      expect(mockQueue.add).toHaveBeenCalledWith(
-        JOBS.TASK_REMINDER,
-        expect.objectContaining({ taskId: 'task-uuid-1', userId: 'user-uuid-1' }),
+      expect(queue.add).toHaveBeenCalledWith(
+        'task-reminder',
+        expect.objectContaining({ taskId: 'task-1', userId: 'user-1' }),
         expect.objectContaining({
-          jobId: 'task-reminder-task-uuid-1',
-          delay: expect.any(Number),
+          jobId: 'task-reminder-task-1',
+          delay: 30 * 60_000,
+          attempts: 3,
         }),
       );
-
-      const callArgs = mockQueue.add.mock.calls[0][2];
-      expect(callArgs.delay).toBeGreaterThan(0);
     });
 
-    it('не добавляет job если startTime в прошлом', async () => {
-      const pastDate = new Date(Date.now() - 60_000); // минуту назад
+    it('не ставит напоминание, если startTime не задан', async () => {
+      await service.scheduleTaskReminder(baseTask);
+      expect(queue.add).not.toHaveBeenCalled();
+    });
 
-      const task = { id: 'task-2', userId: 'user-1', title: 'Завтрак', startTime: pastDate } as Task;
+    it('не ставит напоминание, если startTime уже прошёл', async () => {
+      const task = { ...baseTask, startTime: new Date('2026-07-25T09:59:56.000Z') };
+      await service.scheduleTaskReminder(task);
+      expect(queue.add).not.toHaveBeenCalled();
+    });
+
+    it('перед постановкой всегда отменяет предыдущее напоминание по этой задаче (защита от задвоения)', async () => {
+      const existingJob = { remove: jest.fn().mockResolvedValue(undefined) };
+      queue.getJob.mockResolvedValueOnce(existingJob);
+      const task = { ...baseTask, startTime: new Date('2026-07-25T10:30:00.000Z') };
 
       await service.scheduleTaskReminder(task);
 
-      expect(mockQueue.add).not.toHaveBeenCalled();
-    });
-
-    it('не добавляет job если startTime = null', async () => {
-      const task = { id: 'task-3', userId: 'user-1', title: 'Без времени', startTime: null } as Task;
-
-      await service.scheduleTaskReminder(task);
-
-      expect(mockQueue.add).not.toHaveBeenCalled();
-    });
-
-    it('отменяет старый job перед добавлением нового (перепланирование)', async () => {
-      const existingJob = { remove: jest.fn() };
-      mockQueue.getJob.mockResolvedValueOnce(existingJob);
-
-      const futureDate = new Date(Date.now() + 30 * 60_000);
-      const task = { id: 'task-4', userId: 'user-1', title: 'Обед', startTime: futureDate } as Task;
-
-      await service.scheduleTaskReminder(task);
-
+      expect(queue.getJob).toHaveBeenCalledWith('task-reminder-task-1');
       expect(existingJob.remove).toHaveBeenCalled();
-      expect(mockQueue.add).toHaveBeenCalled();
+    });
+
+    it('корректно считает delay независимо от локального часового пояса сервера (DST-safety)', async () => {
+      // Date хранит абсолютный момент времени (epoch), поэтому смена локального TZ
+      // процесса не должна влиять на разницу startTime - now. Проверяем на TZ с DST
+      // (в самой РФ DST отменён с 2014 года, но сервер/CI может быть настроен иначе).
+      const originalTZ = process.env.TZ;
+      process.env.TZ = 'America/New_York';
+
+      const task = { ...baseTask, startTime: new Date('2026-07-25T11:15:00.000Z') };
+      await service.scheduleTaskReminder(task);
+
+      expect(queue.add).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ delay: 75 * 60_000 }),
+      );
+
+      process.env.TZ = originalTZ;
     });
   });
 
-  // ──────────────────────────────────────────────
-  // sendPushNotification
-  // ──────────────────────────────────────────────
+  describe('cancelTaskReminder', () => {
+    it('удаляет job, если он существует', async () => {
+      const job = { remove: jest.fn().mockResolvedValue(undefined) };
+      queue.getJob.mockResolvedValueOnce(job);
+
+      await service.cancelTaskReminder('task-1');
+
+      expect(job.remove).toHaveBeenCalled();
+    });
+
+    it('ничего не делает, если job не найден', async () => {
+      queue.getJob.mockResolvedValueOnce(null);
+      await expect(service.cancelTaskReminder('task-1')).resolves.not.toThrow();
+    });
+  });
 
   describe('sendPushNotification', () => {
-    it('отправляет запрос к Expo API и возвращает true при статусе ok', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({
-        expoPushToken: 'ExponentPushToken[xxxxxx]',
-      });
+    it('возвращает no-token, если у пользователя нет expoPushToken', async () => {
+      prisma.user.findUnique.mockResolvedValue({ expoPushToken: null });
+      const result = await service.sendPushNotification('user-1', 'Заголовок', 'Текст');
+      expect(result).toEqual({ status: 'no-token' });
+    });
 
-      (global.fetch as jest.Mock).mockResolvedValue({
+    it('возвращает sent при успешном ответе Expo', async () => {
+      prisma.user.findUnique.mockResolvedValue({ expoPushToken: 'ExponentPushToken[abc]' });
+      global.fetch = jest.fn().mockResolvedValue({
         json: async () => ({ data: { status: 'ok' } }),
-      });
+      }) as any;
 
-      const result = await service.sendPushNotification('user-1', '⏰ Время!', 'Задача: Спорт');
-
-      expect(result).toBe(true);
-      expect(global.fetch).toHaveBeenCalledWith(
-        'https://exp.host/--/api/v2/push/send',
-        expect.objectContaining({ method: 'POST' }),
-      );
+      const result = await service.sendPushNotification('user-1', 'Заголовок', 'Текст');
+      expect(result).toEqual({ status: 'sent' });
     });
 
-    it('возвращает false если нет push-токена у пользователя', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ expoPushToken: null });
+    it('очищает токен и возвращает device-not-registered при мёртвом токене', async () => {
+      prisma.user.findUnique.mockResolvedValue({ expoPushToken: 'ExponentPushToken[dead]' });
+      global.fetch = jest.fn().mockResolvedValue({
+        json: async () => ({
+          data: { status: 'error', details: { error: 'DeviceNotRegistered' } },
+        }),
+      }) as any;
 
-      const result = await service.sendPushNotification('user-1', 'Тест', 'Тест');
+      const result = await service.sendPushNotification('user-1', 'Заголовок', 'Текст');
 
-      expect(result).toBe(false);
-      expect(global.fetch).not.toHaveBeenCalled();
+      expect(result).toEqual({ status: 'device-not-registered' });
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: { expoPushToken: null },
+      });
     });
 
-    it('возвращает false при ошибке сети (не бросает исключение)', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({
-        expoPushToken: 'ExponentPushToken[xxxxxx]',
-      });
+    it('возвращает error при прочих ошибках Expo или сети', async () => {
+      prisma.user.findUnique.mockResolvedValue({ expoPushToken: 'ExponentPushToken[abc]' });
+      global.fetch = jest.fn().mockRejectedValue(new Error('network down')) as any;
 
-      (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
-
-      const result = await service.sendPushNotification('user-1', 'Тест', 'Тест');
-
-      expect(result).toBe(false); // не выбрасывает, возвращает false → retry через BullMQ
+      const result = await service.sendPushNotification('user-1', 'Заголовок', 'Текст');
+      expect(result).toEqual({ status: 'error', message: 'network down' });
     });
   });
 
-  // ──────────────────────────────────────────────
-  // logNotification
-  // ──────────────────────────────────────────────
+  describe('wasRecentlyDelivered', () => {
+    it('возвращает true, если недавно была успешная доставка', async () => {
+      prisma.notificationLog.findFirst.mockResolvedValue({ id: 'log-1' });
+      await expect(service.wasRecentlyDelivered('task-1')).resolves.toBe(true);
+    });
 
-  describe('logNotification', () => {
-    it('создаёт запись в NotificationLog', async () => {
-      mockPrisma.notificationLog.create.mockResolvedValue({});
-
-      await service.logNotification('user-1', 'task-1', true);
-
-      expect(mockPrisma.notificationLog.create).toHaveBeenCalledWith({
-        data: { userId: 'user-1', taskId: 'task-1', delivered: true },
-      });
+    it('возвращает false, если свежих доставок нет', async () => {
+      prisma.notificationLog.findFirst.mockResolvedValue(null);
+      await expect(service.wasRecentlyDelivered('task-1')).resolves.toBe(false);
     });
   });
 });

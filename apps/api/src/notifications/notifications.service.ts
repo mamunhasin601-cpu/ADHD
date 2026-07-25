@@ -13,6 +13,13 @@ export interface TaskReminderJobData {
   scheduledFor: string; // ISO 8601
 }
 
+/** Результат попытки отправки push-уведомления через Expo */
+export type PushSendResult =
+  | { status: 'sent' }
+  | { status: 'no-token' }
+  | { status: 'device-not-registered' }
+  | { status: 'error'; message: string };
+
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
@@ -83,8 +90,12 @@ export class NotificationsService {
   /**
    * Фактически отправляет Expo push-уведомление через HTTP API.
    * Вызывается из NotificationsProcessor.
+   *
+   * Обрабатывает DeviceNotRegistered — если Expo сообщает, что токен мёртв,
+   * очищаем его в БД, чтобы не слать в пустоту и не забивать очередь ретраями.
+   * Мобильное приложение должно перерегистрировать токен при следующем запуске.
    */
-  async sendPushNotification(userId: string, title: string, body: string): Promise<boolean> {
+  async sendPushNotification(userId: string, title: string, body: string): Promise<PushSendResult> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { expoPushToken: true },
@@ -92,7 +103,7 @@ export class NotificationsService {
 
     if (!user?.expoPushToken) {
       this.logger.warn(`Нет push-токена для пользователя ${userId} — уведомление пропущено`);
-      return false;
+      return { status: 'no-token' };
     }
 
     const token = user.expoPushToken;
@@ -119,19 +130,30 @@ export class NotificationsService {
         }),
       });
 
-      const result = (await response.json()) as { data?: { status: string; message?: string } };
-      const status = result.data?.status;
+      const result = (await response.json()) as {
+        data?: { status: string; message?: string; details?: { error?: string } };
+      };
+      const ticket = result.data;
 
-      if (status === 'ok') {
+      if (ticket?.status === 'ok') {
         this.logger.log(`Push отправлен пользователю ${userId}`);
-        return true;
-      } else {
-        this.logger.warn(`Expo push вернул статус "${status}": ${result.data?.message}`);
-        return false;
+        return { status: 'sent' };
       }
+
+      if (ticket?.details?.error === 'DeviceNotRegistered') {
+        this.logger.warn(`Токен пользователя ${userId} невалиден (DeviceNotRegistered) — очищаем`);
+        await this.prisma.user.update({
+          where: { id: userId },
+          data: { expoPushToken: null },
+        });
+        return { status: 'device-not-registered' };
+      }
+
+      this.logger.warn(`Expo push вернул статус "${ticket?.status}": ${ticket?.message}`);
+      return { status: 'error', message: ticket?.message ?? 'unknown' };
     } catch (err) {
       this.logger.error(`Ошибка отправки push пользователю ${userId}:`, err);
-      return false;
+      return { status: 'error', message: (err as Error).message };
     }
   }
 
@@ -147,5 +169,20 @@ export class NotificationsService {
     await this.prisma.notificationLog.create({
       data: { userId, taskId, delivered },
     });
+  }
+
+  /**
+   * Доп. страховка от задвоения уведомлений (помимо детерминированного jobId в BullMQ):
+   * если по этой задаче уже есть свежая успешная доставка — не шлём повторно.
+   */
+  async wasRecentlyDelivered(taskId: string, withinMs = 2 * 60_000): Promise<boolean> {
+    const recent = await this.prisma.notificationLog.findFirst({
+      where: {
+        taskId,
+        delivered: true,
+        sentAt: { gte: new Date(Date.now() - withinMs) },
+      },
+    });
+    return !!recent;
   }
 }
