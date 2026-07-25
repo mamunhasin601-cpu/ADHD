@@ -1,0 +1,128 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ──────────────────────────────────────────────
+// User
+// ──────────────────────────────────────────────
+
+model User {
+  id             String   @id @default(uuid())
+  email          String?  @unique
+  phone          String?  @unique
+  passwordHash   String
+  timezone       String   @default("Europe/Moscow")
+  expoPushToken  String?  // Expo push notification token (регистрируется с мобильного приложения)
+  createdAt      DateTime @default(now())
+
+  tasks                 Task[]
+  routines              Routine[]
+  hostedSessions        FocusSession[]            @relation("HostedSessions")
+  sessionParticipations FocusSessionParticipant[]
+  notificationLogs      NotificationLog[]
+
+  @@map("users")
+}
+
+// ──────────────────────────────────────────────
+// Task  (включая подзадачи через self-relation)
+// ──────────────────────────────────────────────
+
+model Task {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title           String
+  startTime       DateTime?
+  durationMinutes Int       @default(30)
+  color           String    @default("#6B5BFC")
+  isRecurring     Boolean   @default(false)
+  recurrenceRule  String?   // iCal RRULE, напр. "FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR"
+  parentTaskId    String?
+  parentTask      Task?     @relation("SubTasks", fields: [parentTaskId], references: [id])
+  subTasks        Task[]    @relation("SubTasks")
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  notificationLogs NotificationLog[]
+
+  @@index([userId])
+  @@index([userId, startTime])
+  @@map("tasks")
+}
+
+// ──────────────────────────────────────────────
+// Routine  (шаблон повторяющихся задач)
+// ──────────────────────────────────────────────
+
+model Routine {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  daysOfWeek Int[]    // 0=Вс, 1=Пн, ..., 6=Сб
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+  @@map("routines")
+}
+
+// ──────────────────────────────────────────────
+// FocusSession  (body doubling)
+// ──────────────────────────────────────────────
+
+model FocusSession {
+  id              String    @id @default(uuid())
+  hostUserId      String
+  host            User      @relation("HostedSessions", fields: [hostUserId], references: [id])
+  dailyRoomUrl    String?   // URL из Daily.co REST API
+  isPublic        Boolean   @default(true)
+  maxParticipants Int       @default(10)
+  timerMinutes    Int       @default(25)  // Pomodoro = 25 мин по умолчанию
+  createdAt       DateTime  @default(now())
+  endedAt         DateTime?
+
+  participants FocusSessionParticipant[]
+
+  @@map("focus_sessions")
+}
+
+model FocusSessionParticipant {
+  id        String       @id @default(uuid())
+  sessionId String
+  session   FocusSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User         @relation(fields: [userId], references: [id])
+  joinedAt  DateTime     @default(now())
+  leftAt    DateTime?
+
+  @@unique([sessionId, userId])
+  @@map("focus_session_participants")
+}
+
+// ──────────────────────────────────────────────
+// NotificationLog  (для отладки надёжности доставки)
+// ──────────────────────────────────────────────
+
+model NotificationLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  taskId    String?
+  task      Task?    @relation(fields: [taskId], references: [id])
+  sentAt    DateTime @default(now())
+  delivered Boolean  @default(false)
+
+  @@index([userId])
+  @@map("notification_logs")
+}

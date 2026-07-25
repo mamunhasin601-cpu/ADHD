@@ -1,0 +1,29 @@
+{
+  "name": "focus-app",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run start:dev --workspace=apps/api",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "dev:mobile": "npm run start --workspace=apps/mobile",
+    "build:api": "npm run build --workspace=apps/api",
+    "test:api": "npm run test --workspace=apps/api",
+    "prisma:migrate": "npm run prisma:migrate --workspace=apps/api",
+    "prisma:generate": "npm run prisma:generate --workspace=apps/api"
+  },
+  "devDependencies": {
+    "typescript": "5.4.5"
+  },
+  "allowScripts": {
+    "@nestjs/core@10.3.10": true,
+    "@prisma/client@5.16.2": true,
+    "@prisma/engines@5.16.2": true,
+    "bcrypt@5.1.1": true,
+    "msgpackr-extract@3.0.4": true,
+    "prisma@5.16.2": true
+  }
+}

@@ -1,0 +1,112 @@
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { CreateTaskDto } from './dto/create-task.dto';
+import { UpdateTaskDto } from './dto/update-task.dto';
+import { GetTasksQueryDto } from './dto/get-tasks-query.dto';
+import type { Task } from '@prisma/client';
+
+@Injectable()
+export class TasksService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
+
+  async create(userId: string, dto: CreateTaskDto): Promise<Task> {
+    return this.prisma.task.create({
+      data: {
+        userId,
+        title: dto.title,
+        startTime: dto.startTime ? new Date(dto.startTime) : null,
+        durationMinutes: dto.durationMinutes ?? 30,
+        color: dto.color ?? '#6B5BFC',
+        isRecurring: dto.isRecurring ?? false,
+        recurrenceRule: dto.recurrenceRule ?? null,
+        parentTaskId: dto.parentTaskId ?? null,
+      },
+      include: { subTasks: true },
+    });
+  }
+
+  async findAll(userId: string, query: GetTasksQueryDto): Promise<Task[]> {
+    const where: Record<string, unknown> = {
+      userId,
+      parentTaskId: null, // только верхнеуровневые задачи
+    };
+
+    // Фильтр по дате: задачи, которые начинаются в указанный день
+    if (query.date) {
+      const dayStart = new Date(query.date);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(query.date);
+      dayEnd.setHours(23, 59, 59, 999);
+      where['startTime'] = { gte: dayStart, lte: dayEnd };
+    }
+
+    if (query.incomplete) {
+      where['completedAt'] = null;
+    }
+
+    return this.prisma.task.findMany({
+      where,
+      include: query.includeSubTasks ? { subTasks: true } : undefined,
+      orderBy: [
+        { startTime: 'asc' },
+        { createdAt: 'asc' },
+      ],
+    });
+  }
+
+  async findOne(userId: string, taskId: string): Promise<Task> {
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      include: { subTasks: true },
+    });
+
+    if (!task) throw new NotFoundException('Задача не найдена');
+    if (task.userId !== userId) throw new ForbiddenException('Нет доступа к этой задаче');
+
+    return task;
+  }
+
+  async update(userId: string, taskId: string, dto: UpdateTaskDto): Promise<Task> {
+    await this.findOne(userId, taskId); // проверяем принадлежность
+
+    return this.prisma.task.update({
+      where: { id: taskId },
+      data: {
+        ...(dto.title !== undefined && { title: dto.title }),
+        ...(dto.startTime !== undefined && {
+          startTime: dto.startTime ? new Date(dto.startTime) : null,
+        }),
+        ...(dto.durationMinutes !== undefined && { durationMinutes: dto.durationMinutes }),
+        ...(dto.color !== undefined && { color: dto.color }),
+        ...(dto.isRecurring !== undefined && { isRecurring: dto.isRecurring }),
+        ...(dto.recurrenceRule !== undefined && { recurrenceRule: dto.recurrenceRule }),
+        ...(dto.completedAt !== undefined && {
+          completedAt: dto.completedAt ? new Date(dto.completedAt) : null,
+        }),
+      },
+      include: { subTasks: true },
+    });
+  }
+
+  async remove(userId: string, taskId: string): Promise<void> {
+    await this.findOne(userId, taskId); // проверяем принадлежность
+    await this.prisma.task.delete({ where: { id: taskId } });
+  }
+
+  /** Отметить задачу как выполненную / невыполненную */
+  async toggleComplete(userId: string, taskId: string): Promise<Task> {
+    const task = await this.findOne(userId, taskId);
+
+    return this.prisma.task.update({
+      where: { id: taskId },
+      data: {
+        completedAt: task.completedAt ? null : new Date(),
+      },
+      include: { subTasks: true },
+    });
+  }
+}

@@ -1,0 +1,39 @@
+node_modules/
+dist/
+build/
+.env
+.env.local
+.env.*.local
+*.log
+npm-debug.log*
+
+# Expo
+.expo/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+
+# Next.js
+.next/
+out/
+
+# NestJS
+apps/api/dist/
+
+# Prisma
+apps/api/prisma/generated/
+
+# OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

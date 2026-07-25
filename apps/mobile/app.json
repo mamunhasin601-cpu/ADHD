@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "Focus",
+    "slug": "focus-adhd",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#6B5BFC"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.focus.adhd",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Для видео в фокус-комнатах",
+        "NSMicrophoneUsageDescription": "Для аудио в фокус-комнатах"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#6B5BFC"
+      },
+      "package": "com.focus.adhd",
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#6B5BFC"
+        }
+      ]
+    ],
+    "scheme": "focus"
+  }
+}
