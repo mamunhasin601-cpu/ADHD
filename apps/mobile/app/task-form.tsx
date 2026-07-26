@@ -1,0 +1,510 @@
+import { useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Alert,
+} from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
+import type { Task } from '@focus/shared-types';
+import {
+  useCreateTask,
+  useUpdateTask,
+  useDeleteTask,
+  createSubtask,
+  deleteTaskById,
+} from '../lib/api/tasks';
+
+const DURATION_PRESETS = [15, 30, 45, 60, 90, 120];
+const COLOR_PRESETS = [
+  '#6B5BFC',
+  '#F97316',
+  '#10B981',
+  '#3B82F6',
+  '#EF4444',
+  '#EC4899',
+  '#84CC16',
+  '#F59E0B',
+];
+
+type RecurrencePreset = 'none' | 'daily' | 'weekdays';
+
+const RECURRENCE_RULES: Record<RecurrencePreset, string | null> = {
+  none: null,
+  daily: 'FREQ=DAILY',
+  weekdays: 'FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR',
+};
+
+const RECURRENCE_LABELS: Record<RecurrencePreset, string> = {
+  none: 'Не повторять',
+  daily: 'Каждый день',
+  weekdays: 'Будни (Пн–Пт)',
+};
+
+const SUBTASK_PRESETS: Record<string, string[]> = {
+  'Уборка комнаты': ['Мусор', 'Пол', 'Поверхности'],
+  'Утренняя рутина': ['Вода', 'Зарядка', 'Завтрак'],
+};
+
+function roundToStep(value: number, step: number): number {
+  return Math.round(value / step) * step;
+}
+
+function recurrencePresetFromRule(rule: string | null): RecurrencePreset {
+  if (rule === RECURRENCE_RULES.weekdays) return 'weekdays';
+  if (rule === RECURRENCE_RULES.daily) return 'daily';
+  return 'none';
+}
+
+export default function TaskFormScreen() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const params = useLocalSearchParams<{
+    task?: string;
+    prefillStartTime?: string;
+    prefillTitle?: string;
+  }>();
+
+  // ДОПУЩЕНИЕ: приложение сейчас показывает только "сегодня", поэтому дата
+  // для инвалидации кэша и для новых задач — всегда текущая. Если появится
+  // навигация по дням, дату нужно будет передавать параметром, а не брать new Date().
+  const today = useMemo(() => new Date(), []);
+
+  const existingTask: Task | null = useMemo(() => {
+    if (!params.task) return null;
+    try {
+      const parsed = JSON.parse(params.task) as Task;
+      return {
+        ...parsed,
+        startTime: parsed.startTime ? new Date(parsed.startTime) : null,
+      };
+    } catch {
+      return null;
+    }
+  }, [params.task]);
+
+  const isEditMode = !!existingTask;
+
+  const createTask = useCreateTask(today);
+  const updateTask = useUpdateTask(today);
+  const deleteTask = useDeleteTask(today);
+
+  const [title, setTitle] = useState(existingTask?.title ?? params.prefillTitle ?? '');
+
+  const initialStartTime =
+    existingTask?.startTime ??
+    (params.prefillStartTime ? new Date(params.prefillStartTime) : null);
+
+  const [hasTime, setHasTime] = useState(!!initialStartTime);
+  const [hour, setHour] = useState(initialStartTime?.getHours() ?? new Date().getHours());
+  const [minute, setMinute] = useState(
+    roundToStep(initialStartTime?.getMinutes() ?? new Date().getMinutes(), 5),
+  );
+  const baseDate = initialStartTime ?? today;
+
+  const [durationMinutes, setDurationMinutes] = useState(existingTask?.durationMinutes ?? 30);
+  const [color, setColor] = useState(existingTask?.color ?? COLOR_PRESETS[0]);
+  const [recurrencePreset, setRecurrencePreset] = useState<RecurrencePreset>(
+    recurrencePresetFromRule(existingTask?.recurrenceRule ?? null),
+  );
+
+  const [existingSubtasks, setExistingSubtasks] = useState(existingTask?.subTasks ?? []);
+  const [newSubtasks, setNewSubtasks] = useState<string[]>([]);
+  const [subtaskInput, setSubtaskInput] = useState('');
+
+  const [saving, setSaving] = useState(false);
+
+  function adjustHour(delta: number) {
+    setHour((h) => (h + delta + 24) % 24);
+  }
+
+  function adjustMinute(delta: number) {
+    setMinute((m) => (m + delta + 60) % 60);
+  }
+
+  function addSubtaskFromInput() {
+    const value = subtaskInput.trim();
+    if (!value) return;
+    setNewSubtasks((prev) => [...prev, value]);
+    setSubtaskInput('');
+  }
+
+  function addSubtaskPreset(presetName: string) {
+    setNewSubtasks((prev) => [...prev, ...SUBTASK_PRESETS[presetName]]);
+  }
+
+  function removeNewSubtask(index: number) {
+    setNewSubtasks((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function removeExistingSubtask(subtaskId: string) {
+    setExistingSubtasks((prev) => prev.filter((s) => s.id !== subtaskId));
+    try {
+      await deleteTaskById(subtaskId);
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    } catch {
+      Alert.alert('Не удалось удалить шаг', 'Попробуйте снова');
+    }
+  }
+
+  async function handleSave() {
+    if (!title.trim()) return;
+    setSaving(true);
+
+    const startTimeIso = hasTime
+      ? (() => {
+          const d = new Date(baseDate);
+          d.setHours(hour, minute, 0, 0);
+          return d.toISOString();
+        })()
+      : null;
+
+    const dto = {
+      title: title.trim(),
+      startTime: startTimeIso,
+      durationMinutes,
+      color,
+      isRecurring: recurrencePreset !== 'none',
+      recurrenceRule: RECURRENCE_RULES[recurrencePreset],
+    };
+
+    try {
+      let parentId: string;
+      if (isEditMode && existingTask) {
+        const updated = await updateTask.mutateAsync({ id: existingTask.id, dto });
+        parentId = updated.id;
+      } else {
+        const created = await createTask.mutateAsync(dto);
+        parentId = created.id;
+      }
+
+      for (const subtaskTitle of newSubtasks) {
+        await createSubtask(parentId, subtaskTitle);
+      }
+      if (newSubtasks.length > 0) {
+        queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      }
+
+      router.back();
+    } catch {
+      Alert.alert('Не удалось сохранить', 'Проверьте соединение и попробуйте снова');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleDelete() {
+    if (!existingTask) return;
+    Alert.alert('Удалить задачу?', existingTask.title, [
+      { text: 'Отмена', style: 'cancel' },
+      {
+        text: 'Удалить',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteTask.mutateAsync(existingTask.id);
+            router.back();
+          } catch {
+            Alert.alert('Не удалось удалить', 'Попробуйте снова');
+          }
+        },
+      },
+    ]);
+  }
+
+  return (
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <TextInput
+        style={styles.titleInput}
+        placeholder="Название задачи"
+        placeholderTextColor="#9CA3AF"
+        value={title}
+        onChangeText={setTitle}
+        autoFocus={!isEditMode}
+      />
+
+      {/* Время */}
+      <Text style={styles.sectionLabel}>Время</Text>
+      <View style={styles.row}>
+        <Pressable
+          style={[styles.toggleChip, !hasTime && styles.toggleChipActive]}
+          onPress={() => setHasTime(false)}
+        >
+          <Text style={[styles.toggleChipText, !hasTime && styles.toggleChipTextActive]}>
+            Без времени
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.toggleChip, hasTime && styles.toggleChipActive]}
+          onPress={() => setHasTime(true)}
+        >
+          <Text style={[styles.toggleChipText, hasTime && styles.toggleChipTextActive]}>
+            Указать время
+          </Text>
+        </Pressable>
+      </View>
+
+      {hasTime && (
+        <View style={styles.timeStepperRow}>
+          <View style={styles.stepper}>
+            <Pressable onPress={() => adjustHour(-1)} style={styles.stepperButton}>
+              <Text style={styles.stepperButtonText}>−</Text>
+            </Pressable>
+            <Text style={styles.stepperValue}>{String(hour).padStart(2, '0')}</Text>
+            <Pressable onPress={() => adjustHour(1)} style={styles.stepperButton}>
+              <Text style={styles.stepperButtonText}>+</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.timeColon}>:</Text>
+          <View style={styles.stepper}>
+            <Pressable onPress={() => adjustMinute(-5)} style={styles.stepperButton}>
+              <Text style={styles.stepperButtonText}>−</Text>
+            </Pressable>
+            <Text style={styles.stepperValue}>{String(minute).padStart(2, '0')}</Text>
+            <Pressable onPress={() => adjustMinute(5)} style={styles.stepperButton}>
+              <Text style={styles.stepperButtonText}>+</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      {/* Длительность */}
+      <Text style={styles.sectionLabel}>Длительность</Text>
+      <View style={styles.chipsWrap}>
+        {DURATION_PRESETS.map((mins) => (
+          <Pressable
+            key={mins}
+            style={[styles.chip, durationMinutes === mins && styles.chipActive]}
+            onPress={() => setDurationMinutes(mins)}
+          >
+            <Text style={[styles.chipText, durationMinutes === mins && styles.chipTextActive]}>
+              {mins} мин
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {/* Цвет */}
+      <Text style={styles.sectionLabel}>Цвет</Text>
+      <View style={styles.chipsWrap}>
+        {COLOR_PRESETS.map((c) => (
+          <Pressable
+            key={c}
+            onPress={() => setColor(c)}
+            style={[
+              styles.colorSwatch,
+              { backgroundColor: c },
+              color === c && styles.colorSwatchActive,
+            ]}
+          />
+        ))}
+      </View>
+
+      {/* Повтор */}
+      <Text style={styles.sectionLabel}>Повтор</Text>
+      <View style={styles.chipsWrap}>
+        {(Object.keys(RECURRENCE_LABELS) as RecurrencePreset[]).map((preset) => (
+          <Pressable
+            key={preset}
+            style={[styles.chip, recurrencePreset === preset && styles.chipActive]}
+            onPress={() => setRecurrencePreset(preset)}
+          >
+            <Text
+              style={[styles.chipText, recurrencePreset === preset && styles.chipTextActive]}
+            >
+              {RECURRENCE_LABELS[preset]}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {/* Подзадачи */}
+      <Text style={styles.sectionLabel}>Разбить на шаги</Text>
+      <View style={styles.chipsWrap}>
+        {Object.keys(SUBTASK_PRESETS).map((presetName) => (
+          <Pressable
+            key={presetName}
+            style={styles.presetChip}
+            onPress={() => addSubtaskPreset(presetName)}
+          >
+            <Text style={styles.presetChipText}>+ {presetName}</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {existingSubtasks.map((s) => (
+        <View key={s.id} style={styles.subtaskRow}>
+          <Text style={styles.subtaskText}>{s.title}</Text>
+          <Pressable onPress={() => removeExistingSubtask(s.id)}>
+            <Text style={styles.subtaskRemove}>×</Text>
+          </Pressable>
+        </View>
+      ))}
+      {newSubtasks.map((s, i) => (
+        <View key={`new-${i}`} style={styles.subtaskRow}>
+          <Text style={styles.subtaskText}>{s}</Text>
+          <Pressable onPress={() => removeNewSubtask(i)}>
+            <Text style={styles.subtaskRemove}>×</Text>
+          </Pressable>
+        </View>
+      ))}
+
+      <View style={styles.subtaskInputRow}>
+        <TextInput
+          style={styles.subtaskInput}
+          placeholder="Добавить шаг"
+          placeholderTextColor="#9CA3AF"
+          value={subtaskInput}
+          onChangeText={setSubtaskInput}
+          onSubmitEditing={addSubtaskFromInput}
+          returnKeyType="done"
+        />
+        <Pressable onPress={addSubtaskFromInput} style={styles.subtaskAddButton}>
+          <Text style={styles.subtaskAddButtonText}>+</Text>
+        </Pressable>
+      </View>
+
+      {/* Действия */}
+      <Pressable
+        style={[styles.saveButton, (!title.trim() || saving) && styles.saveButtonDisabled]}
+        onPress={handleSave}
+        disabled={!title.trim() || saving}
+      >
+        <Text style={styles.saveButtonText}>{saving ? 'Сохранение…' : 'Сохранить'}</Text>
+      </Pressable>
+
+      {isEditMode && (
+        <Pressable style={styles.deleteButton} onPress={handleDelete}>
+          <Text style={styles.deleteButtonText}>Удалить задачу</Text>
+        </Pressable>
+      )}
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  content: { padding: 20, paddingBottom: 48 },
+  titleInput: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#111827',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    paddingVertical: 10,
+    marginBottom: 20,
+  },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginTop: 16,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  row: { flexDirection: 'row', gap: 8 },
+  toggleChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+  },
+  toggleChipActive: { backgroundColor: '#6B5BFC' },
+  toggleChipText: { fontSize: 13, color: '#6B7280', fontWeight: '600' },
+  toggleChipTextActive: { color: '#FFFFFF' },
+  timeStepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  stepper: { flexDirection: 'row', alignItems: 'center' },
+  stepperButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperButtonText: { fontSize: 18, color: '#111827', fontWeight: '600' },
+  stepperValue: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
+    width: 44,
+    textAlign: 'center',
+  },
+  timeColon: { fontSize: 22, fontWeight: '700', color: '#111827', marginHorizontal: 4 },
+  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+  },
+  chipActive: { backgroundColor: '#6B5BFC' },
+  chipText: { fontSize: 13, color: '#6B7280', fontWeight: '600' },
+  chipTextActive: { color: '#FFFFFF' },
+  colorSwatch: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  colorSwatchActive: { borderColor: '#111827' },
+  presetChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#6B5BFC',
+  },
+  presetChipText: { fontSize: 13, color: '#6B5BFC', fontWeight: '600' },
+  subtaskRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  subtaskText: { fontSize: 14, color: '#111827' },
+  subtaskRemove: { fontSize: 18, color: '#9CA3AF', paddingHorizontal: 8 },
+  subtaskInputRow: { flexDirection: 'row', gap: 8, marginTop: 8, alignItems: 'center' },
+  subtaskInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#111827',
+  },
+  subtaskAddButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  subtaskAddButtonText: { fontSize: 20, color: '#111827' },
+  saveButton: {
+    marginTop: 28,
+    backgroundColor: '#6B5BFC',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  saveButtonDisabled: { opacity: 0.5 },
+  saveButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
+  deleteButton: { marginTop: 16, paddingVertical: 12, alignItems: 'center' },
+  deleteButtonText: { color: '#EF4444', fontSize: 14, fontWeight: '600' },
+});

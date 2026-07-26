@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { useRouter } from 'expo-router';
 import { Timeline } from '../../components/timeline/Timeline';
 import { useTasksForDate, useCreateTask, useToggleTask } from '../../lib/api/tasks';
 import type { Task } from '@focus/shared-types';
@@ -20,6 +21,7 @@ import type { Task } from '@focus/shared-types';
  * Открывается сразу на "сейчас" (см. Timeline), а не на списке/меню — по UX-заметкам.
  */
 export default function TodayScreen() {
+  const router = useRouter();
   const today = new Date();
   const todayLabel = today.toLocaleDateString('ru-RU', {
     weekday: 'long',
@@ -57,6 +59,17 @@ export default function TodayScreen() {
     setQuickAddOpen(false);
   }
 
+  function openFullForm() {
+    setQuickAddOpen(false);
+    router.push({
+      pathname: '/task-form',
+      params: {
+        ...(title.trim() ? { prefillTitle: title.trim() } : {}),
+        ...(quickAddTime ? { prefillStartTime: quickAddTime.toISOString() } : {}),
+      },
+    });
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="auto" />
@@ -84,8 +97,10 @@ export default function TodayScreen() {
           tasks={tasks}
           onToggle={(id) => toggleTask.mutate(id)}
           onOpenTask={(task: Task) => {
-            // TODO: полноценный экран редактирования — следующий шаг роадмапа
-            Alert.alert(task.title, 'Редактирование задач появится на следующем шаге разработки');
+            router.push({
+              pathname: '/task-form',
+              params: { task: JSON.stringify(task) },
+            });
           }}
           onCreateAt={(startTime) => openQuickAdd(startTime)}
         />
@@ -125,6 +140,9 @@ export default function TodayScreen() {
             <View style={styles.modalActions}>
               <Pressable onPress={() => setQuickAddOpen(false)} style={styles.modalCancel}>
                 <Text style={styles.modalCancelText}>Отмена</Text>
+              </Pressable>
+              <Pressable onPress={openFullForm} style={styles.modalMore}>
+                <Text style={styles.modalMoreText}>Подробнее →</Text>
               </Pressable>
               <Pressable onPress={handleSubmitQuickAdd} style={styles.modalSubmit}>
                 <Text style={styles.modalSubmitText}>Создать</Text>
@@ -186,8 +204,10 @@ const styles = StyleSheet.create({
   },
   timeHint: { fontSize: 13, color: '#6B7280', marginTop: 8 },
   modalActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 20, gap: 12 },
-  modalCancel: { paddingVertical: 10, paddingHorizontal: 16 },
+  modalCancel: { paddingVertical: 10, paddingHorizontal: 12 },
   modalCancelText: { color: '#6B7280', fontSize: 15 },
+  modalMore: { paddingVertical: 10, paddingHorizontal: 12 },
+  modalMoreText: { color: '#6B5BFC', fontSize: 15, fontWeight: '600' },
   modalSubmit: { backgroundColor: '#6B5BFC', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
   modalSubmitText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
 });

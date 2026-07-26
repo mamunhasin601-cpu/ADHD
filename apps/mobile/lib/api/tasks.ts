@@ -86,3 +86,32 @@ export function useToggleTask(date: Date) {
     },
   });
 }
+
+export function useDeleteTask(date: Date) {
+  const queryClient = useQueryClient();
+  const dateParam = toDateParam(date);
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await apiClient.delete(`/tasks/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: tasksKey(dateParam) });
+    },
+  });
+}
+
+/**
+ * Создание подзадачи — обычный POST /tasks с parentTaskId, но не через useMutation,
+ * потому что при сохранении формы нужно последовательно создать несколько подзадач
+ * и дождаться каждой (await в цикле), а не просто дёрнуть мутацию из компонента.
+ * Инвалидацию кэша вызывающий код делает сам после того, как все подзадачи созданы.
+ */
+export async function createSubtask(parentTaskId: string, title: string): Promise<Task> {
+  const { data } = await apiClient.post<Task>('/tasks', { title, parentTaskId });
+  return data;
+}
+
+export async function deleteTaskById(id: string): Promise<void> {
+  await apiClient.delete(`/tasks/${id}`);
+}
