@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsEmail, IsTimeZone } from 'class-validator';
+import { IsOptional, IsString, IsEmail, IsTimeZone, IsBoolean } from 'class-validator';
 
 export class UpdateUserDto {
   @IsOptional()
@@ -12,4 +12,12 @@ export class UpdateUserDto {
   @IsOptional()
   @IsTimeZone({ message: 'Некорректный часовой пояс (используйте формат IANA, напр. Europe/Moscow)' })
   timezone?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  hasCompletedOnboarding?: boolean;
+
+  @IsOptional()
+  @IsString()
+  expoPushToken?: string;
 }

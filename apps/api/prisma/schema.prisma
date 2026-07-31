@@ -15,13 +15,14 @@ datasource db {
 // ──────────────────────────────────────────────
 
 model User {
-  id             String   @id @default(uuid())
-  email          String?  @unique
-  phone          String?  @unique
-  passwordHash   String
-  timezone       String   @default("Europe/Moscow")
-  expoPushToken  String?  // Expo push notification token (регистрируется с мобильного приложения)
-  createdAt      DateTime @default(now())
+  id                      String   @id @default(uuid())
+  email                   String?  @unique
+  phone                   String?  @unique
+  passwordHash            String
+  timezone                String   @default("Europe/Moscow")
+  hasCompletedOnboarding  Boolean  @default(false)
+  expoPushToken           String?  // Expo push notification token (регистрируется с мобильного приложения)
+  createdAt               DateTime @default(now())
 
   tasks                 Task[]
   routines              Routine[]

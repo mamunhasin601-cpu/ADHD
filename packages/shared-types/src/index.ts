@@ -12,6 +12,7 @@ export interface User {
   email: string | null;
   phone: string | null;
   timezone: string;
+  hasCompletedOnboarding: boolean;
   createdAt: Date;
 }
 
