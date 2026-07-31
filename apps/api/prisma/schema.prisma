@@ -22,6 +22,12 @@ model User {
   timezone                String   @default("Europe/Moscow")
   hasCompletedOnboarding  Boolean  @default(false)
   expoPushToken           String?  // Expo push notification token (регистрируется с мобильного приложения)
+  
+  // OAuth provider IDs
+  yandexId                String?  @unique
+  vkId                    String?  @unique
+  mailruId                String?  @unique
+  
   createdAt               DateTime @default(now())
 
   tasks                 Task[]
