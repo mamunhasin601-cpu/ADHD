@@ -5,6 +5,8 @@ import { AuthService } from './auth.service';
 import { OAuthService } from './oauth.service';
 import { AuthController } from './auth.controller';
 import { YandexOAuthController } from './yandex-oauth.controller';
+import { VkOAuthController } from './vk-oauth.controller';
+import {MailruOAuthController } from './mailru-oauth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
@@ -12,7 +14,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     PassportModule,
     JwtModule.register({}), // секреты передаём динамически в AuthService.generateTokens
   ],
-  controllers: [AuthController, YandexOAuthController],
+  controllers: [AuthController, YandexOAuthController, VkOAuthController, MailruOAuthController],
   providers: [AuthService, OAuthService, JwtStrategy],
   exports: [AuthService],
 })

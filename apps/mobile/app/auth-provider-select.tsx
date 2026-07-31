@@ -62,12 +62,40 @@ export default function AuthProviderSelectScreen() {
     }
   }
 
-  async function handleVKLogin() {
-    Alert.alert('Скоро', 'Вход через VK будет доступен в следующем обновлении');
+    async function handleVKLogin() {
+    setIsLoading(true);
+    try {
+      const result = await WebBrowser.openAuthSessionAsync(
+        `${API_BASE_URL}/auth/vk`,
+        'focus://auth/callback',
+      );
+      if (result.type === 'cancel') {
+        Alert.alert('Отменено', 'Вход через VK был отменён');
+}
+    } catch (error) {
+      console.error('VK OAuth error:', error);
+      Alert.alert('Ошибка', 'Не удалось войти через VK');
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   async function handleMailRuLogin() {
-    Alert.alert('Скоро', 'Вход через Mail.ru будет доступен в следующем обновлении');
+    setIsLoading(true);
+    try {
+      const result = await WebBrowser.openAuthSessionAsync(
+        `${API_BASE_URL}/auth/mailru`,
+        'focus://auth/callback',
+      );
+      if (result.type === 'cancel') {
+        Alert.alert('Отменено', 'Вход через Mail.ru был отменён');
+      }
+    } catch (error) {
+      console.error('Mail.ru OAuth error:', error);
+      Alert.alert('Ошибка', 'Не удалось войти через Mail.ru');
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -88,21 +116,21 @@ export default function AuthProviderSelectScreen() {
           </Pressable>
 
           <Pressable
-            style={[styles.providerButton, styles.vk, styles.disabled]}
+            style={[styles.providerButton, styles.vk]}
             onPress={handleVKLogin}
-            disabled
+            disabled={isLoading}
           >
             <Text style={styles.providerIcon}>ВК</Text>
-            <Text style={[styles.providerText, styles.disabledText]}>VK (скоро)</Text>
+            <Text style={styles.providerText}>VK</Text>
           </Pressable>
 
           <Pressable
-            style={[styles.providerButton, styles.mailru, styles.disabled]}
+            style={[styles.providerButton, styles.mailru]}
             onPress={handleMailRuLogin}
-            disabled
+            disabled={isLoading}
           >
             <Text style={styles.providerIcon}>@</Text>
-            <Text style={[styles.providerText, styles.disabledText]}>Mail.ru (скоро)</Text>
+            <Text style={styles.providerText}>Mail.ru</Text>
           </Pressable>
         </View>
 
