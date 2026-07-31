@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, Dimensions, GestureResponderEvent } from 'react-native';
 import { TIMELINE_CONFIG } from '../../lib/timeline-config';
+import { computeTimelineLayout } from '../../lib/timeline-layout';
 import { NowIndicator } from './NowIndicator';
 import { TaskBlock } from './TaskBlock';
 import type { Task } from '@focus/shared-types';
@@ -10,19 +11,24 @@ interface Props {
   onToggle: (id: string) => void;
   onOpenTask: (task: Task) => void;
   onCreateAt: (startTime: Date) => void;
+  shouldAutoScroll?: boolean;
+  currentDate?: Date;
+  currentTaskId?: string;
 }
 
 const { dayStartHour, dayEndHour, hourHeight } = TIMELINE_CONFIG;
 const hours = Array.from({ length: dayEndHour - dayStartHour }, (_, i) => dayStartHour + i);
 const totalHeight = hours.length * hourHeight;
 
-export function Timeline({ tasks, onToggle, onOpenTask, onCreateAt }: Props) {
+export function Timeline({ tasks, onToggle, onOpenTask, onCreateAt, shouldAutoScroll = true, currentDate = new Date(), currentTaskId }: Props) {
   const scrollRef = useRef<ScrollView>(null);
   const [hasScrolledToNow, setHasScrolledToNow] = useState(false);
+  const layout = useMemo(() => computeTimelineLayout(tasks), [tasks]);
 
   // Открытие экрана — сразу центрируем на "сейчас", а не показываем список/меню сверху
+  // Но только если смотрим на сегодня (shouldAutoScroll)
   useEffect(() => {
-    if (hasScrolledToNow) return;
+    if (!shouldAutoScroll || hasScrolledToNow) return;
     const now = new Date();
     const minutes = (now.getHours() - dayStartHour) * 60 + now.getMinutes();
     const totalMinutes = (dayEndHour - dayStartHour) * 60;
@@ -40,7 +46,7 @@ export function Timeline({ tasks, onToggle, onOpenTask, onCreateAt }: Props) {
     const y = event.nativeEvent.locationY;
     const minutesFromStart = (y / hourHeight) * 60;
 
-    const start = new Date();
+    const start = new Date(currentDate);
     start.setHours(dayStartHour, 0, 0, 0);
     start.setMinutes(start.getMinutes() + Math.round(minutesFromStart / 15) * 15); // округляем до 15 мин
     onCreateAt(start);
@@ -65,9 +71,20 @@ export function Timeline({ tasks, onToggle, onOpenTask, onCreateAt }: Props) {
 
         <NowIndicator />
 
-        {tasks.map((task) => (
-          <TaskBlock key={task.id} task={task} onToggle={onToggle} onOpen={onOpenTask} />
-        ))}
+        {tasks.map((task) => {
+          const taskLayout = layout.get(task.id);
+          return (
+            <TaskBlock
+              key={task.id}
+              task={task}
+              onToggle={onToggle}
+              onOpen={onOpenTask}
+              columnIndex={taskLayout?.columnIndex}
+              columnCount={taskLayout?.columnCount}
+              isCurrent={task.id === currentTaskId}
+            />
+          );
+        })}
       </View>
     </ScrollView>
   );

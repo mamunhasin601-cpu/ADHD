@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { Timeline } from '../../components/timeline/Timeline';
+import { ProgressRing } from '../../components/ProgressRing';
+import { EmptyState } from '../../components/EmptyState';
 import { useTasksForDate, useCreateTask, useToggleTask } from '../../lib/api/tasks';
 import type { Task } from '@focus/shared-types';
 
@@ -22,22 +24,73 @@ import type { Task } from '@focus/shared-types';
  */
 export default function TodayScreen() {
   const router = useRouter();
-  const today = new Date();
-  const todayLabel = today.toLocaleDateString('ru-RU', {
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  
+  const isToday = useMemo(() => {
+    const now = new Date();
+    return (
+      selectedDate.getDate() === now.getDate() &&
+      selectedDate.getMonth() === now.getMonth() &&
+      selectedDate.getFullYear() === now.getFullYear()
+    );
+  }, [selectedDate]);
+
+  const dateLabel = selectedDate.toLocaleDateString('ru-RU', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
   });
 
-  const { data: tasks = [], isLoading, isError } = useTasksForDate(today);
-  const createTask = useCreateTask(today);
-  const toggleTask = useToggleTask(today);
+  const { data: tasks = [], isLoading, isError } = useTasksForDate(selectedDate);
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Обновляем время каждую минуту для актуализации Now/Next
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // каждую минуту
+    return () => clearInterval(interval);
+  }, []);
+
+  const scheduledTasks = tasks.filter((task) => task.startTime && !task.completedAt);
+  const unscheduledTasks = tasks.filter((task) => !task.startTime);
+
+  // Прогресс дня: завершенные / все задачи
+  const completedCount = tasks.filter((task) => task.completedAt).length;
+  const totalCount = tasks.length;
+
+  // Текущая задача: startTime <= now < endTime
+  const currentTask = useMemo(() => {
+    if (!isToday) return null;
+    const now = currentTime.getTime();
+    return scheduledTasks.find((task) => {
+      const start = new Date(task.startTime!).getTime();
+      const end = task.durationMinutes
+        ? start + task.durationMinutes * 60 * 1000
+        : start + 60 * 60 * 1000; // default 1 hour if no duration
+      return start <= now && now < end;
+    });
+  }, [scheduledTasks, currentTime, isToday]);
+
+  // Следующая задача: startTime > now, ближайшая
+  const nextTask = useMemo(() => {
+    if (!isToday) return null;
+    const now = currentTime.getTime();
+    const upcoming = scheduledTasks
+      .filter((task) => new Date(task.startTime!).getTime() > now)
+      .sort((a, b) => new Date(a.startTime!).getTime() - new Date(b.startTime!).getTime());
+    return upcoming[0] || null;
+  }, [scheduledTasks, currentTime, isToday]);
+  const createTask = useCreateTask(selectedDate);
+  const toggleTask = useToggleTask(selectedDate);
 
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [quickAddTime, setQuickAddTime] = useState<Date | null>(null);
   const [title, setTitle] = useState('');
 
   function openQuickAdd(startTime: Date | null) {
+    // Если startTime передан, используем его как есть
+    // Если null, то задача создается без времени
     setQuickAddTime(startTime);
     setTitle('');
     setQuickAddOpen(true);
@@ -74,8 +127,43 @@ export default function TodayScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar style="auto" />
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Focus</Text>
-        <Text style={styles.headerDate}>{todayLabel}</Text>
+        <View style={styles.headerTop}>
+          <Text style={styles.headerTitle}>Focus</Text>
+          {isToday && totalCount > 0 && (
+            <ProgressRing completed={completedCount} total={totalCount} />
+          )}
+          {!isToday && (
+            <Pressable
+              onPress={() => setSelectedDate(new Date())}
+              style={styles.todayButton}
+            >
+              <Text style={styles.todayButtonText}>Сегодня</Text>
+            </Pressable>
+          )}
+        </View>
+        <View style={styles.dateNav}>
+          <Pressable
+            onPress={() => {
+              const prev = new Date(selectedDate);
+              prev.setDate(prev.getDate() - 1);
+              setSelectedDate(prev);
+            }}
+            style={styles.navButton}
+          >
+            <Text style={styles.navButtonText}>‹</Text>
+          </Pressable>
+          <Text style={styles.headerDate}>{dateLabel}</Text>
+          <Pressable
+            onPress={() => {
+              const next = new Date(selectedDate);
+              next.setDate(next.getDate() + 1);
+              setSelectedDate(next);
+            }}
+            style={styles.navButton}
+          >
+            <Text style={styles.navButtonText}>›</Text>
+          </Pressable>
+        </View>
       </View>
 
       {isLoading && (
@@ -92,18 +180,123 @@ export default function TodayScreen() {
         </View>
       )}
 
-      {!isLoading && !isError && (
-        <Timeline
-          tasks={tasks}
-          onToggle={(id) => toggleTask.mutate(id)}
-          onOpenTask={(task: Task) => {
-            router.push({
-              pathname: '/task-form',
-              params: { task: JSON.stringify(task) },
-            });
-          }}
-          onCreateAt={(startTime) => openQuickAdd(startTime)}
+      {!isLoading && !isError && totalCount === 0 && (
+        <EmptyState
+          emoji="🌅"
+          title={isToday ? "Начни свой день" : "Свободный день"}
+          description={
+            isToday
+              ? "Добавь первую задачу, чтобы начать планирование. Нажми + внизу или коснись таймлайна."
+              : "На этот день пока нет задач. Создай задачу или вернись к сегодняшнему дню."
+          }
+          actionLabel="Создать задачу"
+          onAction={() => openQuickAdd(null)}
         />
+      )}
+
+      {!isLoading && !isError && totalCount > 0 && (
+        <>
+          {isToday && (currentTask || nextTask) && (
+            <View style={styles.nowNextCard}>
+              {currentTask && (
+                <View style={styles.nowSection}>
+                  <Text style={styles.nowLabel}>Сейчас</Text>
+                  <Text style={styles.nowTaskTitle} numberOfLines={1}>
+                    {currentTask.title}
+                  </Text>
+                  {currentTask.durationMinutes && (
+                    <Text style={styles.nowTaskTime}>
+                      {new Date(currentTask.startTime!).toLocaleTimeString('ru-RU', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}{' '}
+                      • {currentTask.durationMinutes} мин
+                    </Text>
+                  )}
+                </View>
+              )}
+              {nextTask && (
+                <View style={styles.nextSection}>
+                  <Text style={styles.nextLabel}>Дальше</Text>
+                  <Text style={styles.nextTaskTitle} numberOfLines={1}>
+                    {nextTask.title}
+                  </Text>
+                  <Text style={styles.nextTaskTime}>
+                    {new Date(nextTask.startTime!).toLocaleTimeString('ru-RU', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+          {unscheduledTasks.length > 0 && (
+            <View style={styles.unscheduledList}>
+              {unscheduledTasks.map((task) => (
+                <Pressable
+                  key={task.id}
+                  style={styles.unscheduledItem}
+                  onPress={() => toggleTask.mutate(task.id)}
+                  onLongPress={() =>
+                    router.push({
+                      pathname: '/task-form',
+                      params: { task: JSON.stringify(task) },
+                    })
+                  }
+                >
+                  <View
+                    style={[
+                      styles.unscheduledDot,
+                      { backgroundColor: task.completedAt ? '#E5E7EB' : task.color },
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      styles.unscheduledText,
+                      !!task.completedAt && styles.unscheduledTextDone,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {task.title}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+          {scheduledTasks.length === 0 ? (
+            <EmptyState
+              emoji="📅"
+              title="Таймлайн свободен"
+              description="Коснись таймлайна, чтобы запланировать задачу на конкретное время."
+              actionLabel={unscheduledTasks.length > 0 ? "Запланировать из Inbox" : undefined}
+              onAction={
+                unscheduledTasks.length > 0
+                  ? () =>
+                      router.push({
+                        pathname: '/task-form',
+                        params: { task: JSON.stringify(unscheduledTasks[0]) },
+                      })
+                  : undefined
+              }
+            />
+          ) : (
+            <Timeline
+              tasks={tasks}
+              onToggle={(id) => toggleTask.mutate(id)}
+              onOpenTask={(task: Task) => {
+                router.push({
+                  pathname: '/task-form',
+                  params: { task: JSON.stringify(task) },
+                });
+              }}
+              onCreateAt={(startTime) => openQuickAdd(startTime)}
+              shouldAutoScroll={isToday}
+              currentDate={selectedDate}
+              currentTaskId={currentTask?.id}
+            />
+          )}
+        </>
       )}
 
       <Pressable style={styles.fab} onPress={() => openQuickAdd(null)}>
@@ -164,10 +357,114 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   headerTitle: { fontSize: 28, fontWeight: '700', color: '#6B5BFC' },
-  headerDate: { fontSize: 14, color: '#6B7280', marginTop: 2, textTransform: 'capitalize' },
+  todayButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#EDE9FE',
+  },
+  todayButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B5BFC',
+  },
+  dateNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  navButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navButtonText: {
+    fontSize: 24,
+    color: '#6B5BFC',
+    fontWeight: '600',
+  },
+  headerDate: { fontSize: 16, color: '#111827', fontWeight: '500', textTransform: 'capitalize', flex: 1, textAlign: 'center' },
+  nowNextCard: {
+    marginHorizontal: 20,
+    marginVertical: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  nowSection: {
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  nowLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6B5BFC',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  nowTaskTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  nowTaskTime: {
+    fontSize: 13,
+    color: '#6B7280',
+  },
+  nextSection: {},
+  nextLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#9CA3AF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  nextTaskTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 2,
+  },
+  nextTaskTime: {
+    fontSize: 13,
+    color: '#9CA3AF',
+  },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   errorText: { color: '#6B7280', textAlign: 'center' },
+  unscheduledList: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  unscheduledItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
+  unscheduledDot: { width: 8, height: 8, borderRadius: 4, marginRight: 10 },
+  unscheduledText: { fontSize: 14, color: '#111827', flex: 1 },
+  unscheduledTextDone: { textDecorationLine: 'line-through', color: '#9CA3AF' },
   fab: {
     position: 'absolute',
     bottom: 32,
@@ -203,7 +500,7 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   timeHint: { fontSize: 13, color: '#6B7280', marginTop: 8 },
-  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 20, gap: 12 },
+  modalActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20 },
   modalCancel: { paddingVertical: 10, paddingHorizontal: 12 },
   modalCancelText: { color: '#6B7280', fontSize: 15 },
   modalMore: { paddingVertical: 10, paddingHorizontal: 12 },
