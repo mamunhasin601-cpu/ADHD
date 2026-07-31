@@ -11,6 +11,15 @@ datasource db {
 }
 
 // ──────────────────────────────────────────────
+// Subscription Plan
+// ──────────────────────────────────────────────
+
+enum Plan {
+  FREE
+  PRO
+}
+
+// ──────────────────────────────────────────────
 // User
 // ──────────────────────────────────────────────
 
@@ -21,6 +30,8 @@ model User {
   passwordHash            String
   timezone                String   @default("Europe/Moscow")
   hasCompletedOnboarding  Boolean  @default(false)
+  plan   Plan     @default(FREE)
+  proExpiresAt            DateTime? // null = навсегда (если Pro) или не Pro
   expoPushToken           String?  // Expo push notification token (регистрируется с мобильного приложения)
   
   // OAuth provider IDs

@@ -75,6 +75,7 @@ export default function RootLayout() {
         <Stack.Screen name="register" />
         <Stack.Screen name="auth-provider-select" />
         <Stack.Screen name="onboarding" />
+        <Stack.Screen name="paywall" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen
           name="task-form"

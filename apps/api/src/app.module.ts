@@ -7,6 +7,7 @@ import { UsersModule } from './users/users.module';
 import { TasksModule } from './tasks/tasks.module';
 import { RoutinesModule } from './routines/routines.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { PlanModule } from './plan/plan.module';
 
 @Module({
   imports: [
@@ -23,12 +24,13 @@ import { NotificationsModule } from './notifications/notifications.module';
       },
     }),
 
-    PrismaModule,
+        PrismaModule,
     AuthModule,
     UsersModule,
     TasksModule,
     RoutinesModule,
     NotificationsModule,
+    PlanModule,
   ],
 })
 export class AppModule {}

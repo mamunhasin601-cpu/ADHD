@@ -7,12 +7,21 @@
 // User
 // ────────────────────────────────────────────────────────────
 
+export type Plan = 'FREE' | 'PRO';
+
+export const FREE_TIER_LIMITS = {
+  /** Максимальное количество активных задач для Free пользователей */
+  maxActiveTasks: 50,
+} as const;
+
 export interface User {
   id: string;
   email: string | null;
   phone: string | null;
   timezone: string;
   hasCompletedOnboarding: boolean;
+  plan: Plan;
+  proExpiresAt: Date | null;
   createdAt: Date;
 }
 

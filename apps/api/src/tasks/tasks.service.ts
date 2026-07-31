@@ -1,10 +1,12 @@
 import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PlanService } from '../plan/plan.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { GetTasksQueryDto } from './dto/get-tasks-query.dto';
 import type { Task } from '@prisma/client';
+import { toDate } from 'date-fns-tz';
 
 @Injectable()
 export class TasksService {
@@ -13,9 +15,15 @@ export class TasksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly planService: PlanService,
   ) {}
 
   async create(userId: string, dto: CreateTaskDto): Promise<Task> {
+    // Проверяем лимит задач для Free пользователей
+    if (!dto.parentTaskId) {
+      await this.planService.enforceTaskLimit(userId);
+    }
+
     const task = await this.prisma.task.create({
       data: {
         userId,
@@ -42,11 +50,19 @@ export class TasksService {
 
     // Фильтр по дате: задачи, которые начинаются в указанный день
     if (query.date) {
-      const dayStart = new Date(query.date);
-      dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(query.date);
-      dayEnd.setHours(23, 59, 59, 999);
-      where['startTime'] = { gte: dayStart, lte: dayEnd };
+      // Получаем timezone пользователя
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { timezone: true },
+      });
+      const userTimezone = user?.timezone || 'UTC';
+
+      // Строим даты начала и конца дня в timezone пользователя
+      // toDate интерпретирует строку в указанной timezone и возвращает Date в UTC
+      const dayStartUtc = toDate(`${query.date}T00:00:00`, { timeZone: userTimezone });
+      const dayEndUtc = toDate(`${query.date}T23:59:59.999`, { timeZone: userTimezone });
+
+      where['startTime'] = { gte: dayStartUtc, lte: dayEndUtc };
     }
 
     if (query.incomplete) {
