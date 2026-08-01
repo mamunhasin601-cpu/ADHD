@@ -6,14 +6,17 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "paths": {
-      "@focus/shared-types": ["../../packages/shared-types/src/index.ts"],
-      "@/*": ["./*"]
+      "@focus/shared-types": [
+        "../../packages/shared-types/src/index.ts"
+      ],
+      "@/*": [
+        "./*"
+      ]
     }
   },
   "include": [
     "**/*.ts",
     "**/*.tsx",
-    ".expo/types/**/*.d.ts",
-    "expo-env.d.ts"
+    ".expo/types/**/*.d.ts"
   ]
 }

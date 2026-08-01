@@ -26,26 +26,20 @@ apiClient.interceptors.response.use(
   async (error: unknown) => {
     const axiosError = error as { response?: { status: number }; config?: { _retry?: boolean } & Record<string, unknown> };
     const originalRequest = axiosError.config;
-
     if (axiosError.response?.status === 401 && originalRequest && !originalRequest._retry) {
       originalRequest._retry = true;
-
       try {
         const { useAuthStore } = await import('../stores/auth.store');
         const refreshToken = useAuthStore.getState().refreshToken;
-
         if (!refreshToken) throw new Error('Нет refresh-токена');
-
         const { data } = await axios.post<AuthTokens>(`${API_BASE_URL}/auth/refresh`, {
           refreshToken,
         });
-
         useAuthStore.getState().setTokens(data);
         setAuthToken(data.accessToken);
         if (originalRequest.headers) {
           (originalRequest.headers as Record<string, string>)['Authorization'] = `Bearer ${data.accessToken}`;
         }
-
         return apiClient(originalRequest);
       } catch {
         const { useAuthStore } = await import('../stores/auth.store');
@@ -53,7 +47,6 @@ apiClient.interceptors.response.use(
         return Promise.reject(error);
       }
     }
-
     return Promise.reject(error);
   },
 );

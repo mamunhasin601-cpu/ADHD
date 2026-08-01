@@ -1,0 +1,34 @@
+/**
+ * Извлекает понятный текст ошибки из axios-исключения.
+ *
+ * Раньше в login.tsx/register.tsx была своя копия этой функции, которая при
+ * ЛЮБОЙ ошибке без ответа сервера (сеть недоступна, таймаут, неверный адрес)
+ * показывала одну и ту же общую фразу "Проверьте данные и попробуйте снова" —
+ * это маскировало реальную причину и мешало диагностике.
+ *
+ * Теперь: если ответа от сервера вообще не было — показываем это явно
+ * (с текстом низкоуровневой ошибки axios), а не generic-фразу.
+ */
+export function extractErrorMessage(err: unknown): string {
+  const axiosErr = err as {
+    message?: string;
+    code?: string;
+    response?: { data?: { message?: string | string[] }; status?: number };
+  };
+
+  // Сервер ответил (400/401/409 и т.д.) — показываем именно его сообщение
+  if (axiosErr.response) {
+    const message = axiosErr.response.data?.message;
+    if (Array.isArray(message)) return message.join(', ');
+    if (message) return message;
+    return `Сервер ответил с ошибкой (код ${axiosErr.response.status ?? '?'})`;
+  }
+
+  // Таймаут запроса
+  if (axiosErr.code === 'ECONNABORTED') {
+    return 'Сервер не ответил вовремя (таймаут). Проверьте, запущен ли backend.';
+  }
+
+  // Запрос вообще не дошёл до сервера — сеть/адрес/фаервол
+  return `Не удалось подключиться к серверу: ${axiosErr.message ?? 'неизвестная сетевая ошибка'}. Проверьте адрес API (EXPO_PUBLIC_API_URL) и что телефон и компьютер в одной сети.`;
+}

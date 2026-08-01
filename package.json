@@ -18,6 +18,9 @@
   "devDependencies": {
     "typescript": "5.4.5"
   },
+  "overrides": {
+    "expo-linking": "6.3.1"
+  },
   "allowScripts": {
     "@nestjs/core@10.3.10": true,
     "@prisma/client@5.16.2": true,

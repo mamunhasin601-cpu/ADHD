@@ -9,6 +9,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { JWT_SECRET, JWT_REFRESH_SECRET } from './jwt-secrets';
 import type { AuthTokens, JwtPayload } from '@focus/shared-types';
 import type { User } from '@prisma/client';
 
@@ -83,7 +84,7 @@ export class AuthService {
   async refreshTokens(refreshToken: string): Promise<AuthTokens> {
     try {
       const payload = this.jwtService.verify<JwtPayload>(refreshToken, {
-        secret: process.env.JWT_REFRESH_SECRET ?? 'dev-refresh-secret',
+        secret: JWT_REFRESH_SECRET,
       });
 
       const user = await this.prisma.user.findUnique({
@@ -108,12 +109,12 @@ export class AuthService {
     };
 
     const accessToken = this.jwtService.sign(payload, {
-      secret: process.env.JWT_SECRET ?? 'dev-secret',
+      secret: JWT_SECRET,
       expiresIn: process.env.JWT_EXPIRES_IN ?? '15m',
     });
 
     const refreshToken = this.jwtService.sign(payload, {
-      secret: process.env.JWT_REFRESH_SECRET ?? 'dev-refresh-secret',
+      secret: JWT_REFRESH_SECRET,
       expiresIn: process.env.JWT_REFRESH_EXPIRES_IN ?? '30d',
     });
 
