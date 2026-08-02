@@ -9,6 +9,20 @@
  * Теперь: если ответа от сервера вообще не было — показываем это явно
  * (с текстом низкоуровневой ошибки axios), а не generic-фразу.
  */
+/**
+ * Возвращает true если сервер ответил 403 FREE_TIER_LIMIT_REACHED
+ * (пользователь Free превысил лимит активных задач).
+ */
+export function isFreeTierLimitError(err: unknown): boolean {
+  const axiosErr = err as {
+    response?: { status?: number; data?: { code?: string } };
+  };
+  return (
+    axiosErr.response?.status === 403 &&
+    axiosErr.response?.data?.code === 'FREE_TIER_LIMIT_REACHED'
+  );
+}
+
 export function extractErrorMessage(err: unknown): string {
   const axiosErr = err as {
     message?: string;

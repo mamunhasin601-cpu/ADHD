@@ -16,6 +16,7 @@ import { Timeline } from '../../components/timeline/Timeline';
 import { ProgressRing } from '../../components/ProgressRing';
 import { EmptyState } from '../../components/EmptyState';
 import { useTasksForDate, useCreateTask, useToggleTask } from '../../lib/api/tasks';
+import { isFreeTierLimitError } from '../../lib/api-error';
 import type { Task } from '@focus/shared-types';
 
 /**
@@ -52,18 +53,18 @@ export default function TodayScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  const scheduledTasks = tasks.filter((task) => task.startTime && !task.completedAt);
-  const unscheduledTasks = tasks.filter((task) => !task.startTime);
+    const scheduledTasks = tasks.filter((task: Task) => task.startTime && !task.completedAt);
+  const unscheduledTasks = tasks.filter((task: Task) => !task.startTime);
 
   // Прогресс дня: завершенные / все задачи
-  const completedCount = tasks.filter((task) => task.completedAt).length;
+  const completedCount = tasks.filter((task: Task) => task.completedAt).length;
   const totalCount = tasks.length;
 
   // Текущая задача: startTime <= now < endTime
   const currentTask = useMemo(() => {
     if (!isToday) return null;
     const now = currentTime.getTime();
-    return scheduledTasks.find((task) => {
+    return scheduledTasks.find((task: Task) => {
       const start = new Date(task.startTime!).getTime();
       const end = task.durationMinutes
         ? start + task.durationMinutes * 60 * 1000
@@ -77,8 +78,8 @@ export default function TodayScreen() {
     if (!isToday) return null;
     const now = currentTime.getTime();
     const upcoming = scheduledTasks
-      .filter((task) => new Date(task.startTime!).getTime() > now)
-      .sort((a, b) => new Date(a.startTime!).getTime() - new Date(b.startTime!).getTime());
+      .filter((task: Task) => new Date(task.startTime!).getTime() > now)
+      .sort((a: Task, b: Task) => new Date(a.startTime!).getTime() - new Date(b.startTime!).getTime());
     return upcoming[0] || null;
   }, [scheduledTasks, currentTime, isToday]);
   const createTask = useCreateTask(selectedDate);
@@ -97,7 +98,7 @@ export default function TodayScreen() {
   }
 
   function handleSubmitQuickAdd() {
-    if (!title.trim()) return; // единственное обязательное поле — само название
+    if (!title.trim()) return;
 
     createTask.mutate(
       {
@@ -105,8 +106,14 @@ export default function TodayScreen() {
         startTime: quickAddTime ? quickAddTime.toISOString() : null,
       },
       {
-        onError: () =>
-          Alert.alert('Не удалось создать задачу', 'Проверьте соединение и попробуйте снова'),
+        onError: (err) => {
+          if (isFreeTierLimitError(err)) {
+            setQuickAddOpen(false);
+router.push('/paywall');
+          } else {
+            Alert.alert('Не удалось создать задачу', 'Проверьте соединение и попробуйте снова');
+          }
+        },
       },
     );
     setQuickAddOpen(false);
@@ -119,6 +126,7 @@ export default function TodayScreen() {
       params: {
         ...(title.trim() ? { prefillTitle: title.trim() } : {}),
         ...(quickAddTime ? { prefillStartTime: quickAddTime.toISOString() } : {}),
+        selectedDate: selectedDate.toISOString(),
       },
     });
   }
@@ -233,7 +241,7 @@ export default function TodayScreen() {
           )}
           {unscheduledTasks.length > 0 && (
             <View style={styles.unscheduledList}>
-              {unscheduledTasks.map((task) => (
+              {unscheduledTasks.map((task: Task) => (
                 <Pressable
                   key={task.id}
                   style={styles.unscheduledItem}
@@ -241,7 +249,10 @@ export default function TodayScreen() {
                   onLongPress={() =>
                     router.push({
                       pathname: '/task-form',
-                      params: { task: JSON.stringify(task) },
+                      params: {
+                        task: JSON.stringify(task),
+                        selectedDate: selectedDate.toISOString(),
+                      },
                     })
                   }
                 >
@@ -275,7 +286,10 @@ export default function TodayScreen() {
                   ? () =>
                       router.push({
                         pathname: '/task-form',
-                        params: { task: JSON.stringify(unscheduledTasks[0]) },
+                        params: {
+                          task: JSON.stringify(unscheduledTasks[0]),
+                          selectedDate: selectedDate.toISOString(),
+                        },
                       })
                   : undefined
               }
@@ -287,7 +301,10 @@ export default function TodayScreen() {
               onOpenTask={(task: Task) => {
                 router.push({
                   pathname: '/task-form',
-                  params: { task: JSON.stringify(task) },
+                  params: {
+                    task: JSON.stringify(task),
+                    selectedDate: selectedDate.toISOString(),
+                  },
                 });
               }}
               onCreateAt={(startTime) => openQuickAdd(startTime)}

@@ -18,6 +18,7 @@ import {
   createSubtask,
   deleteTaskById,
 } from '../lib/api/tasks';
+import { isFreeTierLimitError } from '../lib/api-error';
 
 const DURATION_PRESETS = [15, 30, 45, 60, 90, 120];
 const COLOR_PRESETS = [
@@ -67,12 +68,16 @@ export default function TaskFormScreen() {
     task?: string;
     prefillStartTime?: string;
     prefillTitle?: string;
+    /** ISO-строка даты выбранного дня — передаётся из today.tsx для корректной инвалидации кэша */
+    selectedDate?: string;
   }>();
 
-  // ДОПУЩЕНИЕ: приложение сейчас показывает только "сегодня", поэтому дата
-  // для инвалидации кэша и для новых задач — всегда текущая. Если появится
-  // навигация по дням, дату нужно будет передавать параметром, а не брать new Date().
-  const today = useMemo(() => new Date(), []);
+  // Используем дату, переданную с экрана (выбранный день навигации).
+  // Если параметр не пришёл — fallback на сегодня (обратная совместимость).
+  const today = useMemo(
+    () => (params.selectedDate ? new Date(params.selectedDate) : new Date()),
+    [params.selectedDate],
+  );
 
   const existingTask: Task | null = useMemo(() => {
     if (!params.task) return null;
@@ -190,8 +195,12 @@ export default function TaskFormScreen() {
       }
 
       router.back();
-    } catch {
-      Alert.alert('Не удалось сохранить', 'Проверьте соединение и попробуйте снова');
+    } catch (err) {
+      if (isFreeTierLimitError(err)) {
+        router.replace('/paywall');
+      } else {
+        Alert.alert('Не удалось сохранить', 'Проверьте соединение и попробуйте снова');
+      }
     } finally {
       setSaving(false);
     }

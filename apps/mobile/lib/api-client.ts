@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { type AxiosRequestConfig } from 'axios';
 import type { AuthTokens } from '@focus/shared-types';
 
 // В dev-режиме: ваш локальный IP или ngrok-адрес
@@ -24,7 +24,7 @@ export function setAuthToken(token: string | null) {
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: unknown) => {
-    const axiosError = error as { response?: { status: number }; config?: { _retry?: boolean } & Record<string, unknown> };
+    const axiosError = error as { response?: { status: number }; config?: AxiosRequestConfig & { _retry?: boolean } };
     const originalRequest = axiosError.config;
     if (axiosError.response?.status === 401 && originalRequest && !originalRequest._retry) {
       originalRequest._retry = true;
@@ -40,7 +40,7 @@ apiClient.interceptors.response.use(
         if (originalRequest.headers) {
           (originalRequest.headers as Record<string, string>)['Authorization'] = `Bearer ${data.accessToken}`;
         }
-        return apiClient(originalRequest);
+        return apiClient(originalRequest as AxiosRequestConfig);
       } catch {
         const { useAuthStore } = await import('../stores/auth.store');
         useAuthStore.getState().logout();

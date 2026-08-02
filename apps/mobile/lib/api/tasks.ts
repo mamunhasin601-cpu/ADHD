@@ -68,8 +68,8 @@ export function useToggleTask(date: Date) {
       await queryClient.cancelQueries({ queryKey: tasksKey(dateParam) });
       const previous = queryClient.getQueryData<Task[]>(tasksKey(dateParam));
 
-      queryClient.setQueryData<Task[]>(tasksKey(dateParam), (old) =>
-        old?.map((t) =>
+            queryClient.setQueryData<Task[]>(tasksKey(dateParam), (old: Task[] | undefined) =>
+        old?.map((t: Task) =>
           t.id === id ? { ...t, completedAt: t.completedAt ? null : new Date() } : t,
         ),
       );

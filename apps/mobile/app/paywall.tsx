@@ -1,8 +1,10 @@
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { apiClient } from '../lib/api-client';
+import { usePlanInfo, useInvalidatePlan } from '../lib/api/plan';
+import { FREE_TIER_LIMITS } from '@focus/shared-types';
 import { useState } from 'react';
 
 /**
@@ -12,19 +14,26 @@ import { useState } from 'react';
 export default function PaywallScreen() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const { data: planInfo } = usePlanInfo();
+  const invalidatePlan = useInvalidatePlan();
+
+  const activeTasks = planInfo?.usage.activeTasks ??0;
+  const limit = FREE_TIER_LIMITS.maxActiveTasks;
+  const usagePercent = Math.min((activeTasks / limit) * 100, 100);
 
   async function handleUpgrade() {
     setIsLoading(true);
     try {
       // TODO: интеграция с Expo IAP для реальной оплаты
-      // Сейчас — dev режим, просто апгрейд без оплаты
+      // Сейчас — dev endpoint, апгрейд без оплаты
       await apiClient.post('/plan/upgrade');
+      await invalidatePlan();
       Alert.alert(
         '🎉 Добро пожаловать в Pro!',
         'Теперь у вас безлимитное количество задач и все Pro-фичи.',
         [{ text: 'Начать', onPress: () => router.back() }],
       );
-    } catch (error) {
+    } catch {
       Alert.alert('Ошибка', 'Не удалось оформить подписку. Попробуйте ещё раз.');
     } finally {
       setIsLoading(false);
@@ -43,6 +52,15 @@ export default function PaywallScreen() {
             Вы достигли лимита бесплатного плана.
             Перейдите на Pro, чтобы продолжить.
           </Text>
+          {/* Индикатор использования лимита */}
+          <View style={styles.usageContainer}>
+            <View style={styles.usageBar}>
+              <View style={[styles.usageFill, { width: `${usagePercent}%` as any }]} />
+            </View>
+            <Text style={styles.usageText}>
+              {activeTasks} из {limit} активных задач использовано
+            </Text>
+          </View>
         </View>
 
         {/* Free vs Pro comparison */}
@@ -258,6 +276,27 @@ lineHeight: 24,
     color: '#FFFFFF',
     fontSize: 17,
     fontWeight: '700',
+  },
+    usageContainer: {
+    width: '100%',
+    marginTop: 16,
+  },
+  usageBar: {
+    height: 6,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 6,
+  },
+  usageFill: {
+    height: '100%',
+    backgroundColor: '#EF4444',
+    borderRadius: 3,
+  },
+  usageText: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center',
   },
   trialNote: {
     fontSize: 12,

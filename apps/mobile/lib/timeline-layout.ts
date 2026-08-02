@@ -20,7 +20,7 @@ export function computeTimelineLayout(tasks: Task[]): Map<string, TaskLayout> {
   const intervals = tasks
     .filter((task) => !!task.startTime)
     .map((task) => {
-      const start = minutesFromDayStart(new Date(task.startTime as string));
+            const start = minutesFromDayStart(new Date(task.startTime as unknown as string));
       return { task, start, end: start + task.durationMinutes };
     })
     .sort((a, b) => a.start - b.start || a.end - b.end);
