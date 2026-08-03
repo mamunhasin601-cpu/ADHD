@@ -2,13 +2,13 @@
 
 **Source:** Official TZ from `D:\11\Users\mihaa\Downloads\Focus_CloudCode_Master_TZ_v2`  
 **Target:** Release A (P0 — Before Launch)  
-**Progress:** ~64% complete
+**Progress:** ~68% complete
 
 ---
 
 ## P0 — Before Launch (Release A)
 
-### ✅ Completed (16/25 features)
+### ✅ Completed (19/25 features)
 
 **Identity (4/4):**
 - [x] Email/phone auth + secure sessions + session recovery
@@ -51,10 +51,10 @@
 - [ ] Sync on reconnect
 - [ ] Conflict resolution
 
-**Monetization (0/5):**
-- [ ] Free tier limits (50 tasks/month)
-- [ ] Pro architecture
-- [ ] Paywall screen
+**Monetization (3/5):**
+- [x] Free tier limits (50 active tasks) ✅ (2026-08-02)
+- [x] Pro architecture (PlanService, enforceTaskLimit, plan badge) ✅ (2026-08-02)
+- [x] Paywall screen (usage bar, Free/Pro comparison, upgrade flow) ✅ (2026-08-02)
 - [ ] In-app purchases (Expo IAP)
 - [ ] Restore purchases
 
@@ -79,11 +79,11 @@
 3. ✅ Empty states (2h) — DONE
 4. ✅ 5-minute start (4h) — DONE
 
-### Week 2: Identity + Monetization  
+### Week 2: Identity + Monetization ✅ COMPLETE
 5. ✅ Yandex OAuth (1 day) — DONE
 6. ✅ VK OAuth (1 day) — DONE
 7. ✅ Mail.ru OAuth (1 day) — DONE
-8. Free/Pro architecture (2 days)
+8. ✅ Free/Pro architecture (2 days) — DONE
 
 ### Week 3: Week View + Recurring
 7. Basic week view (6-8h)
@@ -150,7 +150,7 @@
 
 ## Technical Debt
 
-- [ ] Fix TypeScript config warning (`bundler` module setting)
+- [x] Fix TypeScript config warning (`bundler` module setting) ✅ (2026-08-02)
 - [ ] Add unit tests for timeline layout
 - [ ] Add integration tests for auth flow
 - [ ] Add E2E tests for critical paths
@@ -169,10 +169,17 @@
 - Empty states (friendly messages when no tasks)
 - 5-minute start onboarding (3-step flow for new users)
 - Yandex OAuth 2.0 integration (backend + mobile)
+- Free/Pro architecture: PlanService + enforceTaskLimit backend
+- Paywall screen with live usage bar and upgrade flow
+- Settings screen: plan badge, usage bar (red≥90%), upgrade CTA
+- Auto-redirect to /paywall on FREE_TIER_LIMIT_REACHED (today + task-form)
+- Bug fix: task-form date param (was hardcoding new Date() after day navigation added)
+- Bug fix: TypeScript config — module=ESNext for bundler moduleResolution
+- Bug fix: implicit any in callbacks (today.tsx, tasks.ts, api-client.ts, timeline-layout.ts)
 
 🎉 **Week 1 Core UX: 100% COMPLETE**
-🎉 **Week 2: 75% COMPLETE (3/4 features)**
+🎉 **Week 2 Identity + Monetization: 100% COMPLETE (4/4 features)**
 
-📝 **Next milestone:** Free/Pro architecture (2 days) — последняя задача Week 2
+📝 **Next milestone:** Week 3 — Basic recurring tasks (1-2 days)
 
 **Detailed roadmap:** See `docs/ai/NEXT_STEPS_v2.md`

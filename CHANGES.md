@@ -1,5 +1,34 @@
 # Изменения в проекте Focus
 
+## 5. Free/Pro архитектура — Paywall, план в Settings, исправление бага даты (2026-08-02)
+
+### Что изменено
+
+- `apps/mobile/lib/api-error.ts` — добавлен `isFreeTierLimitError(err)`: распознаёт ответ 403 с кодом `FREE_TIER_LIMIT_REACHED`.
+- `apps/mobile/lib/api/plan.ts` — НОВЫЙ. `usePlanInfo()` (React Query, кэш 5 мин), `useInvalidatePlan()` — инвалидация после апгрейда.
+- `apps/mobile/app/paywall.tsx` — ОБНОВЛЁН: показывает реальный прогресс (activeTasks/50), инвалидирует кэш плана после апгрейда.
+- `apps/mobile/app/(tabs)/settings.tsx` — ПЕРЕПИСАН: секция Профиль (email/телефон, таймзона), секция Подписка (бейдж Free/Pro, полоса использования красная при ≥90%, кнопка Улучшить для Free, срок Pro).
+- `apps/mobile/app/(tabs)/today.tsx` — обработка FREE_TIER_LIMIT_REACHED при quick-add → автопереход на /paywall; все переходы на task-form передают selectedDate.
+- `apps/mobile/app/task-form.tsx` — ИСПРАВЛЕН БАГ: использовал new Date() вместо даты выбранного дня. Теперь принимает параметр selectedDate из роутера. Обработка FREE_TIER_LIMIT_REACHED при сохранении.
+- `apps/mobile/tsconfig.json` — добавлен `module: ESNext` (bundler moduleResolution требует ES2015+).
+
+### Исправленные TypeScript ошибки
+
+- `today.tsx`: implicit any в колбэках filter/sort/map.
+- `lib/api/tasks.ts`: implicit any в setQueryData колбэке.
+- `lib/api-client.ts`: неправильный тип originalRequest в 401-интерцепторе.
+- `lib/timeline-layout.ts`: неверный cast Date|null → string.
+
+### Поведение при достижении лимита (Free)
+
+1.51-я задача → бэкенд отвечает 403 FREE_TIER_LIMIT_REACHED.
+2. Мобильное приложение переходит на /paywall.
+3. Paywall показывает полосу «50/50 активных задач».
+4. После апгрейда кэш плана инвалидируется, Settings обновляется мгновенно.
+
+---
+
+
 ## 1. Авторизация в мобильном приложении
 
 ### Что внутри
