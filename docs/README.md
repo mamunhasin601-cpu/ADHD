@@ -8,6 +8,7 @@
 2. [Development](Development.md) — локальный запуск.
 3. [Architecture](Architecture.md) — границы приложений и потоки данных.
 4. [API](API.md) и [Database](Database.md) — backend-контракты и модель данных.
+5. [Product Bible](../Product-Bible/Product-Bible.md) — продуктовые намерения, UX-принципы и roadmap; он не дублирует инженерную реализацию.
 
 Документы основаны на коде репозитория. Если факт не найден в исходниках или конфигурации, он помечен явно как `Не найдено` или `Planned`.
 
