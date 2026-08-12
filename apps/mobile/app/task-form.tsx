@@ -20,8 +20,11 @@ import {
 } from '../lib/api/tasks';
 import { isFreeTierLimitError } from '../lib/api-error';
 import { useAuthStore } from '../stores/auth.store';
+import {
+  TASK_DURATION_PRESETS,
+  taskDurationLabel,
+} from '../lib/task-duration';
 
-const DURATION_PRESETS = [15, 30, 45, 60, 90, 120];
 const COLOR_PRESETS = [
   '#6B5BFC',
   '#F97316',
@@ -69,6 +72,7 @@ export default function TaskFormScreen() {
     task?: string;
     prefillStartTime?: string;
     prefillTitle?: string;
+    prefillDurationMinutes?: string;
     /** ISO-строка даты выбранного дня — передаётся из today.tsx для корректной инвалидации кэша */
     selectedDate?: string;
   }>();
@@ -115,7 +119,12 @@ export default function TaskFormScreen() {
   );
   const baseDate = initialStartTime ?? today;
 
-  const [durationMinutes, setDurationMinutes] = useState(existingTask?.durationMinutes ?? 30);
+  const prefillDuration = params.prefillDurationMinutes
+    ? Number(params.prefillDurationMinutes)
+    : null;
+  const [durationMinutes, setDurationMinutes] = useState<number | null>(
+    existingTask ? existingTask.durationMinutes : prefillDuration,
+  );
   const [color, setColor] = useState(existingTask?.color ?? COLOR_PRESETS[0]);
   const [recurrencePreset, setRecurrencePreset] = useState<RecurrencePreset>(
     recurrencePresetFromRule(existingTask?.recurrenceRule ?? null),
@@ -288,14 +297,16 @@ export default function TaskFormScreen() {
       {/* Длительность */}
       <Text style={styles.sectionLabel}>Длительность</Text>
       <View style={styles.chipsWrap}>
-        {DURATION_PRESETS.map((mins) => (
+        {TASK_DURATION_PRESETS.map((mins) => (
           <Pressable
-            key={mins}
+            key={mins ?? 'unknown'}
+            accessibilityRole="button"
+            accessibilityState={{ selected: durationMinutes === mins }}
             style={[styles.chip, durationMinutes === mins && styles.chipActive]}
             onPress={() => setDurationMinutes(mins)}
           >
             <Text style={[styles.chipText, durationMinutes === mins && styles.chipTextActive]}>
-              {mins} мин
+              {taskDurationLabel(mins)}
             </Text>
           </Pressable>
         ))}

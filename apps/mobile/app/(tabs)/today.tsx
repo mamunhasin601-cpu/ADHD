@@ -24,9 +24,20 @@ import {
   useToggleTask,
 } from '../../lib/api/tasks';
 import { useAuthStore } from '../../stores/auth.store';
-import { toCanonicalDateParam } from '../../lib/timezone';
+import {
+  addCalendarDays,
+  isValidIANATimezone,
+  localMidnightToInstant,
+  toCanonicalDateParam,
+} from '../../lib/timezone';
 import { isFreeTierLimitError } from '../../lib/api-error';
 import type { Task } from '@focus/shared-types';
+import { findCurrentTask } from '../../lib/current-task';
+import {
+  TASK_DURATION_PRESETS,
+  type TaskDurationPreset,
+  taskDurationLabel,
+} from '../../lib/task-duration';
 
 /**
  * Экран "Сегодня" — главный экран таймлайна дня.
@@ -84,18 +95,20 @@ export default function TodayScreen() {
   const completedCount = tasks.filter((task: Task) => task.completedAt).length;
   const totalCount = tasks.length;
 
-  // Текущая задача: startTime <= now < endTime
+  // Known durations use their real end. Unknown durations remain current until
+  // the next scheduled task (or the end of the profile-local Today view).
   const currentTask = useMemo(() => {
     if (!isToday) return null;
-    const now = currentTime.getTime();
-    return scheduledTasks.find((task: Task) => {
-      const start = new Date(task.startTime!).getTime();
-      const end = task.durationMinutes
-        ? start + task.durationMinutes * 60 * 1000
-        : start + 60 * 60 * 1000; // default 1 hour if no duration
-      return start <= now && now < end;
-    });
-  }, [scheduledTasks, currentTime, isToday]);
+    const currentDay = toCanonicalDateParam(currentTime, profileTimezone);
+    const dayEnd = profileTimezone && isValidIANATimezone(profileTimezone)
+      ? localMidnightToInstant(addCalendarDays(currentDay, 1), profileTimezone)
+      : (() => {
+          const deviceDayEnd = new Date(currentTime);
+          deviceDayEnd.setHours(24, 0, 0, 0);
+          return deviceDayEnd;
+        })();
+    return findCurrentTask(scheduledTasks, currentTime, dayEnd);
+  }, [scheduledTasks, currentTime, isToday, profileTimezone]);
 
   // Следующая задача: startTime > now, ближайшая
   const nextTask = useMemo(() => {
@@ -113,6 +126,7 @@ export default function TodayScreen() {
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [quickAddTime, setQuickAddTime] = useState<Date | null>(null);
   const [title, setTitle] = useState('');
+  const [quickAddDuration, setQuickAddDuration] = useState<TaskDurationPreset>(null);
   const quickSubmissionPending = useRef(false);
 
   function openQuickAdd(startTime: Date | null) {
@@ -120,6 +134,7 @@ export default function TodayScreen() {
     // Если null, то задача создается без времени
     setQuickAddTime(startTime);
     setTitle('');
+    setQuickAddDuration(null);
     setQuickAddOpen(true);
   }
 
@@ -142,6 +157,7 @@ export default function TodayScreen() {
       await createTask.mutateAsync({
         title: trimmedTitle,
         startTime: startTime ? startTime.toISOString() : null,
+        durationMinutes: quickAddDuration,
       });
 
       // Force a fresh read after successful creation. This is intentionally
@@ -152,6 +168,7 @@ export default function TodayScreen() {
       setQuickAddOpen(false);
       setTitle('');
       setQuickAddTime(null);
+      setQuickAddDuration(null);
     } catch (err) {
       if (isFreeTierLimitError(err)) {
         setQuickAddOpen(false);
@@ -176,6 +193,9 @@ export default function TodayScreen() {
       params: {
         ...(trimmedTitle ? { prefillTitle: trimmedTitle } : {}),
         ...(quickAddTime ? { prefillStartTime: quickAddTime.toISOString() } : {}),
+        ...(quickAddDuration !== null
+          ? { prefillDurationMinutes: String(quickAddDuration) }
+          : {}),
         selectedDate: selectedDate.toISOString(),
       },
     });
@@ -382,6 +402,31 @@ export default function TodayScreen() {
                   })}`
                 : 'Без времени — запись сохранится в «Мысли»'}
             </Text>
+            <Text style={styles.durationLabel}>Примерная длительность</Text>
+            <View style={styles.durationPresets}>
+              {TASK_DURATION_PRESETS.map((duration) => (
+                <Pressable
+                  key={duration ?? 'unknown'}
+                  onPress={() => setQuickAddDuration(duration)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Длительность ${taskDurationLabel(duration)}`}
+                  accessibilityState={{ selected: quickAddDuration === duration }}
+                  style={[
+                    styles.durationChip,
+                    quickAddDuration === duration && styles.durationChipActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.durationChipText,
+                      quickAddDuration === duration && styles.durationChipTextActive,
+                    ]}
+                  >
+                    {taskDurationLabel(duration)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
             <View style={styles.modalActions}>
               <Pressable
                 onPress={() => setQuickAddOpen(false)}
@@ -534,6 +579,18 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   timeHint: { fontSize: 13, color: '#6B7280', marginTop: 8 },
+  durationLabel: { fontSize: 13, color: '#6B7280', marginTop: 16, marginBottom: 8 },
+  durationPresets: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  durationChip: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  durationChipActive: { backgroundColor: '#6B5BFC', borderColor: '#6B5BFC' },
+  durationChipText: { color: '#4B5563', fontSize: 13 },
+  durationChipTextActive: { color: '#FFFFFF', fontWeight: '600' },
   modalActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20 },
   modalCancel: { paddingVertical: 10, paddingHorizontal: 12 },
   modalCancelText: { color: '#6B7280', fontSize: 15 },

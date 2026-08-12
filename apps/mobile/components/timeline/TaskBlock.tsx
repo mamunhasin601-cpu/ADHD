@@ -31,7 +31,9 @@ export function TaskBlock({ task, onToggle, onOpen, columnIndex = 0, columnCount
   const top = Math.max(0, (startMinutes / 60) * TIMELINE_CONFIG.hourHeight);
   const height = Math.max(
     TIMELINE_CONFIG.minBlockHeight,
-    (task.durationMinutes / 60) * TIMELINE_CONFIG.hourHeight,
+    task.durationMinutes === null
+      ? TIMELINE_CONFIG.minBlockHeight
+      : (task.durationMinutes / 60) * TIMELINE_CONFIG.hourHeight,
   );
 
   const isDone = !!task.completedAt;

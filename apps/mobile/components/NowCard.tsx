@@ -47,13 +47,12 @@ export function NowCard({
         {task.title}
       </Text>
 
-      {(time || task.durationMinutes) && (
-        <Text style={styles.meta}>
-          {time ? `${isCurrent ? 'Началось' : 'Запланировано'} в ${time}` : ''}
-          {time && task.durationMinutes ? '  •  ' : ''}
-          {task.durationMinutes ? `около ${task.durationMinutes} мин` : ''}
-        </Text>
-      )}
+      <Text style={styles.meta}>
+        {time ? `${isCurrent ? 'Началось' : 'Запланировано'} в ${time}  •  ` : ''}
+        {task.durationMinutes === null
+          ? 'Длительность: Не знаю'
+          : `около ${task.durationMinutes} мин`}
+      </Text>
 
       <View style={styles.actions}>
         {isCurrent ? (

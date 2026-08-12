@@ -23,7 +23,7 @@ export class CreateTaskDto {
   @IsInt()
   @Min(1)
   @Max(1440) // макс 24 часа
-  durationMinutes?: number;
+  durationMinutes?: number | null;
 
   @IsOptional()
   @IsHexColor({ message: 'color должен быть в формате HEX (#RRGGBB)' })
