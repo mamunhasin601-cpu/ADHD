@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   View,
@@ -113,6 +113,7 @@ export default function TodayScreen() {
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [quickAddTime, setQuickAddTime] = useState<Date | null>(null);
   const [title, setTitle] = useState('');
+  const quickSubmissionPending = useRef(false);
 
   function openQuickAdd(startTime: Date | null) {
     // Если startTime передан, используем его как есть
@@ -132,14 +133,15 @@ export default function TodayScreen() {
     });
   }
 
-  async function handleSubmitQuickAdd() {
+  async function handleSubmitQuickAdd(startTime: Date | null = quickAddTime) {
     const trimmedTitle = title.trim();
-    if (!trimmedTitle || createTask.isPending) return;
+    if (!trimmedTitle || createTask.isPending || quickSubmissionPending.current) return;
+    quickSubmissionPending.current = true;
 
     try {
       await createTask.mutateAsync({
         title: trimmedTitle,
-        startTime: quickAddTime ? quickAddTime.toISOString() : null,
+        startTime: startTime ? startTime.toISOString() : null,
       });
 
       // Force a fresh read after successful creation. This is intentionally
@@ -160,15 +162,19 @@ export default function TodayScreen() {
           'Проверьте соединение и попробуйте снова',
         );
       }
+    } finally {
+      quickSubmissionPending.current = false;
     }
   }
 
   function openFullForm() {
+    if (createTask.isPending) return;
+    const trimmedTitle = title.trim();
     setQuickAddOpen(false);
     router.push({
       pathname: '/task-form',
       params: {
-        ...(title.trim() ? { prefillTitle: title.trim() } : {}),
+        ...(trimmedTitle ? { prefillTitle: trimmedTitle } : {}),
         ...(quickAddTime ? { prefillStartTime: quickAddTime.toISOString() } : {}),
         selectedDate: selectedDate.toISOString(),
       },
@@ -339,7 +345,12 @@ export default function TodayScreen() {
         </>
       )}
 
-      <Pressable style={styles.fab} onPress={() => openQuickAdd(null)}>
+      <Pressable
+        style={styles.fab}
+        onPress={() => openQuickAdd(null)}
+        accessibilityRole="button"
+        accessibilityLabel="Быстро добавить задачу"
+      >
         <Text style={styles.fabText}>＋</Text>
       </Pressable>
 
@@ -359,26 +370,66 @@ export default function TodayScreen() {
               value={title}
               onChangeText={setTitle}
               autoFocus
-              onSubmitEditing={handleSubmitQuickAdd}
+              onSubmitEditing={() => handleSubmitQuickAdd()}
               returnKeyType="done"
+              accessibilityLabel="Название задачи"
             />
             <Text style={styles.timeHint}>
               {quickAddTime
-                ? `Время: ${quickAddTime.toLocaleTimeString('ru-RU', {
+                ? `Выбранное время: ${quickAddTime.toLocaleTimeString('ru-RU', {
                     hour: '2-digit',
                     minute: '2-digit',
-                  })} (можно доразметить позже)`
-                : 'Без времени — разметите позже'}
+                  })}`
+                : 'Без времени — запись сохранится в «Мысли»'}
             </Text>
             <View style={styles.modalActions}>
-              <Pressable onPress={() => setQuickAddOpen(false)} style={styles.modalCancel}>
+              <Pressable
+                onPress={() => setQuickAddOpen(false)}
+                style={styles.modalCancel}
+                accessibilityRole="button"
+                accessibilityLabel="Отменить быстрое добавление"
+              >
                 <Text style={styles.modalCancelText}>Отмена</Text>
               </Pressable>
-              <Pressable onPress={openFullForm} style={styles.modalMore}>
+              <Pressable
+                onPress={openFullForm}
+                style={styles.modalMore}
+                accessibilityRole="button"
+                accessibilityLabel="Открыть полную форму задачи"
+                accessibilityState={{ disabled: createTask.isPending }}
+                disabled={createTask.isPending}
+              >
                 <Text style={styles.modalMoreText}>Подробнее →</Text>
               </Pressable>
-              <Pressable onPress={handleSubmitQuickAdd} style={styles.modalSubmit}>
-                <Text style={styles.modalSubmitText}>Создать</Text>
+              {quickAddTime && (
+                <Pressable
+                  onPress={() => handleSubmitQuickAdd(null)}
+                  style={[styles.modalThoughts, createTask.isPending && styles.modalActionDisabled]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Сохранить задачу в Мысли без времени"
+                  accessibilityState={{ disabled: !title.trim() || createTask.isPending }}
+                  disabled={!title.trim() || createTask.isPending}
+                >
+                  <Text style={styles.modalThoughtsText}>В Мысли</Text>
+                </Pressable>
+              )}
+              <Pressable
+                onPress={() => handleSubmitQuickAdd()}
+                style={[styles.modalSubmit, (!title.trim() || createTask.isPending) && styles.modalActionDisabled]}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  quickAddTime
+                    ? `Добавить задачу на ${quickAddTime.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`
+                    : 'Сохранить задачу в Мысли'
+                }
+                accessibilityState={{ disabled: !title.trim() || createTask.isPending }}
+                disabled={!title.trim() || createTask.isPending}
+              >
+                <Text style={styles.modalSubmitText}>
+                  {quickAddTime
+                    ? `Добавить на ${quickAddTime.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`
+                    : 'Сохранить в Мысли'}
+                </Text>
               </Pressable>
             </View>
           </View>
@@ -488,6 +539,9 @@ const styles = StyleSheet.create({
   modalCancelText: { color: '#6B7280', fontSize: 15 },
   modalMore: { paddingVertical: 10, paddingHorizontal: 12 },
   modalMoreText: { color: '#6B5BFC', fontSize: 15, fontWeight: '600' },
+  modalThoughts: { paddingVertical: 10, paddingHorizontal: 12 },
+  modalThoughtsText: { color: '#6B5BFC', fontSize: 15, fontWeight: '600' },
   modalSubmit: { backgroundColor: '#6B5BFC', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
   modalSubmitText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+  modalActionDisabled: { opacity: 0.45 },
 });
