@@ -58,17 +58,15 @@ Phase 1 реализует минимальное ядро из [PDR-001](../12-
 2. **Task 0013 — user-facing `Мысли` language — completed.**
 3. **Task 0014 — explicit quick-capture destinations — completed.**
 
-Следующий предлагаемый ограниченный production slice:
-
-4. **Task 0015 candidate — approximate task duration with a first-class
-   `Не знаю` option.** Это следующий предлагаемый ограниченный production slice,
-   а не реализованная часть этой документационной задачи. Финальные инженерные
-   границы и acceptance criteria должны быть определены отдельной задачей.
+4. **Task 0015 — approximate task duration with a first-class
+   `Не знаю` option — completed.** Реализован и проверен ограниченный production slice:
+   `durationMinutes` хранит точную модель `number | null`, а `Не знаю` доступно
+   в полной форме и quick capture без скрытой подстановки длительности.
    `Не знаю` является полноценным допустимым ответом, а не ошибкой или
    незавершенным состоянием; при его выборе Focus не придумывает длительность
-   молча. Возможность указать приблизительную длительность должна сохранять
-   title-first capture и не заставлять пользователя планировать до фиксации.
-   Slice должен оставаться согласованным с
+   молча. Возможность указать приблизительную длительность сохраняет
+   title-first capture и не заставляет пользователя планировать до фиксации.
+   Slice согласован с
    [PDR-001](../12-Decisions/PDR-001-Timeline-Centered-Day-Experience.md) и
    [Future Screen Map](../05-Experience/Future-Screen-Map.md).
 

@@ -40,7 +40,7 @@ describe('TaskFormScreen create flow', () => {
   it('defaults new tasks to unknown and sends null', async () => {
     mockCreateTask.mockResolvedValue({ id: 'task-unknown' });
     renderTaskForm();
-    expect(screen.getByText('Не знаю').parent?.props.accessibilityState).toEqual({ selected: true });
+    expect(screen.getByRole('button', { name: 'Не знаю' }).props.accessibilityState).toEqual({ selected: true });
     fireEvent.changeText(screen.getByPlaceholderText('Название задачи'), 'Без оценки');
     fireEvent.press(screen.getByText('Сохранить'));
     await waitFor(() => expect(mockCreateTask).toHaveBeenCalledWith(
@@ -52,7 +52,7 @@ describe('TaskFormScreen create flow', () => {
     mockParams = { ...mockParams, prefillDurationMinutes: '90' };
     mockCreateTask.mockResolvedValue({ id: 'task-90' });
     renderTaskForm();
-    expect(screen.getByText('90 мин').parent?.props.accessibilityState).toEqual({ selected: true });
+    expect(screen.getByRole('button', { name: '90 мин' }).props.accessibilityState).toEqual({ selected: true });
     fireEvent.changeText(screen.getByPlaceholderText('Название задачи'), 'Оценено');
     fireEvent.press(screen.getByText('45 мин'));
     fireEvent.press(screen.getByText('Сохранить'));
@@ -70,7 +70,7 @@ describe('TaskFormScreen create flow', () => {
       }),
     };
     renderTaskForm();
-    expect(screen.getByText(label).parent?.props.accessibilityState).toEqual({ selected: true });
+    expect(screen.getByRole('button', { name: label }).props.accessibilityState).toEqual({ selected: true });
   });
 
   it('renders, creates a task, invalidates Today, and returns', async () => {

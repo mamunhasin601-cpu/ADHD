@@ -2,10 +2,8 @@
 
 ## Status
 
-Implementation is present, but completion is **blocked by environment verification**. The
-required dependency install could not complete because the registry returned HTTP 403 and
-the local cache did not contain `supertest`. Consequently the roadmap is intentionally not
-marked complete and the full required suites/typechecks could not be claimed as passing.
+**Completed.** Dependency access was restored, the focused and complete verification passed,
+and the roadmap now records Task 0015 as completed.
 
 ## User problem and Product Bible basis
 
@@ -40,18 +38,23 @@ including 30, is preserved.
 - Task create DTO, service, service/validation tests, and shared task types.
 - Mobile task form, Today capture/current selection, NowCard, TaskBlock, timeline layout,
   shared duration presets, and focused tests for these behaviors.
-- This task record. The Feature Roadmap is unchanged while verification is blocked.
+- This task record and the Feature Roadmap completion marker.
 
 ## Verification evidence
 
-- Focused API tests passed before dependency reinstallation: 2 suites, 32 tests.
-- Pure mobile current-task and timeline-layout tests passed: 2 suites, 2 tests.
-- The first focused mobile run could not resolve `@testing-library/react-native`.
-- `npm ci --no-audit --no-fund` failed with HTTP 403 fetching `debug`.
-- `npm ci --offline --no-audit --no-fund` failed because `supertest-6.3.4.tgz` was not cached.
+- `npm ci --no-audit --no-fund`: passed; 1,744 packages installed from the committed lockfile.
+- Prisma schema validation and client generation: passed. Validation used a syntactically
+  valid local-only placeholder `DATABASE_URL`; it did not connect to a database.
+- Focused API tests: 2 suites, 32 tests passed.
+- Focused mobile tests: 5 suites, 23 tests passed.
+- Complete API tests: 12 suites, 220 tests passed.
+- Complete mobile tests: 22 suites, 280 tests passed.
+- API and mobile `tsc --noEmit`: passed.
+- Both required `git diff --check` commands: passed.
 
 ## Residual limitations
 
 No custom durations are offered by these preset-only surfaces. Migration application was not
-attempted because no disposable local database was established. Full verification and the
-roadmap completion marker remain pending until dependencies are available.
+attempted because no disposable local PostgreSQL installation or database was available; the
+schema and forward SQL were validated/inspected without contacting a database. The mobile
+suite emits an existing React Native Modal `act(...)` cleanup warning while passing.
