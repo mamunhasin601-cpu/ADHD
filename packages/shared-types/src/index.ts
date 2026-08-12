@@ -34,7 +34,7 @@ export interface Task {
   userId: string;
   title: string;
   startTime: Date | null;
-  durationMinutes: number;
+  durationMinutes: number | null;
   color: string;
   isRecurring: boolean;
   recurrenceRule: string | null; // iCal RRULE, напр. "FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR"
@@ -48,7 +48,7 @@ export interface Task {
 export interface CreateTaskDto {
   title: string;
   startTime?: string | null; // ISO 8601
-  durationMinutes?: number;
+  durationMinutes?: number | null;
   color?: string;
   isRecurring?: boolean;
   recurrenceRule?: string | null;

@@ -6,6 +6,10 @@ export interface TaskLayout {
   columnCount: number;
 }
 
+/** Layout-only interval represented by the existing minimum readable height. */
+export const UNKNOWN_DURATION_LAYOUT_MINUTES =
+  (TIMELINE_CONFIG.minBlockHeight / TIMELINE_CONFIG.hourHeight) * 60;
+
 function minutesFromDayStart(date: Date): number {
   return (date.getHours() - TIMELINE_CONFIG.dayStartHour) * 60 + date.getMinutes();
 }
@@ -21,7 +25,11 @@ export function computeTimelineLayout(tasks: Task[]): Map<string, TaskLayout> {
     .filter((task) => !!task.startTime)
     .map((task) => {
             const start = minutesFromDayStart(new Date(task.startTime as unknown as string));
-      return { task, start, end: start + task.durationMinutes };
+      return {
+        task,
+        start,
+        end: start + (task.durationMinutes ?? UNKNOWN_DURATION_LAYOUT_MINUTES),
+      };
     })
     .sort((a, b) => a.start - b.start || a.end - b.end);
 

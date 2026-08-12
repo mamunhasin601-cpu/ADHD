@@ -108,6 +108,7 @@ describe('Today quick capture destinations', () => {
     await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledWith({
       title: 'Купить молоко',
       startTime: null,
+      durationMinutes: null,
     }));
     expect(mockRefetchQueries).toHaveBeenCalledWith({ queryKey: ['tasks'] });
   });
@@ -122,6 +123,7 @@ describe('Today quick capture destinations', () => {
     await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledWith({
       title: 'Встреча',
       startTime: new Date(2026, 7, 12, 14, 30).toISOString(),
+      durationMinutes: null,
     }));
   });
 
@@ -133,7 +135,48 @@ describe('Today quick capture destinations', () => {
     await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledWith({
       title: 'Идея',
       startTime: null,
+      durationMinutes: null,
     }));
+  });
+
+  it('preserves a numeric duration for timed and Thoughts destinations', async () => {
+    renderWithTimeline();
+    fireEvent.press(screen.getByLabelText('Длительность 45 мин'));
+    fireEvent.changeText(screen.getByLabelText('Название задачи'), 'Timed');
+    fireEvent.press(screen.getByText('Добавить на 14:30'));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenLastCalledWith(expect.objectContaining({
+      startTime: expect.any(String), durationMinutes: 45,
+    })));
+
+    renderWithTimeline();
+    fireEvent.press(screen.getByLabelText('Длительность 90 мин'));
+    fireEvent.changeText(screen.getAllByLabelText('Название задачи').at(-1)!, 'Thought');
+    fireEvent.press(screen.getAllByText('В Мысли').at(-1)!);
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenLastCalledWith(expect.objectContaining({
+      startTime: null, durationMinutes: 90,
+    })));
+  });
+
+  it('passes numeric duration to the full form', () => {
+    render(<TodayScreen />);
+    openGlobalCapture();
+    fireEvent.press(screen.getByLabelText('Длительность 120 мин'));
+    fireEvent.press(screen.getByText('Подробнее →'));
+    expect(mockPush).toHaveBeenCalledWith(expect.objectContaining({
+      params: expect.objectContaining({ prefillDurationMinutes: '120' }),
+    }));
+  });
+
+  it('keeps selected duration after a failed creation', async () => {
+    mockMutateAsync.mockRejectedValueOnce(new Error('network'));
+    render(<TodayScreen />);
+    openGlobalCapture();
+    fireEvent.press(screen.getByLabelText('Длительность 60 мин'));
+    fireEvent.changeText(screen.getByLabelText('Название задачи'), 'Retry me');
+    fireEvent.press(screen.getByText('Сохранить в Мысли'));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalled());
+    expect(screen.getByDisplayValue('Retry me')).toBeTruthy();
+    expect(screen.getByLabelText('Длительность 60 мин').props.accessibilityState).toEqual({ selected: true });
   });
 
   it('preserves the trimmed title in the full-form prefill', () => {

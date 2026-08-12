@@ -44,6 +44,38 @@ describe('TasksService — синхронизация напоминаний', (
     expect(notifications.cancelTaskReminder).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['omitted', undefined, null],
+    ['explicit null', null, null],
+    ['numeric', 45, 45],
+  ])('create(): preserves %s duration as %p', async (_label, duration, expected) => {
+    const task = { id: 'duration-create', userId, startTime: null, completedAt: null };
+    prisma.task.create.mockResolvedValue(task);
+    await service.create(userId, {
+      title: 'Duration',
+      ...(duration !== undefined ? { durationMinutes: duration } : {}),
+    });
+    expect(prisma.task.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ durationMinutes: expected }),
+    }));
+  });
+
+  it.each([
+    ['omitted', undefined, false],
+    ['explicit null', null, null],
+    ['numeric', 90, 90],
+  ])('update(): handles %s duration without inventing a value', async (_label, duration, expected) => {
+    const existing = { id: 'duration-update', userId, startTime: null, completedAt: null };
+    prisma.task.findUnique.mockResolvedValue(existing);
+    prisma.task.update.mockResolvedValue(existing);
+    await service.update(userId, existing.id, {
+      ...(duration !== undefined ? { durationMinutes: duration } : {}),
+    });
+    const data = prisma.task.update.mock.calls[0][0].data;
+    if (expected === false) expect(data).not.toHaveProperty('durationMinutes');
+    else expect(data.durationMinutes).toBe(expected);
+  });
+
   it('create(): не планирует напоминание, если startTime не задан (просто снимает возможный старый job)', async () => {
     const task = { id: 't2', userId, startTime: null, completedAt: null };
     prisma.task.create.mockResolvedValue(task);

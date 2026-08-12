@@ -29,7 +29,7 @@ export class TasksService {
         userId,
         title: dto.title,
         startTime: dto.startTime ? new Date(dto.startTime) : null,
-        durationMinutes: dto.durationMinutes ?? 30,
+        durationMinutes: dto.durationMinutes ?? null,
         color: dto.color ?? '#6B5BFC',
         isRecurring: dto.isRecurring ?? false,
         recurrenceRule: dto.recurrenceRule ?? null,

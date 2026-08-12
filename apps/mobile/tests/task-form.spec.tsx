@@ -2,10 +2,11 @@ const mockBack = jest.fn();
 const mockReplace = jest.fn();
 const mockCreateTask = jest.fn();
 const mockInvalidateQueries = jest.fn();
+let mockParams: Record<string, string> = { selectedDate: '2026-08-11T12:00:00.000Z' };
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ back: mockBack, replace: mockReplace }),
-  useLocalSearchParams: () => ({ selectedDate: '2026-08-11T12:00:00.000Z' }),
+  useLocalSearchParams: () => mockParams,
 }));
 jest.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ invalidateQueries: mockInvalidateQueries }),
@@ -31,7 +32,46 @@ function renderTaskForm() {
 }
 
 describe('TaskFormScreen create flow', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockParams = { selectedDate: '2026-08-11T12:00:00.000Z' };
+  });
+
+  it('defaults new tasks to unknown and sends null', async () => {
+    mockCreateTask.mockResolvedValue({ id: 'task-unknown' });
+    renderTaskForm();
+    expect(screen.getByRole('button', { name: 'Не знаю' }).props.accessibilityState).toEqual({ selected: true });
+    fireEvent.changeText(screen.getByPlaceholderText('Название задачи'), 'Без оценки');
+    fireEvent.press(screen.getByText('Сохранить'));
+    await waitFor(() => expect(mockCreateTask).toHaveBeenCalledWith(
+      expect.objectContaining({ durationMinutes: null }),
+    ));
+  });
+
+  it('sends an exact numeric preset and preserves numeric prefill', async () => {
+    mockParams = { ...mockParams, prefillDurationMinutes: '90' };
+    mockCreateTask.mockResolvedValue({ id: 'task-90' });
+    renderTaskForm();
+    expect(screen.getByRole('button', { name: '90 мин' }).props.accessibilityState).toEqual({ selected: true });
+    fireEvent.changeText(screen.getByPlaceholderText('Название задачи'), 'Оценено');
+    fireEvent.press(screen.getByText('45 мин'));
+    fireEvent.press(screen.getByText('Сохранить'));
+    await waitFor(() => expect(mockCreateTask).toHaveBeenCalledWith(
+      expect.objectContaining({ durationMinutes: 45 }),
+    ));
+  });
+
+  it.each([[null, 'Не знаю'], [60, '60 мин']])('selects edited duration %p', (duration, label) => {
+    mockParams = {
+      ...mockParams,
+      task: JSON.stringify({
+        id: 'edited', title: 'Edit', startTime: null, durationMinutes: duration,
+        color: '#6B5BFC', recurrenceRule: null, subTasks: [],
+      }),
+    };
+    renderTaskForm();
+    expect(screen.getByRole('button', { name: label }).props.accessibilityState).toEqual({ selected: true });
+  });
 
   it('renders, creates a task, invalidates Today, and returns', async () => {
     mockCreateTask.mockResolvedValue({

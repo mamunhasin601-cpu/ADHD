@@ -19,6 +19,17 @@ const task: Task = {
 };
 
 describe('NowCard', () => {
+  it('shows honest known and unknown duration text', () => {
+    const { rerender } = render(
+      <NowCard task={task} mode="current" onComplete={jest.fn()} onOpenTask={jest.fn()} />,
+    );
+    expect(screen.getByText(/около 30 мин/)).toBeTruthy();
+    rerender(
+      <NowCard task={{ ...task, durationMinutes: null }} mode="current" onComplete={jest.fn()} onOpenTask={jest.fn()} />,
+    );
+    expect(screen.getByText(/Длительность: Не знаю/)).toBeTruthy();
+    expect(screen.queryByText(/около 0 мин/)).toBeNull();
+  });
   it('делает завершение текущей задачи главным действием', () => {
     const onComplete = jest.fn();
     const onOpenTask = jest.fn();

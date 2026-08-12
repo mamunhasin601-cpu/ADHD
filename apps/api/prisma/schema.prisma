@@ -61,7 +61,7 @@ model Task {
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   title           String
   startTime       DateTime?
-  durationMinutes Int       @default(30)
+  durationMinutes Int?
   color           String    @default("#6B5BFC")
   isRecurring     Boolean   @default(false)
   recurrenceRule  String?   // iCal RRULE, напр. "FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR"
