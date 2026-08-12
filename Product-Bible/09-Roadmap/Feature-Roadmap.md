@@ -50,11 +50,35 @@ Phase 1 реализует минимальное ядро из [PDR-001](../12-
 - базовый recovery с preview и undo;
 - отдых, буферы и свободные окна как допустимую часть дня.
 
-Точная последовательность поставки и полный перечень поверхностей определены в
-[Future Screen Map](../05-Experience/Future-Screen-Map.md). Контекстный помощник,
-overload mode и focus session относятся к следующему расширению опыта; AI
-декомпозиция, energy-aware suggestions и explainable rescheduling не блокируют
-проверку минимального ядра.
+#### Ближайшая последовательность Phase 1
+
+Завершенная работа:
+
+1. **Task 0012 — actionable `Сейчас` card — completed.**
+2. **Task 0013 — user-facing `Мысли` language — completed.**
+3. **Task 0014 — explicit quick-capture destinations — completed.**
+
+Следующий предлагаемый ограниченный production slice:
+
+4. **Task 0015 candidate — approximate task duration with a first-class
+   `Не знаю` option.** Это следующий предлагаемый ограниченный production slice,
+   а не реализованная часть этой документационной задачи. Финальные инженерные
+   границы и acceptance criteria должны быть определены отдельной задачей.
+   `Не знаю` является полноценным допустимым ответом, а не ошибкой или
+   незавершенным состоянием; при его выборе Focus не придумывает длительность
+   молча. Возможность указать приблизительную длительность должна сохранять
+   title-first capture и не заставлять пользователя планировать до фиксации.
+   Slice должен оставаться согласованным с
+   [PDR-001](../12-Decisions/PDR-001-Timeline-Centered-Day-Experience.md) и
+   [Future Screen Map](../05-Experience/Future-Screen-Map.md).
+
+Остальные capability Phase 1 остаются на горизонте, но их точный порядок пока
+не принят. Контекстный помощник, overload mode и focus session относятся к
+следующему расширению опыта; AI-декомпозиция, energy-aware suggestions и
+explainable rescheduling не блокируют проверку минимального ядра. Принятое
+требование формата времени в Профиле зафиксировано в
+[PDR-002](../12-Decisions/PDR-002-User-Controlled-Time-Format.md), но не становится
+автоматически Task 0015 и не ставится впереди approximate duration.
 
 ### 4. Phase 2: focus and body doubling
 

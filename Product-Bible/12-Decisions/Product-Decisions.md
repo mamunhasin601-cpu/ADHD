@@ -81,6 +81,9 @@
 - [PDR-001: Timeline-centered day experience](PDR-001-Timeline-Centered-Day-Experience.md)
   — принято 2026-08-12; задает таймлайн как основу Today, приоритет «Сейчас»,
   recovery без стыда и границу между вдохновением Structured и копированием.
+- [PDR-002: User-controlled time format](PDR-002-User-Controlled-Time-Format.md)
+  — принято 2026-08-12; дает пользователю независимый от языка и часового пояса
+  выбор системного, 24-часового или 12-часового отображения времени во всем Focus.
 
 #### 6.2 Superseded decisions
 
