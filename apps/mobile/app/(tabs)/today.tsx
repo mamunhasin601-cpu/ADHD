@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   View,
   Text,
@@ -15,7 +16,14 @@ import { useRouter } from 'expo-router';
 import { Timeline } from '../../components/timeline/Timeline';
 import { ProgressRing } from '../../components/ProgressRing';
 import { EmptyState } from '../../components/EmptyState';
-import { useTasksForDate, useCreateTask, useToggleTask } from '../../lib/api/tasks';
+import { RecoverySection } from '../../components/RecoverySection';
+import {
+  useTasksForDate,
+  useCreateTask,
+  useToggleTask,
+} from '../../lib/api/tasks';
+import { useAuthStore } from '../../stores/auth.store';
+import { toCanonicalDateParam } from '../../lib/timezone';
 import { isFreeTierLimitError } from '../../lib/api-error';
 import type { Task } from '@focus/shared-types';
 
@@ -25,16 +33,24 @@ import type { Task } from '@focus/shared-types';
  */
 export default function TodayScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [selectedDate, setSelectedDate] = useState(new Date());
-  
-  const isToday = useMemo(() => {
-    const now = new Date();
-    return (
-      selectedDate.getDate() === now.getDate() &&
-      selectedDate.getMonth() === now.getMonth() &&
-      selectedDate.getFullYear() === now.getFullYear()
-    );
-  }, [selectedDate]);
+
+  // Raw profile IANA timezone. May be undefined before the profile loads or
+  // invalid if the stored value is corrupt. Never substituted with UTC for
+  // Recovery — RecoverySection owns that guard (Task 0006C/0007A).
+  const profileTimezone = useAuthStore((s) => s.user?.timezone);
+
+  // isToday for the non-Recovery parts of Today (progress ring, Now/Next,
+  // timeline autoscroll). Both sides go through the canonical date helper, so
+  // the comparison uses the profile timezone when it is valid and the DEVICE
+  // calendar day otherwise — never UTC (Task 0007A).
+  const isToday = useMemo(
+    () =>
+      toCanonicalDateParam(selectedDate, profileTimezone) ===
+      toCanonicalDateParam(new Date(), profileTimezone),
+    [selectedDate, profileTimezone],
+  );
 
   const dateLabel = selectedDate.toLocaleDateString('ru-RU', {
     weekday: 'long',
@@ -42,7 +58,14 @@ export default function TodayScreen() {
     month: 'long',
   });
 
-  const { data: tasks = [], isLoading, isError } = useTasksForDate(selectedDate);
+  // Profile timezone is passed so the Today query key and its `?date=` param
+  // resolve to the same canonical day that Recovery invalidates (Task 0007A).
+  const {
+    data: tasks = [],
+    isLoading,
+    isError,
+  } = useTasksForDate(selectedDate, profileTimezone);
+
   const [currentTime, setCurrentTime] = useState(new Date());
 
   // Обновляем время каждую минуту для актуализации Now/Next
@@ -82,8 +105,9 @@ export default function TodayScreen() {
       .sort((a: Task, b: Task) => new Date(a.startTime!).getTime() - new Date(b.startTime!).getTime());
     return upcoming[0] || null;
   }, [scheduledTasks, currentTime, isToday]);
-  const createTask = useCreateTask(selectedDate);
-  const toggleTask = useToggleTask(selectedDate);
+  // Same canonical key as the Today query and Recovery invalidation (0007A).
+  const createTask = useCreateTask(selectedDate, profileTimezone);
+  const toggleTask = useToggleTask(selectedDate, profileTimezone);
 
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [quickAddTime, setQuickAddTime] = useState<Date | null>(null);
@@ -97,26 +121,35 @@ export default function TodayScreen() {
     setQuickAddOpen(true);
   }
 
-  function handleSubmitQuickAdd() {
-    if (!title.trim()) return;
+  async function handleSubmitQuickAdd() {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle || createTask.isPending) return;
 
-    createTask.mutate(
-      {
-        title: title.trim(),
+    try {
+      await createTask.mutateAsync({
+        title: trimmedTitle,
         startTime: quickAddTime ? quickAddTime.toISOString() : null,
-      },
-      {
-        onError: (err) => {
-          if (isFreeTierLimitError(err)) {
-            setQuickAddOpen(false);
-router.push('/paywall');
-          } else {
-            Alert.alert('Не удалось создать задачу', 'Проверьте соединение и попробуйте снова');
-          }
-        },
-      },
-    );
-    setQuickAddOpen(false);
+      });
+
+      // Force a fresh read after successful creation. This is intentionally
+      // broader than the date-specific mutation invalidation so the Today
+      // screen cannot remain on a stale cache after POST /tasks succeeds.
+      await queryClient.refetchQueries({ queryKey: ['tasks'] });
+
+      setQuickAddOpen(false);
+      setTitle('');
+      setQuickAddTime(null);
+    } catch (err) {
+      if (isFreeTierLimitError(err)) {
+        setQuickAddOpen(false);
+        router.push('/paywall');
+      } else {
+        Alert.alert(
+          'Не удалось создать задачу',
+          'Проверьте соединение и попробуйте снова',
+        );
+      }
+    }
   }
 
   function openFullForm() {
@@ -198,9 +231,22 @@ router.push('/paywall');
               : "На этот день пока нет задач. Создай задачу или вернись к сегодняшнему дню."
           }
           actionLabel="Создать задачу"
-          onAction={() => openQuickAdd(null)}
+          onAction={() =>
+            router.push({
+              pathname: '/task-form',
+              params: { selectedDate: selectedDate.toISOString() },
+            })
+          }
         />
       )}
+
+      {/* Recovery — production coordinator owns timezone guard, query,
+          mutation, banner lifecycle and the Today-level partial notice. */}
+      <RecoverySection
+        selectedDate={selectedDate}
+        profileTimezone={profileTimezone}
+        onTimezoneInvalid={() => router.push('/settings')}
+      />
 
       {!isLoading && !isError && totalCount > 0 && (
         <>

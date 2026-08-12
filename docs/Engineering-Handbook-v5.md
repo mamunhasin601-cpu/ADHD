@@ -179,6 +179,60 @@ sequenceDiagram
 
 Trust rules: JWT supplies identity; `userId` from client is not trusted; PostgreSQL owns durable state; Redis only coordinates jobs; push payload is allowlisted; timeline/current-next is recomputable projection. Полная версия: [Data Flow](research/15-data-flow.md).
 
+### Overdue recovery (реализовано, ADR-008)
+
+```mermaid
+sequenceDiagram
+ participant UI as RecoverySection (Today)
+ participant Q as React Query
+ participant S as TaskRecoveryService
+ participant DB as PostgreSQL
+ participant B as BullMQ
+ UI->>UI: profile IANA tz валидна?
+ UI->>Q: useOverdueTasks (только если tz валидна и дата = сегодня)
+ Q->>S: GET /tasks/recovery
+ S->>S: localDayStart из user.timezone (сервер, не клиент)
+ S->>DB: overdue read (root, incomplete, non-recurring, startTime < localDayStart)
+ UI->>Q: confirm с явным mapping
+ Q->>S: POST /tasks/recovery/reschedule
+ S->>DB: transaction: updateMany с eligibility в where
+ DB-->>S: count != 1 → 409 STALE_RECOVERY_STATE, rollback
+ S->>B: reminder sync ПОСЛЕ commit
+ B-->>S: сбой → failedReminderSyncs, без rollback
+ S-->>Q: taskUpdateStatus ok + reminderSyncStatus ok|partial
+ Q->>Q: invalidate recovery + today (+ inbox если был null)
+```
+
+Инварианты потока: границу дня определяет сервер, клиентский `?date=` идёт только в cache key;
+невалидная или отсутствующая профильная timezone блокирует запрос, подстановка `UTC`/device tz
+запрещена; условия eligibility живут в `where` самой записи, а не в предварительном чтении;
+частичный сбой напоминаний — это 200, а не ошибка, и он не откатывает перенос задач.
+
+Дополнительные инварианты (0007A/0007C):
+
+- **Canonical date key.** `toCanonicalDateParam(date, profileTimezone)` — единственный
+  хелпер для Today-запроса, dated-мутаций и Recovery-инвалидации. Разные хелперы для
+  разных путей давали разные ключи вокруг полуночи при device tz ≠ profile tz.
+- **Today-only guard.** `RecoverySection` проверяет `!isToday` ДО `!timezoneValid`.
+  На исторических датах компонент возвращает `null` — без запроса и без timezone-state.
+  На сегодня с невалидной/отсутствующей timezone — нейтральный actionable state.
+- **Strict absolute timestamp.** Destination принимает только абсолютный ISO-8601 инстант
+  (`...Z` или `...±HH:MM`). Date-only и offsetless → HTTP 400. Destination строго >
+  `referenceInstant` сервиса (equal-to-now и earlier-today → HTTP 422).
+- **Privacy-safe observability.** Recovery log-lines содержат outcome, count,
+  `latencyMs`, reminderSyncStatus (где применимо) и failureClass (где применимо).
+  Никаких userId, taskId, task title, timezone, localDayStart, destinations или payloads в новых строках.
+- **Authenticated integration.** `tasks.controller.recovery.auth-integration.spec.ts` —
+  реальный `JwtAuthGuard` + `JwtStrategy` + `TasksController` + `TaskRecoveryService` с двумя
+  различными users. Доказывает: 401 без токена, 401 неверный secret, 401 неизвестный subject,
+  два токена → два разных identity (observable по `userTimezone` в ответе и `userId` в
+  `updateMany` where), ownership в обоих направлениях, mixed-batch атомарность, 200 при
+  сбое очереди. PostgreSQL/Redis e2e и device smoke **NOT verified** в текущей среде
+  (нет Docker/Redis/Postgres).
+- **Mock isolation.** В тестах с `jest.resetAllMocks()` (не `clearAllMocks`) очереди
+  `mockResolvedValueOnce` очищаются между тестами. Тесты, отклоняемые ValidationPipe, не
+  должны ставить очереди для сервиса — иначе неиспользованные значения утекают.
+
 ## 7. Архитектура и ADR
 
 | ADR | Решение | Следствие |
@@ -202,6 +256,29 @@ Trust rules: JWT supplies identity; `userId` from client is not trusted; Postgre
 ### Task
 
 `Draft → Scheduled/Active → Completed | Deleted`; edit может reopen. При изменении проверять date projection, timezone, recurrence, parent/child ownership, quota и reminder state. Root-task limit не применять к subtask без явного policy.
+
+Отдельный подпереход — `Overdue → Rescheduled | Inbox` (ADR-008, реализовано). Задача считается
+overdue только если она root (`parentTaskId IS NULL`), незавершённая, не recurring, имеет
+`startTime` и `startTime < localDayStart` в IANA-timezone пользователя. Инварианты перехода:
+
+- destination задаётся исключительно явно — **абсолютный ISO-8601 инстант** (`...Z` или
+  `...±HH:MM`) либо `null` (Inbox); date-only и offsetless datetime → HTTP 400;
+  отсутствующий ключ `targetStartTime` — ошибка, а не «по умолчанию в Inbox»;
+- destination строго > `referenceInstant` сервиса; equal-to-now и earlier-today → HTTP 422;
+- сервер никогда не вычисляет destination сам и не переносит задачи молча;
+- переход меняет только `startTime`; title, duration, color, recurrence metadata, parent relation
+  и completion state сохраняются;
+- eligibility проверяется в `where` самой записи, поэтому параллельное завершение задачи
+  приводит к 409, а не к перезаписи;
+- повторная отправка того же подтверждённого перехода не даёт второй записи и второго напоминания.
+
+### Notification (recovery-специфика)
+
+Напоминание остаётся производным от Task и синхронизируется после commit. Для recovery это значит:
+`startTime` в будущем → reminder планируется; `null` или completed → отменяется. Сбой очереди после
+commit не откатывает перенос, а отражается в `reminderSyncStatus: "partial"`. Автоматической
+дозаписи или повторной синхронизации при следующем подключении клиента **нет** — UI обязан
+говорить об этом честно.
 
 ### Notification
 
@@ -227,6 +304,58 @@ endpoint → DTO → Controller → Service → Module
 Каждый endpoint описывает method/status, auth, request/response, errors, ownership и cache key. Controller не содержит Prisma и orchestration; Service получает identity из JWT context; DTO валидирует внешний ввод; mobile не делает raw axios/fetch.
 
 React Query — server state, cache/invalidation и optimistic rollback. Zustand — session/UI. Expo Router — filesystem routes; private route требует auth gating. Детали: [API](API.md), [Frontend](Frontend.md), [Backend](Backend.md), [Developer API workflow](Developer-Bible.md#6-как-добавить-api).
+
+### Референсный слайс: Guilt-Free Recovery
+
+Реализованный пример полного прохода без кросс-доменного рефакторинга (всё внутри `TasksModule`):
+
+```text
+dto → controller (routes перед /tasks/:id) → TaskRecoveryService → shared-types
+    → lib/timezone.ts → lib/api/tasks.ts (hooks) → RecoverySection → RecoveryBanner → tests → docs
+```
+
+Что этот слайс фиксирует как норму для новых функций:
+
+- **Порядок маршрутов.** Литеральный сегмент (`/tasks/recovery`) объявляется до параметрического
+  (`/tasks/:id`), иначе `ParseUUIDPipe` перехватит запрос и вернёт 400.
+- **Слои валидации не дублируют, а дополняют друг друга.** DTO отсекает форму данных на транспорте
+  (400), сервис сохраняет собственные guard-проверки (403/409/422) для прямых вызовов. Из-за этого
+  одно и то же условие может иметь разный статус на разных слоях — это нужно документировать, а не
+  «выравнивать».
+- **Строгие boolean в query.** Только `"true"`/`"false"`; `enableImplicitConversion` не включать —
+  он превращает `"false"` в `true` до `@Transform`.
+- **Никаких silent defaults в контракте.** Отсутствующее поле — ошибка; «переместить в Inbox»
+  выражается явным `null`.
+- **Cache-контракт описывается вместе с endpoint.** Ключи и правила инвалидации:
+  `['tasks','recovery',dateParam]`, `['tasks',dateParam]`, `['tasks','inbox']` (последний — только
+  когда в batch есть `null`). Ошибка 409 инвалидирует recovery-ключ; остальные ошибки оставляют
+  экран восстановимым.
+- **Клиент не занимается арифметикой дат.** Границы дня приходят с сервера; на клиенте все
+  вычисления идут через `lib/timezone.ts` (`date-fns-tz`), а не через `toISOString().slice(0,10)`
+  или прибавление 24 ч.
+- **HTTP-boundary тесты обязательны.** Изолированной проверки DTO недостаточно: реальные статусы и
+  работу production `ValidationPipe` доказывают supertest-специ (`*.http.spec.ts`).
+- **Authenticated integration отдельно от HTTP-boundary.** `*.http.spec.ts` переопределяет guard и
+  не доказывает identity-mapping. Отдельный `*.auth-integration.spec.ts` держит реальный
+  `JwtAuthGuard` + `JwtStrategy` + `TaskRecoveryService`, использует два разных JWT-subject и
+  проверяет observable identity boundary (`prisma.user.findUnique` lookup id + `userId` в
+  `updateMany` where). Неизвестный subject → `null` из БД → 401 без дополнительного кода.
+- **Strict destination timestamp.** Destination — обязательно абсолютный ISO-8601 инстант
+  (`...Z` или `...±HH:MM`). Date-only и offsetless отклоняет `@Matches(ABSOLUTE_ISO_INSTANT)`
+  на DTO-слое (HTTP 400). Сервис дополнительно проверяет `dest > referenceInstant`: equal-to-now
+  и earlier-today → HTTP 422. Отдельные слои, разные статусы — намеренно.
+- **Privacy-safe observability.** Log-строки Recovery содержат только outcome, count,
+  `latencyMs`, reminderSyncStatus (где применимо) и failureClass (где применимо). userId,
+  taskId, task title, timezone, localDayStart, destinations и payloads недопустимы в новых
+  recovery log-строках. Тест должен шпионить на `logger` и assertить как наличие разрешённых
+  полей, так и отсутствие запрещённых идентификаторов.
+- **Mock isolation: resetAllMocks vs clearAllMocks.** `jest.clearAllMocks()` сбрасывает call
+  history, но НЕ очередь `mockResolvedValueOnce`. Тесты, отклоняемые ValidationPipe до вызова
+  сервиса, не должны выставлять `mockResolvedValueOnce` для сервиса — иначе неиспользованные
+  значения утекают в следующий тест. Используй `jest.resetAllMocks()` в `beforeEach`,
+  затем восстанавливай нужные implementations.
+- **PostgreSQL/Redis e2e и device smoke — NOT verified** в средах без этих сервисов.
+  Фиксируй как явно непроверенное, а не как пройденное.
 
 ## 10. Authentication и безопасность
 

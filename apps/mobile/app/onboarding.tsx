@@ -6,12 +6,19 @@ import {
   Pressable,
   TextInput,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
 import { useCreateTask } from '../lib/api/tasks';
 import { apiClient } from '../lib/api-client';
+import { useAuthStore } from '../stores/auth.store';
+import {
+  isValidIANATimezone,
+  localDateTimeToInstant,
+  toCanonicalDateParam,
+} from '../lib/timezone';
+import type { User } from '@focus/shared-types';
 
 /**
  * 5-minute start onboarding.
@@ -22,21 +29,25 @@ import { apiClient } from '../lib/api-client';
  * 4. Переход на Today screen
  */
 export default function OnboardingScreen() {
-  const router = useRouter();
+  const setUser = useAuthStore((s) => s.setUser);
+  const profileTimezone = useAuthStore((s) => s.user?.timezone);
   const [step, setStep] = useState(1);
   const [taskTitle, setTaskTitle] = useState('');
   const [taskTime, setTaskTime] = useState('');
-  const createTask = useCreateTask(new Date());
+  const createTask = useCreateTask(new Date(), profileTimezone);
 
   async function completeOnboarding() {
     try {
       // Отмечаем онбординг как завершенный
-      await apiClient.patch('/users/me', { hasCompletedOnboarding: true });
-      router.replace('/(tabs)/today');
-    } catch (error) {
-      console.error('Failed to complete onboarding:', error);
-      // Все равно пускаем на главный экран
-      router.replace('/(tabs)/today');
+      const { data: updatedUser } = await apiClient.patch<User>('/users/me', {
+        hasCompletedOnboarding: true,
+      });
+      setUser(updatedUser);
+    } catch {
+      Alert.alert(
+        'Не удалось завершить онбординг',
+        'Проверьте соединение и попробуйте снова',
+      );
     }
   }
 
@@ -48,8 +59,17 @@ export default function OnboardingScreen() {
 
     if (taskTime) {
       const [hours, minutes] = taskTime.split(':').map(Number);
-      startTime = new Date();
-      startTime.setHours(hours, minutes, 0, 0);
+      if (profileTimezone && isValidIANATimezone(profileTimezone)) {
+        startTime = localDateTimeToInstant(
+          toCanonicalDateParam(now, profileTimezone),
+          hours,
+          minutes,
+          profileTimezone,
+        );
+      } else {
+        startTime = new Date(now);
+        startTime.setHours(hours, minutes, 0, 0);
+      }
     }
 
     createTask.mutate(

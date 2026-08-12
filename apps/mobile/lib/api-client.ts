@@ -11,6 +11,8 @@ export const apiClient = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+let currentTokens: AuthTokens | null = null;
+
 /** Установить access-токен в заголовки всех запросов */
 export function setAuthToken(token: string | null) {
   if (token) {
@@ -20,30 +22,73 @@ export function setAuthToken(token: string | null) {
   }
 }
 
+export function setAuthTokens(tokens: AuthTokens | null) {
+  currentTokens = tokens;
+  setAuthToken(tokens?.accessToken ?? null);
+}
+
+export function getAuthTokens(): AuthTokens | null {
+  return currentTokens;
+}
+
+type RetryableRequestConfig = AxiosRequestConfig & { _retry?: boolean };
+
+let refreshPromise: Promise<string> | null = null;
+let logoutPromise: Promise<void> | null = null;
+
+// Resolve lazily to avoid a Metro cycle: auth.store imports token helpers from
+// this module, while refresh/logout need the store actions.
+function getAuthStore() {
+  return require('../stores/auth.store').useAuthStore as typeof import('../stores/auth.store').useAuthStore;
+}
+
+async function refreshAccessToken(): Promise<string> {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    const refreshToken = currentTokens?.refreshToken;
+    if (!refreshToken) throw new Error('Нет refresh-токена');
+
+    const { data } = await axios.post<AuthTokens>(`${API_BASE_URL}/auth/refresh`, {
+      refreshToken,
+    });
+    await getAuthStore().getState().setTokens(data);
+    return data.accessToken;
+  })().finally(() => {
+    refreshPromise = null;
+  });
+
+  return refreshPromise;
+}
+
+async function logoutOnce(): Promise<void> {
+  if (!logoutPromise) {
+    logoutPromise = Promise.resolve(getAuthStore().getState().logout())
+      .finally(() => {
+        logoutPromise = null;
+      });
+  }
+  return logoutPromise;
+}
+
 /** Интерцептор для автоматического обновления токена при 401 */
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: unknown) => {
-    const axiosError = error as { response?: { status: number }; config?: AxiosRequestConfig & { _retry?: boolean } };
+    const axiosError = error as { response?: { status: number }; config?: RetryableRequestConfig };
     const originalRequest = axiosError.config;
     if (axiosError.response?.status === 401 && originalRequest && !originalRequest._retry) {
       originalRequest._retry = true;
       try {
-        const { useAuthStore } = await import('../stores/auth.store');
-        const refreshToken = useAuthStore.getState().refreshToken;
-        if (!refreshToken) throw new Error('Нет refresh-токена');
-        const { data } = await axios.post<AuthTokens>(`${API_BASE_URL}/auth/refresh`, {
-          refreshToken,
-        });
-        useAuthStore.getState().setTokens(data);
-        setAuthToken(data.accessToken);
+        const accessToken = await refreshAccessToken();
         if (originalRequest.headers) {
-          (originalRequest.headers as Record<string, string>)['Authorization'] = `Bearer ${data.accessToken}`;
+          (originalRequest.headers as Record<string, string>)['Authorization'] = `Bearer ${accessToken}`;
+        } else {
+          originalRequest.headers = { Authorization: `Bearer ${accessToken}` };
         }
-        return apiClient(originalRequest as AxiosRequestConfig);
+        return apiClient(originalRequest);
       } catch {
-        const { useAuthStore } = await import('../stores/auth.store');
-        useAuthStore.getState().logout();
+        await logoutOnce();
         return Promise.reject(error);
       }
     }

@@ -13,9 +13,12 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { TasksService } from './tasks.service';
+import { TaskRecoveryService } from './task-recovery.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { GetTasksQueryDto } from './dto/get-tasks-query.dto';
+import { GetRecoveryQueryDto } from './dto/get-recovery-query.dto';
+import { RescheduleRecoveryDto } from './dto/reschedule-recovery.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { User } from '@prisma/client';
@@ -23,7 +26,10 @@ import type { User } from '@prisma/client';
 @Controller('tasks')
 @UseGuards(JwtAuthGuard)
 export class TasksController {
-  constructor(private readonly tasksService: TasksService) {}
+  constructor(
+    private readonly tasksService: TasksService,
+    private readonly taskRecoveryService: TaskRecoveryService,
+  ) {}
 
   /** POST /tasks */
   @Post()
@@ -35,6 +41,33 @@ export class TasksController {
   @Get()
   findAll(@CurrentUser() user: User, @Query() query: GetTasksQueryDto) {
     return this.tasksService.findAll(user.id, query);
+  }
+
+    /**
+   * GET /tasks/recovery?date=YYYY-MM-DD
+   * Возвращает просроченные задачи пользователя для recovery flow.
+   * Зарегистрирован ПЕРЕД GET /tasks/:id чтобы избежать конфликта маршрутов (ADR-008 D-9).
+   */
+  @Get('recovery')
+  getOverdueTasks(
+    @CurrentUser() user: User,
+    @Query() query: GetRecoveryQueryDto,
+  ) {
+    return this.taskRecoveryService.getOverdueTasks(user.id);
+  }
+
+  /**
+   * POST /tasks/recovery/reschedule
+   * Подтверждает перенос выбранных просроченных задач.
+   * Зарегистрирован ПЕРЕД GET /tasks/:id (ADR-008 D-9).
+   */
+  @Post('recovery/reschedule')
+  @HttpCode(HttpStatus.OK)
+  rescheduleOverdueTasks(
+    @CurrentUser() user: User,
+    @Body() dto: RescheduleRecoveryDto,
+  ) {
+    return this.taskRecoveryService.rescheduleOverdueTasks(user.id, dto.items);
   }
 
   /** GET /tasks/:id */

@@ -19,6 +19,7 @@ import {
   deleteTaskById,
 } from '../lib/api/tasks';
 import { isFreeTierLimitError } from '../lib/api-error';
+import { useAuthStore } from '../stores/auth.store';
 
 const DURATION_PRESETS = [15, 30, 45, 60, 90, 120];
 const COLOR_PRESETS = [
@@ -94,9 +95,12 @@ export default function TaskFormScreen() {
 
   const isEditMode = !!existingTask;
 
-  const createTask = useCreateTask(today);
-  const updateTask = useUpdateTask(today);
-  const deleteTask = useDeleteTask(today);
+  // Profile timezone → same canonical cache key as Today and Recovery (0007A).
+  const profileTimezone = useAuthStore((s) => s.user?.timezone);
+
+  const createTask = useCreateTask(today, profileTimezone);
+  const updateTask = useUpdateTask(today, profileTimezone);
+  const deleteTask = useDeleteTask(today, profileTimezone);
 
   const [title, setTitle] = useState(existingTask?.title ?? params.prefillTitle ?? '');
 

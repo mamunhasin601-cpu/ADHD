@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { AuthTokens, User } from '@focus/shared-types';
-import { setAuthToken } from '../lib/api-client';
+import { getAuthTokens, setAuthTokens } from '../lib/api-client';
 import { saveTokens, loadTokens, clearTokens } from '../lib/secure-storage';
 import { getMe } from '../lib/api/auth';
 
@@ -13,6 +13,7 @@ interface AuthState {
   isLoading: boolean;
 
   setTokens: (tokens: AuthTokens) => Promise<void>;
+  authenticate: (tokens: AuthTokens) => Promise<User>;
   setUser: (user: User) => void;
   logout: () => Promise<void>;
   /** Вызывается один раз при старте приложения (см. app/_layout.tsx) */
@@ -27,26 +28,50 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: true,
 
   setTokens: async (tokens) => {
-    setAuthToken(tokens.accessToken);
     await saveTokens(tokens);
-    set({
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      isAuthenticated: true,
-    });
+    setAuthTokens(tokens);
+    set((state) =>
+      state.isAuthenticated
+        ? { accessToken: tokens.accessToken, refreshToken: tokens.refreshToken }
+        : {},
+    );
+  },
+
+  authenticate: async (tokens) => {
+    try {
+      await saveTokens(tokens);
+      setAuthTokens(tokens);
+      const user = await getMe();
+      const verifiedTokens = getAuthTokens();
+      if (!verifiedTokens) throw new Error('Authentication tokens were cleared during verification');
+      set({
+        user,
+        accessToken: verifiedTokens.accessToken,
+        refreshToken: verifiedTokens.refreshToken,
+        isAuthenticated: true,
+      });
+      return user;
+    } catch (error) {
+      setAuthTokens(null);
+      set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false });
+      await clearTokens().catch(() => {});
+      throw error;
+    }
   },
 
   setUser: (user) => set({ user }),
 
   logout: async () => {
-    setAuthToken(null);
-    await clearTokens();
+    setAuthTokens(null);
     set({
       user: null,
       accessToken: null,
       refreshToken: null,
       isAuthenticated: false,
     });
+    // In-memory/API auth state must remain cleared even if SecureStore is
+    // temporarily unavailable (for example during an OS-level storage error).
+    await clearTokens().catch(() => {});
   },
 
   /**
@@ -59,19 +84,32 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const tokens = await loadTokens();
       if (!tokens) {
-        set({ isLoading: false });
+        setAuthTokens(null);
+        set({
+          user: null,
+          accessToken: null,
+          refreshToken: null,
+          isAuthenticated: false,
+          isLoading: false,
+        });
         return;
       }
 
-      setAuthToken(tokens.accessToken);
-      set({ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken });
+      setAuthTokens(tokens);
 
       const user = await getMe();
+      const verifiedTokens = getAuthTokens();
+      if (!verifiedTokens) throw new Error('Authentication tokens were cleared during bootstrap');
 
-      set({ isAuthenticated: true, user, isLoading: false });
+      set({
+        isAuthenticated: true,
+        user,
+        accessToken: verifiedTokens.accessToken,
+        refreshToken: verifiedTokens.refreshToken,
+        isLoading: false,
+      });
     } catch {
-      await clearTokens();
-      setAuthToken(null);
+      setAuthTokens(null);
       set({
         user: null,
         accessToken: null,
@@ -79,6 +117,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         isAuthenticated: false,
         isLoading: false,
       });
+      await clearTokens().catch(() => {});
     }
   },
 }));

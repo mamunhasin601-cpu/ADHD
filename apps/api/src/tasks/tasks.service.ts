@@ -48,8 +48,26 @@ export class TasksService {
       parentTaskId: null, // только верхнеуровневые задачи
     };
 
-    // Фильтр по дате: задачи, которые начинаются в указанный день
-    if (query.date) {
+    if (query.inbox) {
+      // Inbox-режим: только задачи без startTime (unscheduled).
+      // Параметр date и scheduledFrom/To игнорируются — Inbox не привязан к дню.
+      where['startTime'] = null;
+    } else if (query.scheduledFrom) {
+      // Bounded range query (bootstrap reconciliation, ADR-009).
+      // Maximum server-enforced horizon: 30 days from scheduledFrom.
+      const from = new Date(query.scheduledFrom);
+      const maxHorizonMs = 30 * 24 * 60 * 60 * 1000;
+      let to: Date;
+      if (query.scheduledTo) {
+        const requested = new Date(query.scheduledTo);
+        const maxAllowed = new Date(from.getTime() + maxHorizonMs);
+        to = requested < maxAllowed ? requested : maxAllowed;
+      } else {
+        to = new Date(from.getTime() + maxHorizonMs);
+      }
+      where['startTime'] = { gte: from, lte: to };
+    } else if (query.date) {
+      // Фильтр по дате: задачи, которые начинаются в указанный день
       // Получаем timezone пользователя
       const user = await this.prisma.user.findUnique({
         where: { id: userId },

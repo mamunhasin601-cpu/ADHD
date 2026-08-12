@@ -13,7 +13,9 @@
     "build:api": "npm run build --workspace=apps/api",
     "test:api": "npm run test --workspace=apps/api",
     "prisma:migrate": "npm run prisma:migrate --workspace=apps/api",
-    "prisma:generate": "npm run prisma:generate --workspace=apps/api"
+    "prisma:generate": "npm run prisma:generate --workspace=apps/api",
+    "android": "npm run android --workspace=apps/mobile",
+    "ios": "npm run ios --workspace=apps/mobile"
   },
   "devDependencies": {
     "typescript": "5.4.5"
@@ -28,5 +30,10 @@
     "bcrypt@5.1.1": true,
     "msgpackr-extract@3.0.4": true,
     "prisma@5.16.2": true
+  },
+  "dependencies": {
+    "expo": "~51.0.28",
+    "react": "18.2.0",
+    "react-native": "0.74.5"
   }
 }

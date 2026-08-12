@@ -15,30 +15,36 @@ export class NotificationsProcessor extends WorkerHost {
   async process(job: Job<TaskReminderJobData>): Promise<void> {
     if (job.name !== JOBS.TASK_REMINDER) return;
 
-    const { taskId, userId, taskTitle } = job.data;
+    const { taskId, userId } = job.data;
+    // taskTitle is intentionally NOT in the job payload (ADR-009 privacy contract).
 
-    // Доп. страховка от задвоения (помимо детерминированного jobId при постановке в очередь)
-    const alreadySent = await this.notifications.wasRecentlyDelivered(taskId);
-    if (alreadySent) {
-      this.logger.debug(`Напоминание по задаче ${taskId} уже было доставлено недавно — пропуск`);
+    // No task-global dedup precheck here (0011B blocker 4 fix).
+    // Per-device dedup is inside sendPushNotification: each device is checked
+    // against the NotificationLog before being sent, so retries only reach
+    // devices that have not yet received the delivery.
+    const result = await this.notifications.sendPushNotification(userId, taskId);
+
+    if (result.status === 'no-tokens') {
+      await this.notifications.logNotification(userId, taskId, false, null);
       return;
     }
 
-    const result = await this.notifications.sendPushNotification(
-      userId,
-      'Пора начинать',
-      taskTitle,
-    );
+    // Log per-device outcomes for every attempted (non-skipped) device.
+    // Devices with outcome 'already-delivered' were skipped by per-device dedup
+    // and already have a log entry from a prior attempt — do not double-log.
+    for (const device of result.devices) {
+      if (device.outcome === 'already-delivered') continue;
+      const delivered = device.outcome === 'sent';
+      await this.notifications.logNotification(userId, taskId, delivered, device.tokenId);
+    }
 
-    const delivered = result.status === 'sent';
-    await this.notifications.logNotification(userId, taskId, delivered);
-
-    // no-token / device-not-registered — ретраить бессмысленно (токен уже очищен/отсутствует)
-    if (result.status === 'error') {
-      // Бросаем ошибку — BullMQ применит retry/backoff, заданные при постановке в очередь (3 попытки)
-      throw new Error(
-        `Push не доставлен пользователю ${userId} по задаче ${taskId}: ${result.message}`,
-      );
+    // If ANY device has a retryable error, throw so BullMQ retries the job.
+    // On retry, per-device dedup inside sendPushNotification will skip devices
+    // already recorded as delivered and only re-attempt the failed ones.
+    const hasRetryable = result.devices.some((d) => d.outcome === 'error');
+    if (hasRetryable) {
+      // No userId/taskId in the error message to avoid PII in retry logs.
+      throw new Error('Some device tokens failed delivery; will retry');
     }
   }
 }

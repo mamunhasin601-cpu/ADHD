@@ -32,7 +32,7 @@ model User {
   hasCompletedOnboarding  Boolean  @default(false)
   plan   Plan     @default(FREE)
   proExpiresAt            DateTime? // null = навсегда (если Pro) или не Pro
-  expoPushToken           String?  // Expo push notification token (регистрируется с мобильного приложения)
+  expoPushToken           String?  // Deprecated: use DeviceToken table. Kept for backward compat during migration.
   
   // OAuth provider IDs
   yandexId                String?  @unique
@@ -46,6 +46,7 @@ model User {
   hostedSessions        FocusSession[]            @relation("HostedSessions")
   sessionParticipations FocusSessionParticipant[]
   notificationLogs      NotificationLog[]
+  deviceTokens          DeviceToken[]
 
   @@map("users")
 }
@@ -129,18 +130,44 @@ model FocusSessionParticipant {
 }
 
 // ──────────────────────────────────────────────
+// DeviceToken  (per-device push token registry, ADR-009)
+// Replaces single expoPushToken on User.
+// Multiple authenticated devices can register independently.
+// ──────────────────────────────────────────────
+
+model DeviceToken {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token       String    @unique
+  platform    String    @default("expo") // "expo" | "apns" | "fcm"
+  label       String?   // optional device label (e.g. "iPhone 14")
+  createdAt   DateTime  @default(now())
+  revokedAt   DateTime? // null = active; non-null = revoked (DeviceNotRegistered or explicit removal)
+
+  notificationLogs NotificationLog[]
+
+  @@index([userId])
+  @@index([userId, revokedAt]) // fast "active tokens for user" query
+  @@map("device_tokens")
+}
+
+// ──────────────────────────────────────────────
 // NotificationLog  (для отладки надёжности доставки)
 // ──────────────────────────────────────────────
 
 model NotificationLog {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  taskId    String?
-  task      Task?    @relation(fields: [taskId], references: [id])
-  sentAt    DateTime @default(now())
-  delivered Boolean  @default(false)
+  id            String       @id @default(uuid())
+  userId        String
+  user          User         @relation(fields: [userId], references: [id])
+  taskId        String?
+  task          Task?        @relation(fields: [taskId], references: [id])
+  deviceTokenId String?      // null for legacy or no-tokens paths
+  deviceToken   DeviceToken? @relation(fields: [deviceTokenId], references: [id])
+  sentAt        DateTime     @default(now())
+  delivered     Boolean      @default(false)
 
   @@index([userId])
+  @@index([taskId, deviceTokenId]) // per-device dedup query
   @@map("notification_logs")
 }

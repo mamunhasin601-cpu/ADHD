@@ -10,17 +10,15 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, Link } from 'expo-router';
-import { register as registerRequest, getMe } from '../lib/api/auth';
+import { Link } from 'expo-router';
+import { register as registerRequest } from '../lib/api/auth';
 import { useAuthStore } from '../stores/auth.store';
 import { extractErrorMessage } from '../lib/api-error';
 
 type Identifier = 'email' | 'phone';
 
 export default function RegisterScreen() {
-  const router = useRouter();
-  const setTokens = useAuthStore((s) => s.setTokens);
-  const setUser = useAuthStore((s) => s.setUser);
+  const authenticate = useAuthStore((s) => s.authenticate);
 
   const [identifierType, setIdentifierType] = useState<Identifier>('email');
   const [identifier, setIdentifier] = useState('');
@@ -37,10 +35,7 @@ export default function RegisterScreen() {
         password,
         timezone,
       });
-      await setTokens(tokens);
-      const user = await getMe();
-      setUser(user);
-      router.replace('/(tabs)/today');
+      await authenticate(tokens);
     } catch (err) {
       Alert.alert('Не удалось зарегистрироваться', extractErrorMessage(err));
     } finally {

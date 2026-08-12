@@ -1,0 +1,21 @@
+HTTP/1.1 404 Not Found
+
+X-Powered-By: Express
+
+Vary: Origin
+
+Access-Control-Allow-Credentials: true
+
+Content-Type: application/json; charset=utf-8
+
+Content-Length: 63
+
+ETag: W/"3f-BunLb98SCK6azHy0RO08GDnFBek"
+
+Date: Fri, 07 Aug 2026 18:09:47 GMT
+
+Connection: close
+
+
+
+{"message":"Cannot GET /","error

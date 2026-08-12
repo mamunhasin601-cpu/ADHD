@@ -17,7 +17,7 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
  */
 export default function AuthProviderSelectScreen() {
   const router = useRouter();
-  const setTokens = useAuthStore((s) => s.setTokens);
+  const authenticate = useAuthStore((s) => s.authenticate);
   const [isLoading, setIsLoading] = useState(false);
 
   // Обработка deep link callback от OAuth
@@ -33,8 +33,11 @@ export default function AuthProviderSelectScreen() {
       const refreshToken = url.searchParams.get('refreshToken');
 
       if (accessToken && refreshToken) {
-        await setTokens({ accessToken, refreshToken });
-        router.replace('/(tabs)/today');
+        try {
+          await authenticate({ accessToken, refreshToken });
+        } catch {
+          Alert.alert('Ошибка', 'Не удалось проверить сессию после входа');
+        }
       } else {
         Alert.alert('Ошибка', 'Не удалось получить токены авторизации');
       }

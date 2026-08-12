@@ -45,13 +45,12 @@ export class OAuthService {
 
     // 2. Ищем по email или phone (account linking)
     if (profile.email || profile.phone) {
+      const identityConditions: Array<{ email: string } | { phone: string }> = [];
+      if (profile.email) identityConditions.push({ email: profile.email });
+      if (profile.phone) identityConditions.push({ phone: profile.phone });
+
       user = await this.prisma.user.findFirst({
-        where: {
-          OR: [
-            profile.email ? { email: profile.email } : undefined,
-            profile.phone ? { phone: profile.phone } : undefined,
-          ].filter(Boolean),
-        },
+        where: { OR: identityConditions },
       });
 
       if (user) {

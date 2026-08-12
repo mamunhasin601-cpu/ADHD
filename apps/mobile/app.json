@@ -49,6 +49,6 @@
       ],
       "expo-secure-store"
     ],
-    "scheme": "focus",
+    "scheme": "focus"
   }
 }

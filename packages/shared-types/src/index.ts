@@ -133,6 +133,47 @@ export interface NotificationLog {
 }
 
 // ────────────────────────────────────────────────────────────
+// Recovery (Guilt-Free Return)
+// ────────────────────────────────────────────────────────────
+
+/**
+ * GET /tasks/recovery response
+ */
+export interface OverdueTasksResponse {
+  tasks: Task[];
+  userTimezone: string;
+  /** ISO-8601 UTC — начало текущего локального дня пользователя */
+  localDayStart: string;
+}
+
+/**
+ * Один элемент mapping для reschedule command
+ * targetStartTime: ISO-8601 UTC string → reschedule, null → move to Inbox
+ */
+export interface RescheduleItem {
+  taskId: string;
+  targetStartTime: string | null;
+}
+
+/**
+ * POST /tasks/recovery/reschedule request body
+ */
+export interface RescheduleRecoveryRequest {
+  items: RescheduleItem[];
+}
+
+/**
+ * POST /tasks/recovery/reschedule response
+ */
+export interface RescheduleRecoveryResponse {
+  updatedCount: number;
+  taskUpdateStatus: 'ok';
+  reminderSyncStatus: 'ok' | 'partial';
+  /** taskIds для которых reminder sync не удался */
+  failedReminderSyncs?: string[];
+}
+
+// ────────────────────────────────────────────────────────────
 // API response helpers
 // ────────────────────────────────────────────────────────────
 

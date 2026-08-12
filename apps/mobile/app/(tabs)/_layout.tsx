@@ -1,5 +1,9 @@
 import { Tabs } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Text } from 'react-native';
+
+function TabIcon({ label, color, size }: { label: string; color: string; size: number }) {
+  return <Text style={{ color, fontSize: size }}>{label}</Text>;
+}
 
 export default function TabsLayout() {
   return (
@@ -15,7 +19,16 @@ export default function TabsLayout() {
         options={{
           title: 'Сегодня',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="today-outline" size={size} color={color} />
+            <TabIcon label="□" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="inbox"
+        options={{
+          title: 'Inbox',
+          tabBarIcon: ({ color, size }) => (
+            <TabIcon label="≡" size={size} color={color} />
           ),
         }}
       />
@@ -24,7 +37,7 @@ export default function TabsLayout() {
         options={{
           title: 'Фокус',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people-outline" size={size} color={color} />
+            <TabIcon label="○" size={size} color={color} />
           ),
         }}
       />
@@ -33,7 +46,7 @@ export default function TabsLayout() {
         options={{
           title: 'Настройки',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings-outline" size={size} color={color} />
+            <TabIcon label="⚙" size={size} color={color} />
           ),
         }}
       />
