@@ -158,6 +158,20 @@
 
 ## Current Session
 
+✅ **Completed (2026-08-12, Task 0012 — Actionable Now Card):**
+- Replaced the passive Today `Now / Next` block with an isolated `NowCard`
+  action surface aligned with PDR-001.
+- Current tasks now expose one primary, existing-contract action: `Завершить`.
+  `Изменить план` remains visually secondary.
+- When no task is active, the nearest upcoming task is shown as
+  `Ближайшее действие` with one `Открыть задачу` CTA.
+- The component displays scheduled time and approximate duration and includes
+  task-specific accessibility labels.
+- No artificial `in progress` state, focus session, AI helper or database
+  contract was introduced.
+- **Verified:** mobile 264/264 (20 suites), mobile TypeScript clean,
+  `git diff --check` clean.
+
 ✅ **Completed this session:**
 - Day navigation (left/right arrows, "Сегодня" button)
 - Now / Next indicator (current/upcoming task card)

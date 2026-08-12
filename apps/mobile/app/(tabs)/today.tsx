@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { Timeline } from '../../components/timeline/Timeline';
+import { NowCard } from '../../components/NowCard';
 import { ProgressRing } from '../../components/ProgressRing';
 import { EmptyState } from '../../components/EmptyState';
 import { RecoverySection } from '../../components/RecoverySection';
@@ -76,7 +77,7 @@ export default function TodayScreen() {
     return () => clearInterval(interval);
   }, []);
 
-    const scheduledTasks = tasks.filter((task: Task) => task.startTime && !task.completedAt);
+  const scheduledTasks = tasks.filter((task: Task) => task.startTime && !task.completedAt);
   const unscheduledTasks = tasks.filter((task: Task) => !task.startTime);
 
   // Прогресс дня: завершенные / все задачи
@@ -119,6 +120,16 @@ export default function TodayScreen() {
     setQuickAddTime(startTime);
     setTitle('');
     setQuickAddOpen(true);
+  }
+
+  function openTask(task: Task) {
+    router.push({
+      pathname: '/task-form',
+      params: {
+        task: JSON.stringify(task),
+        selectedDate: selectedDate.toISOString(),
+      },
+    });
   }
 
   async function handleSubmitQuickAdd() {
@@ -251,39 +262,13 @@ export default function TodayScreen() {
       {!isLoading && !isError && totalCount > 0 && (
         <>
           {isToday && (currentTask || nextTask) && (
-            <View style={styles.nowNextCard}>
-              {currentTask && (
-                <View style={styles.nowSection}>
-                  <Text style={styles.nowLabel}>Сейчас</Text>
-                  <Text style={styles.nowTaskTitle} numberOfLines={1}>
-                    {currentTask.title}
-                  </Text>
-                  {currentTask.durationMinutes && (
-                    <Text style={styles.nowTaskTime}>
-                      {new Date(currentTask.startTime!).toLocaleTimeString('ru-RU', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}{' '}
-                      • {currentTask.durationMinutes} мин
-                    </Text>
-                  )}
-                </View>
-              )}
-              {nextTask && (
-                <View style={styles.nextSection}>
-                  <Text style={styles.nextLabel}>Дальше</Text>
-                  <Text style={styles.nextTaskTitle} numberOfLines={1}>
-                    {nextTask.title}
-                  </Text>
-                  <Text style={styles.nextTaskTime}>
-                    {new Date(nextTask.startTime!).toLocaleTimeString('ru-RU', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </Text>
-                </View>
-              )}
-            </View>
+            <NowCard
+              task={currentTask ?? nextTask!}
+              mode={currentTask ? 'current' : 'upcoming'}
+              onComplete={(taskId) => toggleTask.mutate(taskId)}
+              onOpenTask={openTask}
+              isCompleting={toggleTask.isPending}
+            />
           )}
           {unscheduledTasks.length > 0 && (
             <View style={styles.unscheduledList}>
@@ -344,15 +329,7 @@ export default function TodayScreen() {
             <Timeline
               tasks={tasks}
               onToggle={(id) => toggleTask.mutate(id)}
-              onOpenTask={(task: Task) => {
-                router.push({
-                  pathname: '/task-form',
-                  params: {
-                    task: JSON.stringify(task),
-                    selectedDate: selectedDate.toISOString(),
-                  },
-                });
-              }}
+              onOpenTask={openTask}
               onCreateAt={(startTime) => openQuickAdd(startTime)}
               shouldAutoScroll={isToday}
               currentDate={selectedDate}
@@ -458,63 +435,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   headerDate: { fontSize: 16, color: '#111827', fontWeight: '500', textTransform: 'capitalize', flex: 1, textAlign: 'center' },
-  nowNextCard: {
-    marginHorizontal: 20,
-    marginVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  nowSection: {
-    marginBottom: 12,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  nowLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#6B5BFC',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  nowTaskTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 2,
-  },
-  nowTaskTime: {
-    fontSize: 13,
-    color: '#6B7280',
-  },
-  nextSection: {},
-  nextLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#9CA3AF',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  nextTaskTitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-    marginBottom: 2,
-  },
-  nextTaskTime: {
-    fontSize: 13,
-    color: '#9CA3AF',
-  },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   errorText: { color: '#6B7280', textAlign: 'center' },
   unscheduledList: {
