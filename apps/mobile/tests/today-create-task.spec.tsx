@@ -1,27 +1,36 @@
 const mockPush = jest.fn();
+const mockMutateAsync = jest.fn();
+const mockRefetchQueries = jest.fn();
+let mockCreatePending = false;
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
 }));
 jest.mock('@tanstack/react-query', () => ({
-  useQueryClient: () => ({ refetchQueries: jest.fn() }),
+  useQueryClient: () => ({ refetchQueries: mockRefetchQueries }),
 }));
 jest.mock('../lib/api/tasks', () => ({
   useTasksForDate: jest.fn(() => ({ data: [], isLoading: false, isError: false })),
-  useCreateTask: jest.fn(() => ({ mutateAsync: jest.fn(), isPending: false })),
-  useToggleTask: jest.fn(() => ({ mutate: jest.fn() })),
+  useCreateTask: jest.fn(() => ({ mutateAsync: mockMutateAsync, isPending: mockCreatePending })),
+  useToggleTask: jest.fn(() => ({ mutate: jest.fn(), isPending: false })),
 }));
 jest.mock('../stores/auth.store', () => ({
   useAuthStore: jest.fn((selector: any) => selector({ user: { timezone: 'Europe/Moscow' } })),
 }));
 jest.mock('../components/RecoverySection', () => ({ RecoverySection: () => null }));
 jest.mock('../components/ProgressRing', () => ({ ProgressRing: () => null }));
+jest.mock('../components/NowCard', () => ({ NowCard: () => null }));
 jest.mock('../components/timeline/Timeline', () => {
   const React = require('react');
-  const { Text, View } = require('react-native');
+  const { Pressable, Text, View } = require('react-native');
   return {
-    Timeline: ({ tasks }: any) => (
-      <View>{tasks.map((task: any) => <Text key={task.id}>{task.title}</Text>)}</View>
+    Timeline: ({ tasks, onCreateAt }: any) => (
+      <View>
+        {tasks.map((task: any) => <Text key={task.id}>{task.title}</Text>)}
+        <Pressable onPress={() => onCreateAt(new Date(2026, 7, 12, 14, 30))}>
+          <Text>Выбрать 14:30</Text>
+        </Pressable>
+      </View>
     ),
   };
 });
@@ -44,41 +53,148 @@ jest.mock('react-native-safe-area-context', () => {
 });
 
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import TodayScreen from '../app/(tabs)/today';
 import { useTasksForDate } from '../lib/api/tasks';
 
-describe('Today empty state Create Task CTA', () => {
-  beforeEach(() => jest.clearAllMocks());
+const scheduledTask = {
+  id: 'scheduled-task',
+  title: 'Существующая задача',
+  startTime: '2026-08-12T08:00:00.000Z',
+  completedAt: null,
+  durationMinutes: 30,
+};
 
-  it('opens /task-form directly with the selected date', () => {
+function openGlobalCapture() {
+  fireEvent.press(screen.getByLabelText('Быстро добавить задачу'));
+}
+
+function renderWithTimeline() {
+  (useTasksForDate as jest.Mock).mockReturnValue({
+    data: [scheduledTask],
+    isLoading: false,
+    isError: false,
+  });
+  render(<TodayScreen />);
+  fireEvent.press(screen.getByText('Выбрать 14:30'));
+}
+
+describe('Today quick capture destinations', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockCreatePending = false;
+    mockMutateAsync.mockResolvedValue({ id: 'created-task' });
+    mockRefetchQueries.mockResolvedValue(undefined);
+    (useTasksForDate as jest.Mock).mockReturnValue({ data: [], isLoading: false, isError: false });
+  });
+
+  it('keeps the empty-state full task form CTA behavior', () => {
     render(<TodayScreen />);
-
     fireEvent.press(screen.getByText('Создать задачу'));
-
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/task-form',
       params: { selectedDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) },
     });
   });
 
-  it('renders a scheduled onboarding task returned by the Today query', () => {
-    (useTasksForDate as jest.Mock).mockReturnValue({
-      data: [
-        {
-          id: 'onboarding-task',
-          title: 'Тестовая задача',
-          startTime: '2026-08-11T11:00:00.000Z',
-          completedAt: null,
-          durationMinutes: 30,
-        },
-      ],
-      isLoading: false,
-      isError: false,
-    });
-
+  it('labels global capture with Thoughts language and creates without a start time', async () => {
     render(<TodayScreen />);
+    openGlobalCapture();
 
-    expect(screen.getByText('Тестовая задача')).toBeTruthy();
+    expect(screen.getByText('Сохранить в Мысли')).toBeTruthy();
+    fireEvent.changeText(screen.getByLabelText('Название задачи'), '  Купить молоко  ');
+    fireEvent.press(screen.getByText('Сохранить в Мысли'));
+
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledWith({
+      title: 'Купить молоко',
+      startTime: null,
+    }));
+    expect(mockRefetchQueries).toHaveBeenCalledWith({ queryKey: ['tasks'] });
+  });
+
+  it('creates timeline capture at the selected ISO time', async () => {
+    renderWithTimeline();
+
+    expect(screen.getByText('Выбранное время: 14:30')).toBeTruthy();
+    fireEvent.changeText(screen.getByLabelText('Название задачи'), '  Встреча  ');
+    fireEvent.press(screen.getByText('Добавить на 14:30'));
+
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledWith({
+      title: 'Встреча',
+      startTime: new Date(2026, 7, 12, 14, 30).toISOString(),
+    }));
+  });
+
+  it('can save timeline capture to Thoughts without a start time', async () => {
+    renderWithTimeline();
+    fireEvent.changeText(screen.getByLabelText('Название задачи'), '  Идея  ');
+    fireEvent.press(screen.getByText('В Мысли'));
+
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledWith({
+      title: 'Идея',
+      startTime: null,
+    }));
+  });
+
+  it('preserves the trimmed title in the full-form prefill', () => {
+    render(<TodayScreen />);
+    openGlobalCapture();
+    fireEvent.changeText(screen.getByLabelText('Название задачи'), '  Разобрать почту  ');
+    fireEvent.press(screen.getByText('Подробнее →'));
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/task-form',
+      params: {
+        prefillTitle: 'Разобрать почту',
+        selectedDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      },
+    });
+  });
+
+  it('preserves the trimmed title and selected time in full-form prefills', () => {
+    renderWithTimeline();
+    fireEvent.changeText(screen.getByLabelText('Название задачи'), '  Позвонить  ');
+    fireEvent.press(screen.getByText('Подробнее →'));
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/task-form',
+      params: {
+        prefillTitle: 'Позвонить',
+        prefillStartTime: new Date(2026, 7, 12, 14, 30).toISOString(),
+        selectedDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      },
+    });
+  });
+
+  it('does not submit a blank title', () => {
+    render(<TodayScreen />);
+    openGlobalCapture();
+    const submit = screen.getByLabelText('Сохранить задачу в Мысли');
+
+    expect(submit.props.accessibilityState).toEqual({ disabled: true });
+    fireEvent.press(submit);
+    fireEvent(screen.getByLabelText('Название задачи'), 'submitEditing');
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByLabelText('Отменить быстрое добавление'));
+  });
+
+  it('disables every creation destination and planning while creation is pending', () => {
+    mockCreatePending = true;
+    renderWithTimeline();
+    fireEvent.changeText(screen.getByLabelText('Название задачи'), 'Задача');
+
+    const timed = screen.getByLabelText('Добавить задачу на 14:30');
+    const thoughts = screen.getByLabelText('Сохранить задачу в Мысли без времени');
+    const fullForm = screen.getByLabelText('Открыть полную форму задачи');
+    expect(timed.props.accessibilityState).toEqual({ disabled: true });
+    expect(thoughts.props.accessibilityState).toEqual({ disabled: true });
+    expect(fullForm.props.accessibilityState).toEqual({ disabled: true });
+
+    fireEvent.press(timed);
+    fireEvent.press(thoughts);
+    fireEvent.press(fullForm);
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByLabelText('Отменить быстрое добавление'));
   });
 });
