@@ -78,7 +78,14 @@
 
 #### 6.1 Active decisions
 
+- [PDR-001: Timeline-centered day experience](PDR-001-Timeline-Centered-Day-Experience.md)
+  — принято 2026-08-12; задает таймлайн как основу Today, приоритет «Сейчас»,
+  recovery без стыда и границу между вдохновением Structured и копированием.
+
 #### 6.2 Superseded decisions
 
 #### 6.3 Open decisions
 
+- Точная визуальная композиция Today и карточки «Сейчас».
+- Финальная модель постоянной нижней навигации после проверки прототипа.
+- Граница Free/Pro для расширенного помощника без ограничения базового recovery.

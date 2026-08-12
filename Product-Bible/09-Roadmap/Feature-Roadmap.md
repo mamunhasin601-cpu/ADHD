@@ -38,6 +38,24 @@
 
 #### 3.5 Onboarding и первый полезный старт
 
+#### Принятое направление Phase 1
+
+Phase 1 реализует минимальное ядро из [PDR-001](../12-Decisions/PDR-001-Timeline-Centered-Day-Experience.md):
+
+- Today как вертикальный таймлайн;
+- карточку «Сейчас» как главный объект;
+- быстрое добавление после одного названия;
+- приблизительную длительность и вариант `Не знаю`;
+- мысли без обязательного планирования;
+- базовый recovery с preview и undo;
+- отдых, буферы и свободные окна как допустимую часть дня.
+
+Точная последовательность поставки и полный перечень поверхностей определены в
+[Future Screen Map](../05-Experience/Future-Screen-Map.md). Контекстный помощник,
+overload mode и focus session относятся к следующему расширению опыта; AI
+декомпозиция, energy-aware suggestions и explainable rescheduling не блокируют
+проверку минимального ядра.
+
 ### 4. Phase 2: focus and body doubling
 
 #### 4.1 Focus session experience
@@ -117,4 +135,3 @@
 #### 10.3 Sunset and removal
 
 #### 10.4 Learning after release
-

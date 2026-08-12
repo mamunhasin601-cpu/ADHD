@@ -28,6 +28,8 @@ Product Bible отвечает на вопросы «зачем», «для ко
 
 ### 1.5 [Product experience model](05-Experience/Product-Experience-Model.md)
 
+#### 1.5.1 [Future screen map](05-Experience/Future-Screen-Map.md)
+
 ### 1.6 [Smart Planner philosophy](06-Smart-Planner/Smart-Planner-Philosophy.md)
 
 ### 1.7 [AI behavior](07-AI/AI-Behavior.md)
@@ -41,6 +43,8 @@ Product Bible отвечает на вопросы «зачем», «для ко
 ### 1.11 [Product measurement and learning](11-Measurement/Product-Measurement.md)
 
 ### 1.12 [Product decision records](12-Decisions/Product-Decisions.md)
+
+#### 1.12.1 [PDR-001: Timeline-centered day experience](12-Decisions/PDR-001-Timeline-Centered-Day-Experience.md)
 
 ### 1.13 [Document relationships and governance](13-Governance/Document-Relationships.md)
 
@@ -73,4 +77,3 @@ Product Bible отвечает на вопросы «зачем», «для ко
 ### 3.4 История изменений и временные заметки
 
 ### 3.5 Порядок разрешения противоречий
-

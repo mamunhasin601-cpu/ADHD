@@ -50,3 +50,30 @@
 
 #### 4.3 Open follow-ups
 
+## 2026-08-12 — Timeline-centered day experience
+
+### Change summary
+
+- принят [PDR-001](../12-Decisions/PDR-001-Timeline-Centered-Day-Experience.md);
+- UX Principles переведены из структуры в активную спецификацию;
+- Product Experience Model дополнен циклом «Сейчас → действие → recovery»;
+- добавлена [Future Screen Map](../05-Experience/Future-Screen-Map.md);
+- уточнены Smart Planner и Phase 1 roadmap.
+
+### Reason and evidence
+
+Сравнительный разбор Structured показал сильную модель дня через вертикальный
+таймлайн. Решение принято только в той части, которая подтверждается Founder
+Manifesto, User Bible, Product Vision и Constitution. Точная визуальная
+композиция остается гипотезой для прототипирования.
+
+### User impact
+
+Будущий Focus ориентируется на текущий момент и доступный шаг, отображает
+реалистичную емкость дня и помогает пересобрать остаток плана без обвинения.
+
+### Roadmap impact
+
+Минимальное таймлайн-ядро закреплено в Phase 1. Расширенный помощник, энергия,
+AI-декомпозиция и body doubling поставляются последовательно и не блокируют
+проверку основного опыта.
