@@ -1,9 +1,9 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import type { Task } from '@focus/shared-types';
-import { useAuthStore } from '../stores/auth.store';
-import { formatClockTime } from '../lib/time-format';
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import type { Task } from "@focus/shared-types";
+import { useAuthStore } from "../stores/auth.store";
+import { formatClockTime } from "../lib/time-format";
 
-type NowCardMode = 'current' | 'upcoming';
+type NowCardMode = "current" | "upcoming";
 
 interface Props {
   task: Task;
@@ -12,7 +12,6 @@ interface Props {
   onOpenTask: (task: Task) => void;
   isCompleting?: boolean;
 }
-
 
 /**
  * Главная точка действия на Today.
@@ -28,25 +27,30 @@ export function NowCard({
   onOpenTask,
   isCompleting = false,
 }: Props) {
-  const timeFormat = useAuthStore((state) => state.user?.timeFormat ?? 'SYSTEM');
-  const timezone = useAuthStore((state) => state.user?.timezone);
-  const time = task.startTime ? formatClockTime(new Date(task.startTime), timeFormat, timezone ? { timeZone: timezone } : {}) : null;
-  const isCurrent = mode === 'current';
+  const timeFormat = useAuthStore(
+    (state) => state.user?.timeFormat ?? "SYSTEM",
+  );
+  const time = task.startTime
+    ? formatClockTime(new Date(task.startTime), timeFormat)
+    : null;
+  const isCurrent = mode === "current";
 
   return (
     <View style={styles.card} accessibilityRole="summary">
       <Text style={styles.eyebrow}>Сейчас</Text>
       <Text style={styles.context}>
-        {isCurrent ? 'Текущее действие' : 'Ближайшее действие'}
+        {isCurrent ? "Текущее действие" : "Ближайшее действие"}
       </Text>
       <Text style={styles.title} numberOfLines={2}>
         {task.title}
       </Text>
 
       <Text style={styles.meta}>
-        {time ? `${isCurrent ? 'Началось' : 'Запланировано'} в ${time}  •  ` : ''}
+        {time
+          ? `${isCurrent ? "Началось" : "Запланировано"} в ${time}  •  `
+          : ""}
         {task.durationMinutes === null
-          ? 'Длительность: Не знаю'
+          ? "Длительность: Не знаю"
           : `около ${task.durationMinutes} мин`}
       </Text>
 
@@ -65,14 +69,17 @@ export function NowCard({
               ]}
             >
               <Text style={styles.primaryButtonText}>
-                {isCompleting ? 'Сохраняю…' : 'Завершить'}
+                {isCompleting ? "Сохраняю…" : "Завершить"}
               </Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Изменить задачу ${task.title}`}
               onPress={() => onOpenTask(task)}
-              style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
+              style={({ pressed }) => [
+                styles.secondaryButton,
+                pressed && styles.buttonPressed,
+              ]}
             >
               <Text style={styles.secondaryButtonText}>Изменить план</Text>
             </Pressable>
@@ -82,7 +89,10 @@ export function NowCard({
             accessibilityRole="button"
             accessibilityLabel={`Открыть задачу ${task.title}`}
             onPress={() => onOpenTask(task)}
-            style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              pressed && styles.buttonPressed,
+            ]}
           >
             <Text style={styles.primaryButtonText}>Открыть задачу</Text>
           </Pressable>
@@ -98,10 +108,10 @@ const styles = StyleSheet.create({
     marginVertical: 12,
     padding: 20,
     borderRadius: 18,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: '#E8E5FF',
-    shadowColor: '#332A7C',
+    borderColor: "#E8E5FF",
+    shadowColor: "#332A7C",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 12,
@@ -109,28 +119,28 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     fontSize: 12,
-    fontWeight: '700',
-    color: '#6B5BFC',
-    textTransform: 'uppercase',
+    fontWeight: "700",
+    color: "#6B5BFC",
+    textTransform: "uppercase",
     letterSpacing: 0.8,
   },
   context: {
     marginTop: 6,
     fontSize: 13,
-    color: '#7C748F',
+    color: "#7C748F",
   },
   title: {
     marginTop: 8,
     fontSize: 21,
     lineHeight: 27,
-    fontWeight: '700',
-    color: '#211D2E',
+    fontWeight: "700",
+    color: "#211D2E",
   },
   meta: {
     marginTop: 8,
     fontSize: 13,
     lineHeight: 19,
-    color: '#6B6477',
+    color: "#6B6477",
   },
   actions: {
     marginTop: 18,
@@ -140,27 +150,27 @@ const styles = StyleSheet.create({
     minHeight: 48,
     paddingHorizontal: 18,
     borderRadius: 14,
-    backgroundColor: '#6B5BFC',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#6B5BFC",
+    alignItems: "center",
+    justifyContent: "center",
   },
   primaryButtonText: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   secondaryButton: {
     minHeight: 44,
     paddingHorizontal: 16,
     borderRadius: 14,
-    backgroundColor: '#F3F1FF',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#F3F1FF",
+    alignItems: "center",
+    justifyContent: "center",
   },
   secondaryButtonText: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#5A4BE7',
+    fontWeight: "600",
+    color: "#5A4BE7",
   },
   buttonPressed: {
     opacity: 0.78,

@@ -10,19 +10,19 @@ The only values are `SYSTEM` (“Как в системе”, default), `H24` (�
 
 ## Persistence and API
 
-Prisma defines `TimeFormat` and the non-null `User.timeFormat @default(SYSTEM)`. Migration `20260812010000_add_user_time_format` creates the enum and adds the column with the same default, preserving existing rows. Shared `User` exposes the field. `UpdateUserDto` permits only the canonical enum. Existing registration, login, `/auth/me`, and `/users/me` serialize the complete safe Prisma user, so no endpoint was added. `PATCH /users/me` updates only fields explicitly sent; timezone and time format remain independent.
+Prisma defines `TimeFormat` and the non-null `User.timeFormat @default(SYSTEM)`. Migration `20260812010000_add_user_time_format` creates the enum and adds the column with the same default, preserving existing rows. Shared `User` exposes the field. `UpdateUserDto` permits only the canonical enum. Registration and login retain their established token-only responses. Authenticated bootstrap then loads the profile through `/auth/me`; `/auth/me`, `GET /users/me`, and `PATCH /users/me` expose `timeFormat`, so no endpoint was added. `PATCH /users/me` updates only fields explicitly sent; timezone and time format remain independent.
 
 ## Mobile behavior and changed surfaces
 
 Settings supplies three Russian radio choices and examples, disables all choices while saving, rejects duplicate submissions, sends only `{ timeFormat }`, updates the auth-store user only from a successful response, and retains the old user with an actionable error on failure.
 
-`lib/time-format.ts` is the deterministic presentation contract. It resolves the device hour cycle for `SYSTEM`, forces the two overrides, accepts locale and IANA timezone independently, formats internal 0–23 wall-clock fields, and parses onboarding input without 12-hour ambiguity.
+`lib/time-format.ts` is the deterministic presentation contract. It resolves the device hour cycle for `SYSTEM`, forces the two overrides, accepts locale and IANA timezone independently, formats internal 0–23 wall-clock fields while the Task Form exposes a 1–12 editor plus accessible AM/PM controls in 12-hour mode, and parses onboarding input without 12-hour ambiguity.
 
-Covered app-rendered surfaces: Today quick-capture hint, action text and accessibility label; timeline hour labels; Now card scheduled/current time in the profile timezone; task-form time display while retaining a 0–23 internal hour; Recovery overdue/destination previews and native picker preference; onboarding example, parsing, validation, and timeline explanation. Countdown durations and scheduling/conversion helpers are unchanged.
+Covered app-rendered surfaces: Today quick-capture hint, action text and accessibility label; timeline hour labels; Now card scheduled/current time with its pre-Task-0016 device-timezone interpretation unchanged; task-form time display while retaining a 0–23 internal hour; Recovery overdue/destination previews and native picker preference; onboarding example, parsing, validation, and timeline explanation. Countdown durations and scheduling/conversion helpers are unchanged.
 
 ## Verification evidence
 
-The focused formatting suite contains 7 tests. API DTO coverage contains 8 tests. Settings coverage contains 6 tests. The full API run passes 13 suites / 228 tests; the full mobile run passes 24 suites / 293 tests. The required focused mobile run passes 9 suites / 107 tests. Prisma schema validation and client generation passed. Migration SQL was reviewed statically; it was not applied because no explicitly disposable database was provided.
+Final verification: API 14 suites / 234 tests; mobile 25 suites / 326 tests; focused API 2 suites / 14 tests; focused mobile 8 suites / 116 tests. TypeScript checks, Prisma validation/generation, and diff checks passed. Prisma schema validation and client generation passed. Migration SQL was reviewed statically but was not applied because no explicitly disposable database was provided.
 
 ## Platform limitation
 

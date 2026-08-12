@@ -2,31 +2,47 @@ const mockPush = jest.fn();
 const mockMutateAsync = jest.fn();
 const mockRefetchQueries = jest.fn();
 let mockCreatePending = false;
+let mockTimeFormat: "H24" | "H12" = "H24";
 
-jest.mock('expo-router', () => ({
+jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush }),
 }));
-jest.mock('@tanstack/react-query', () => ({
+jest.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ refetchQueries: mockRefetchQueries }),
 }));
-jest.mock('../lib/api/tasks', () => ({
-  useTasksForDate: jest.fn(() => ({ data: [], isLoading: false, isError: false })),
-  useCreateTask: jest.fn(() => ({ mutateAsync: mockMutateAsync, isPending: mockCreatePending })),
+jest.mock("../lib/api/tasks", () => ({
+  useTasksForDate: jest.fn(() => ({
+    data: [],
+    isLoading: false,
+    isError: false,
+  })),
+  useCreateTask: jest.fn(() => ({
+    mutateAsync: mockMutateAsync,
+    isPending: mockCreatePending,
+  })),
   useToggleTask: jest.fn(() => ({ mutate: jest.fn(), isPending: false })),
 }));
-jest.mock('../stores/auth.store', () => ({
-  useAuthStore: jest.fn((selector: any) => selector({ user: { timezone: 'Europe/Moscow', timeFormat: 'H24' } })),
+jest.mock("../stores/auth.store", () => ({
+  useAuthStore: jest.fn((selector: any) =>
+    selector({
+      user: { timezone: "Europe/Moscow", timeFormat: mockTimeFormat },
+    }),
+  ),
 }));
-jest.mock('../components/RecoverySection', () => ({ RecoverySection: () => null }));
-jest.mock('../components/ProgressRing', () => ({ ProgressRing: () => null }));
-jest.mock('../components/NowCard', () => ({ NowCard: () => null }));
-jest.mock('../components/timeline/Timeline', () => {
-  const React = require('react');
-  const { Pressable, Text, View } = require('react-native');
+jest.mock("../components/RecoverySection", () => ({
+  RecoverySection: () => null,
+}));
+jest.mock("../components/ProgressRing", () => ({ ProgressRing: () => null }));
+jest.mock("../components/NowCard", () => ({ NowCard: () => null }));
+jest.mock("../components/timeline/Timeline", () => {
+  const React = require("react");
+  const { Pressable, Text, View } = require("react-native");
   return {
     Timeline: ({ tasks, onCreateAt }: any) => (
       <View>
-        {tasks.map((task: any) => <Text key={task.id}>{task.title}</Text>)}
+        {tasks.map((task: any) => (
+          <Text key={task.id}>{task.title}</Text>
+        ))}
         <Pressable onPress={() => onCreateAt(new Date(2026, 7, 12, 14, 30))}>
           <Text>Выбрать 14:30</Text>
         </Pressable>
@@ -34,39 +50,50 @@ jest.mock('../components/timeline/Timeline', () => {
     ),
   };
 });
-jest.mock('../components/EmptyState', () => {
-  const React = require('react');
-  const { Pressable, Text, View } = require('react-native');
+jest.mock("../components/EmptyState", () => {
+  const React = require("react");
+  const { Pressable, Text, View } = require("react-native");
   return {
     EmptyState: ({ title, actionLabel, onAction }: any) => (
       <View>
         <Text>{title}</Text>
-        <Pressable onPress={onAction}><Text>{actionLabel}</Text></Pressable>
+        <Pressable onPress={onAction}>
+          <Text>{actionLabel}</Text>
+        </Pressable>
       </View>
     ),
   };
 });
-jest.mock('expo-status-bar', () => ({ StatusBar: () => null }));
-jest.mock('react-native-safe-area-context', () => {
-  const { View } = require('react-native');
-  return { SafeAreaView: ({ children, ...props }: any) => <View {...props}>{children}</View> };
+jest.mock("expo-status-bar", () => ({ StatusBar: () => null }));
+jest.mock("react-native-safe-area-context", () => {
+  const { View } = require("react-native");
+  return {
+    SafeAreaView: ({ children, ...props }: any) => (
+      <View {...props}>{children}</View>
+    ),
+  };
 });
 
-import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import TodayScreen from '../app/(tabs)/today';
-import { useTasksForDate } from '../lib/api/tasks';
+import React from "react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react-native";
+import TodayScreen from "../app/(tabs)/today";
+import { useTasksForDate } from "../lib/api/tasks";
 
 const scheduledTask = {
-  id: 'scheduled-task',
-  title: 'Существующая задача',
-  startTime: '2026-08-12T08:00:00.000Z',
+  id: "scheduled-task",
+  title: "Существующая задача",
+  startTime: "2026-08-12T08:00:00.000Z",
   completedAt: null,
   durationMinutes: 30,
 };
 
 function openGlobalCapture() {
-  fireEvent.press(screen.getByLabelText('Быстро добавить задачу'));
+  fireEvent.press(screen.getByLabelText("Быстро добавить задачу"));
 }
 
 function renderWithTimeline() {
@@ -83,6 +110,7 @@ describe('Today quick capture destinations', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockCreatePending = false;
+    mockTimeFormat = 'H24';
     mockMutateAsync.mockResolvedValue({ id: 'created-task' });
     mockRefetchQueries.mockResolvedValue(undefined);
     (useTasksForDate as jest.Mock).mockReturnValue({ data: [], isLoading: false, isError: false });
@@ -126,6 +154,8 @@ describe('Today quick capture destinations', () => {
       durationMinutes: null,
     }));
   });
+
+  it('uses H12 consistently while preserving the exact selected instant', async () => { mockTimeFormat='H12'; renderWithTimeline(); const selected=new Date(2026,7,12,14,30); expect(screen.getByText('Выбранное время: 2:30 PM')).toBeTruthy(); fireEvent.changeText(screen.getByLabelText('Название задачи'),'Встреча'); const action=screen.getByLabelText('Добавить задачу на 2:30 PM'); expect(screen.getByText('Добавить на 2:30 PM')).toBeTruthy(); fireEvent.press(action); await waitFor(()=>expect(mockMutateAsync).toHaveBeenCalledWith(expect.objectContaining({startTime:selected.toISOString()}))); });
 
   it('can save timeline capture to Thoughts without a start time', async () => {
     renderWithTimeline();
@@ -238,6 +268,6 @@ describe('Today quick capture destinations', () => {
     fireEvent.press(fullForm);
     expect(mockMutateAsync).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
-    fireEvent.press(screen.getByLabelText('Отменить быстрое добавление'));
+    fireEvent.press(screen.getByLabelText("Отменить быстрое добавление"));
   });
 });

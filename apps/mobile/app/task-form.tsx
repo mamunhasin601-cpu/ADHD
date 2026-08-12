@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -7,53 +7,50 @@ import {
   ScrollView,
   StyleSheet,
   Alert,
-} from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useQueryClient } from '@tanstack/react-query';
-import type { Task } from '@focus/shared-types';
+} from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
+import type { Task } from "@focus/shared-types";
 import {
   useCreateTask,
   useUpdateTask,
   useDeleteTask,
   createSubtask,
   deleteTaskById,
-} from '../lib/api/tasks';
-import { isFreeTierLimitError } from '../lib/api-error';
-import { useAuthStore } from '../stores/auth.store';
-import { formatWallClock } from '../lib/time-format';
-import {
-  TASK_DURATION_PRESETS,
-  taskDurationLabel,
-} from '../lib/task-duration';
+} from "../lib/api/tasks";
+import { isFreeTierLimitError } from "../lib/api-error";
+import { useAuthStore } from "../stores/auth.store";
+import { formatWallClock, uses12HourClock } from "../lib/time-format";
+import { TASK_DURATION_PRESETS, taskDurationLabel } from "../lib/task-duration";
 
 const COLOR_PRESETS = [
-  '#6B5BFC',
-  '#F97316',
-  '#10B981',
-  '#3B82F6',
-  '#EF4444',
-  '#EC4899',
-  '#84CC16',
-  '#F59E0B',
+  "#6B5BFC",
+  "#F97316",
+  "#10B981",
+  "#3B82F6",
+  "#EF4444",
+  "#EC4899",
+  "#84CC16",
+  "#F59E0B",
 ];
 
-type RecurrencePreset = 'none' | 'daily' | 'weekdays';
+type RecurrencePreset = "none" | "daily" | "weekdays";
 
 const RECURRENCE_RULES: Record<RecurrencePreset, string | null> = {
   none: null,
-  daily: 'FREQ=DAILY',
-  weekdays: 'FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR',
+  daily: "FREQ=DAILY",
+  weekdays: "FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR",
 };
 
 const RECURRENCE_LABELS: Record<RecurrencePreset, string> = {
-  none: 'Не повторять',
-  daily: 'Каждый день',
-  weekdays: 'Будни (Пн–Пт)',
+  none: "Не повторять",
+  daily: "Каждый день",
+  weekdays: "Будни (Пн–Пт)",
 };
 
 const SUBTASK_PRESETS: Record<string, string[]> = {
-  'Уборка комнаты': ['Мусор', 'Пол', 'Поверхности'],
-  'Утренняя рутина': ['Вода', 'Зарядка', 'Завтрак'],
+  "Уборка комнаты": ["Мусор", "Пол", "Поверхности"],
+  "Утренняя рутина": ["Вода", "Зарядка", "Завтрак"],
 };
 
 function roundToStep(value: number, step: number): number {
@@ -61,9 +58,9 @@ function roundToStep(value: number, step: number): number {
 }
 
 function recurrencePresetFromRule(rule: string | null): RecurrencePreset {
-  if (rule === RECURRENCE_RULES.weekdays) return 'weekdays';
-  if (rule === RECURRENCE_RULES.daily) return 'daily';
-  return 'none';
+  if (rule === RECURRENCE_RULES.weekdays) return "weekdays";
+  if (rule === RECURRENCE_RULES.daily) return "daily";
+  return "none";
 }
 
 export default function TaskFormScreen() {
@@ -102,23 +99,30 @@ export default function TaskFormScreen() {
 
   // Profile timezone → same canonical cache key as Today and Recovery (0007A).
   const profileTimezone = useAuthStore((s) => s.user?.timezone);
-  const timeFormat = useAuthStore((s) => s.user?.timeFormat ?? 'SYSTEM');
+  const timeFormat = useAuthStore((s) => s.user?.timeFormat ?? "SYSTEM");
 
   const createTask = useCreateTask(today, profileTimezone);
   const updateTask = useUpdateTask(today, profileTimezone);
   const deleteTask = useDeleteTask(today, profileTimezone);
 
-  const [title, setTitle] = useState(existingTask?.title ?? params.prefillTitle ?? '');
+  const [title, setTitle] = useState(
+    existingTask?.title ?? params.prefillTitle ?? "",
+  );
 
   const initialStartTime =
     existingTask?.startTime ??
     (params.prefillStartTime ? new Date(params.prefillStartTime) : null);
 
   const [hasTime, setHasTime] = useState(!!initialStartTime);
-  const [hour, setHour] = useState(initialStartTime?.getHours() ?? new Date().getHours());
+  const [hour, setHour] = useState(
+    initialStartTime?.getHours() ?? new Date().getHours(),
+  );
   const [minute, setMinute] = useState(
     roundToStep(initialStartTime?.getMinutes() ?? new Date().getMinutes(), 5),
   );
+  const uses12Hour = uses12HourClock(timeFormat);
+  const displayHour = uses12Hour ? hour % 12 || 12 : hour;
+  const meridiem = hour < 12 ? "AM" : "PM";
   const baseDate = initialStartTime ?? today;
 
   const prefillDuration = params.prefillDurationMinutes
@@ -132,14 +136,20 @@ export default function TaskFormScreen() {
     recurrencePresetFromRule(existingTask?.recurrenceRule ?? null),
   );
 
-  const [existingSubtasks, setExistingSubtasks] = useState(existingTask?.subTasks ?? []);
+  const [existingSubtasks, setExistingSubtasks] = useState(
+    existingTask?.subTasks ?? [],
+  );
   const [newSubtasks, setNewSubtasks] = useState<string[]>([]);
-  const [subtaskInput, setSubtaskInput] = useState('');
+  const [subtaskInput, setSubtaskInput] = useState("");
 
   const [saving, setSaving] = useState(false);
 
   function adjustHour(delta: number) {
     setHour((h) => (h + delta + 24) % 24);
+  }
+
+  function toggleMeridiem() {
+    setHour((h) => (h + 12) % 24);
   }
 
   function adjustMinute(delta: number) {
@@ -150,7 +160,7 @@ export default function TaskFormScreen() {
     const value = subtaskInput.trim();
     if (!value) return;
     setNewSubtasks((prev) => [...prev, value]);
-    setSubtaskInput('');
+    setSubtaskInput("");
   }
 
   function addSubtaskPreset(presetName: string) {
@@ -165,9 +175,9 @@ export default function TaskFormScreen() {
     setExistingSubtasks((prev) => prev.filter((s) => s.id !== subtaskId));
     try {
       await deleteTaskById(subtaskId);
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
     } catch {
-      Alert.alert('Не удалось удалить шаг', 'Попробуйте снова');
+      Alert.alert("Не удалось удалить шаг", "Попробуйте снова");
     }
   }
 
@@ -188,14 +198,17 @@ export default function TaskFormScreen() {
       startTime: startTimeIso,
       durationMinutes,
       color,
-      isRecurring: recurrencePreset !== 'none',
+      isRecurring: recurrencePreset !== "none",
       recurrenceRule: RECURRENCE_RULES[recurrencePreset],
     };
 
     try {
       let parentId: string;
       if (isEditMode && existingTask) {
-        const updated = await updateTask.mutateAsync({ id: existingTask.id, dto });
+        const updated = await updateTask.mutateAsync({
+          id: existingTask.id,
+          dto,
+        });
         parentId = updated.id;
       } else {
         const created = await createTask.mutateAsync(dto);
@@ -206,15 +219,18 @@ export default function TaskFormScreen() {
         await createSubtask(parentId, subtaskTitle);
       }
       if (newSubtasks.length > 0) {
-        queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        queryClient.invalidateQueries({ queryKey: ["tasks"] });
       }
 
       router.back();
     } catch (err) {
       if (isFreeTierLimitError(err)) {
-        router.replace('/paywall');
+        router.replace("/paywall");
       } else {
-        Alert.alert('Не удалось сохранить', 'Проверьте соединение и попробуйте снова');
+        Alert.alert(
+          "Не удалось сохранить",
+          "Проверьте соединение и попробуйте снова",
+        );
       }
     } finally {
       setSaving(false);
@@ -223,17 +239,17 @@ export default function TaskFormScreen() {
 
   function handleDelete() {
     if (!existingTask) return;
-    Alert.alert('Удалить задачу?', existingTask.title, [
-      { text: 'Отмена', style: 'cancel' },
+    Alert.alert("Удалить задачу?", existingTask.title, [
+      { text: "Отмена", style: "cancel" },
       {
-        text: 'Удалить',
-        style: 'destructive',
+        text: "Удалить",
+        style: "destructive",
         onPress: async () => {
           try {
             await deleteTask.mutateAsync(existingTask.id);
             router.back();
           } catch {
-            Alert.alert('Не удалось удалить', 'Попробуйте снова');
+            Alert.alert("Не удалось удалить", "Попробуйте снова");
           }
         },
       },
@@ -258,7 +274,12 @@ export default function TaskFormScreen() {
           style={[styles.toggleChip, !hasTime && styles.toggleChipActive]}
           onPress={() => setHasTime(false)}
         >
-          <Text style={[styles.toggleChipText, !hasTime && styles.toggleChipTextActive]}>
+          <Text
+            style={[
+              styles.toggleChipText,
+              !hasTime && styles.toggleChipTextActive,
+            ]}
+          >
             Без времени
           </Text>
         </Pressable>
@@ -273,30 +294,23 @@ export default function TaskFormScreen() {
       </View>
 
       {hasTime && (
-        <>
-        <Text testID="task-time-display" style={styles.sectionLabel}>{formatWallClock(hour, minute, timeFormat)}</Text>
-        <View style={styles.timeStepperRow}>
-          <View style={styles.stepper}>
-            <Pressable onPress={() => adjustHour(-1)} style={styles.stepperButton}>
-              <Text style={styles.stepperButtonText}>−</Text>
-            </Pressable>
-            <Text style={styles.stepperValue}>{String(hour).padStart(2, '0')}</Text>
-            <Pressable onPress={() => adjustHour(1)} style={styles.stepperButton}>
-              <Text style={styles.stepperButtonText}>+</Text>
-            </Pressable>
-          </View>
-          <Text style={styles.timeColon}>:</Text>
-          <View style={styles.stepper}>
-            <Pressable onPress={() => adjustMinute(-5)} style={styles.stepperButton}>
-              <Text style={styles.stepperButtonText}>−</Text>
-            </Pressable>
-            <Text style={styles.stepperValue}>{String(minute).padStart(2, '0')}</Text>
-            <Pressable onPress={() => adjustMinute(5)} style={styles.stepperButton}>
-              <Text style={styles.stepperButtonText}>+</Text>
-            </Pressable>
+        <View>
+          <Text testID="task-time-display" style={styles.timePreview}>{formatWallClock(hour, minute, timeFormat)}</Text>
+          <View style={styles.timeStepperRow}>
+            <View style={styles.stepper}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Уменьшить час" accessibilityState={{ disabled: saving }} disabled={saving} onPress={() => adjustHour(-1)} style={styles.stepperButton}><Text style={styles.stepperButtonText}>−</Text></Pressable>
+              <Text testID="task-hour-value" accessibilityLabel={`Час ${displayHour}`} style={styles.stepperValue}>{uses12Hour ? displayHour : String(displayHour).padStart(2, '0')}</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Увеличить час" accessibilityState={{ disabled: saving }} disabled={saving} onPress={() => adjustHour(1)} style={styles.stepperButton}><Text style={styles.stepperButtonText}>+</Text></Pressable>
+            </View>
+            <Text style={styles.timeColon}>:</Text>
+            <View style={styles.stepper}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Уменьшить минуты" accessibilityState={{ disabled: saving }} disabled={saving} onPress={() => adjustMinute(-5)} style={styles.stepperButton}><Text style={styles.stepperButtonText}>−</Text></Pressable>
+              <Text testID="task-minute-value" accessibilityLabel={`Минуты ${minute}`} style={styles.stepperValue}>{String(minute).padStart(2, '0')}</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Увеличить минуты" accessibilityState={{ disabled: saving }} disabled={saving} onPress={() => adjustMinute(5)} style={styles.stepperButton}><Text style={styles.stepperButtonText}>+</Text></Pressable>
+            </View>
+            {uses12Hour && <View accessibilityRole="radiogroup" style={styles.meridiemGroup}>{(['AM','PM'] as const).map(value => <Pressable key={value} accessibilityRole="radio" accessibilityLabel={`Выбрать ${value}`} accessibilityState={{ selected: meridiem === value, disabled: saving }} disabled={saving || meridiem === value} onPress={toggleMeridiem} style={[styles.meridiemButton, meridiem === value && styles.meridiemButtonActive]}><Text style={[styles.meridiemText, meridiem === value && styles.meridiemTextActive]}>{value}</Text></Pressable>)}</View>}
           </View>
         </View>
-        </>
       )}
 
       {/* Длительность */}
@@ -304,13 +318,18 @@ export default function TaskFormScreen() {
       <View style={styles.chipsWrap}>
         {TASK_DURATION_PRESETS.map((mins) => (
           <Pressable
-            key={mins ?? 'unknown'}
+            key={mins ?? "unknown"}
             accessibilityRole="button"
             accessibilityState={{ selected: durationMinutes === mins }}
             style={[styles.chip, durationMinutes === mins && styles.chipActive]}
             onPress={() => setDurationMinutes(mins)}
           >
-            <Text style={[styles.chipText, durationMinutes === mins && styles.chipTextActive]}>
+            <Text
+              style={[
+                styles.chipText,
+                durationMinutes === mins && styles.chipTextActive,
+              ]}
+            >
               {taskDurationLabel(mins)}
             </Text>
           </Pressable>
@@ -392,18 +411,26 @@ export default function TaskFormScreen() {
           onSubmitEditing={addSubtaskFromInput}
           returnKeyType="done"
         />
-        <Pressable onPress={addSubtaskFromInput} style={styles.subtaskAddButton}>
+        <Pressable
+          onPress={addSubtaskFromInput}
+          style={styles.subtaskAddButton}
+        >
           <Text style={styles.subtaskAddButtonText}>+</Text>
         </Pressable>
       </View>
 
       {/* Действия */}
       <Pressable
-        style={[styles.saveButton, (!title.trim() || saving) && styles.saveButtonDisabled]}
+        style={[
+          styles.saveButton,
+          (!title.trim() || saving) && styles.saveButtonDisabled,
+        ]}
         onPress={handleSave}
         disabled={!title.trim() || saving}
       >
-        <Text style={styles.saveButtonText}>{saving ? 'Сохранение…' : 'Сохранить'}</Text>
+        <Text style={styles.saveButtonText}>
+          {saving ? "Сохранение…" : "Сохранить"}
+        </Text>
       </Pressable>
 
       {isEditMode && (
@@ -416,124 +443,150 @@ export default function TaskFormScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  container: { flex: 1, backgroundColor: "#FFFFFF" },
   content: { padding: 20, paddingBottom: 48 },
   titleInput: {
     fontSize: 20,
-    fontWeight: '600',
-    color: '#111827',
+    fontWeight: "600",
+    color: "#111827",
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: "#E5E7EB",
     paddingVertical: 10,
     marginBottom: 20,
   },
   sectionLabel: {
     fontSize: 13,
-    fontWeight: '600',
-    color: '#6B7280',
+    fontWeight: "600",
+    color: "#6B7280",
     marginTop: 16,
     marginBottom: 8,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
-  row: { flexDirection: 'row', gap: 8 },
+  row: { flexDirection: "row", gap: 8 },
   toggleChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: "#F3F4F6",
   },
-  toggleChipActive: { backgroundColor: '#6B5BFC' },
-  toggleChipText: { fontSize: 13, color: '#6B7280', fontWeight: '600' },
-  toggleChipTextActive: { color: '#FFFFFF' },
+  toggleChipActive: { backgroundColor: "#6B5BFC" },
+  toggleChipText: { fontSize: 13, color: "#6B7280", fontWeight: "600" },
+  toggleChipTextActive: { color: "#FFFFFF" },
+  timePreview: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 8,
+  },
+  meridiemGroup: { gap: 4, marginLeft: 8 },
+  meridiemButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: "#F3F4F6",
+  },
+  meridiemButtonActive: { backgroundColor: "#6B5BFC" },
+  meridiemText: { color: "#374151", fontWeight: "600" },
+  meridiemTextActive: { color: "#FFFFFF" },
   timeStepperRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     marginTop: 12,
   },
-  stepper: { flexDirection: 'row', alignItems: 'center' },
+  stepper: { flexDirection: "row", alignItems: "center" },
   stepperButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  stepperButtonText: { fontSize: 18, color: '#111827', fontWeight: '600' },
+  stepperButtonText: { fontSize: 18, color: "#111827", fontWeight: "600" },
   stepperValue: {
     fontSize: 22,
-    fontWeight: '700',
-    color: '#111827',
+    fontWeight: "700",
+    color: "#111827",
     width: 44,
-    textAlign: 'center',
+    textAlign: "center",
   },
-  timeColon: { fontSize: 22, fontWeight: '700', color: '#111827', marginHorizontal: 4 },
-  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  timeColon: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#111827",
+    marginHorizontal: 4,
+  },
+  chipsWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: "#F3F4F6",
   },
-  chipActive: { backgroundColor: '#6B5BFC' },
-  chipText: { fontSize: 13, color: '#6B7280', fontWeight: '600' },
-  chipTextActive: { color: '#FFFFFF' },
+  chipActive: { backgroundColor: "#6B5BFC" },
+  chipText: { fontSize: 13, color: "#6B7280", fontWeight: "600" },
+  chipTextActive: { color: "#FFFFFF" },
   colorSwatch: {
     width: 36,
     height: 36,
     borderRadius: 18,
     borderWidth: 2,
-    borderColor: 'transparent',
+    borderColor: "transparent",
   },
-  colorSwatchActive: { borderColor: '#111827' },
+  colorSwatchActive: { borderColor: "#111827" },
   presetChip: {
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#6B5BFC',
+    borderColor: "#6B5BFC",
   },
-  presetChipText: { fontSize: 13, color: '#6B5BFC', fontWeight: '600' },
+  presetChipText: { fontSize: 13, color: "#6B5BFC", fontWeight: "600" },
   subtaskRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: "#F3F4F6",
   },
-  subtaskText: { fontSize: 14, color: '#111827' },
-  subtaskRemove: { fontSize: 18, color: '#9CA3AF', paddingHorizontal: 8 },
-  subtaskInputRow: { flexDirection: 'row', gap: 8, marginTop: 8, alignItems: 'center' },
+  subtaskText: { fontSize: 14, color: "#111827" },
+  subtaskRemove: { fontSize: 18, color: "#9CA3AF", paddingHorizontal: 8 },
+  subtaskInputRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+    alignItems: "center",
+  },
   subtaskInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: "#E5E7EB",
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
-    color: '#111827',
+    color: "#111827",
   },
   subtaskAddButton: {
     width: 40,
     height: 40,
     borderRadius: 10,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  subtaskAddButtonText: { fontSize: 20, color: '#111827' },
+  subtaskAddButtonText: { fontSize: 20, color: "#111827" },
   saveButton: {
     marginTop: 28,
-    backgroundColor: '#6B5BFC',
+    backgroundColor: "#6B5BFC",
     borderRadius: 12,
     paddingVertical: 14,
-    alignItems: 'center',
+    alignItems: "center",
   },
   saveButtonDisabled: { opacity: 0.5 },
-  saveButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
-  deleteButton: { marginTop: 16, paddingVertical: 12, alignItems: 'center' },
-  deleteButtonText: { color: '#EF4444', fontSize: 14, fontWeight: '600' },
+  saveButtonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
+  deleteButton: { marginTop: 16, paddingVertical: 12, alignItems: "center" },
+  deleteButtonText: { color: "#EF4444", fontSize: 14, fontWeight: "600" },
 });

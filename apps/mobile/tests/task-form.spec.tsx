@@ -2,6 +2,7 @@ const mockBack = jest.fn();
 const mockReplace = jest.fn();
 const mockCreateTask = jest.fn();
 const mockInvalidateQueries = jest.fn();
+let mockTimeFormat: 'SYSTEM' | 'H24' | 'H12' = 'H24';
 let mockParams: Record<string, string> = { selectedDate: '2026-08-11T12:00:00.000Z' };
 
 jest.mock('expo-router', () => ({
@@ -19,7 +20,7 @@ jest.mock('../lib/api/tasks', () => ({
   deleteTaskById: jest.fn(),
 }));
 jest.mock('../stores/auth.store', () => ({
-  useAuthStore: jest.fn((selector: any) => selector({ user: { timezone: 'Europe/Moscow' } })),
+  useAuthStore: jest.fn((selector: any) => selector({ user: { timezone: 'Europe/Moscow', timeFormat: mockTimeFormat } })),
 }));
 
 import React from 'react';
@@ -35,6 +36,7 @@ describe('TaskFormScreen create flow', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockParams = { selectedDate: '2026-08-11T12:00:00.000Z' };
+    mockTimeFormat = 'H24';
   });
 
   it('defaults new tasks to unknown and sends null', async () => {
@@ -116,4 +118,13 @@ describe('TaskFormScreen create flow', () => {
     expect(screen.getByDisplayValue('Ошибка')).toBeTruthy();
     alertSpy.mockRestore();
   }, 15000);
+});
+
+
+describe('TaskFormScreen time convention', () => {
+  beforeEach(() => { jest.clearAllMocks(); mockTimeFormat='H12'; mockCreateTask.mockResolvedValue({id:'saved'}); });
+  function renderAt(iso: string) { mockParams={selectedDate:iso,prefillStartTime:iso,prefillTitle:'Встреча'}; renderTaskForm(); }
+  it.each([['2026-08-11T00:30:00.000Z','12:30 AM'],['2026-08-11T12:30:00.000Z','12:30 PM'],['2026-08-11T14:30:00.000Z','2:30 PM']])('renders %s as %s without exposing 24-hour editor values', (iso,label) => { renderAt(iso); expect(screen.getByTestId('task-time-display').props.children).toBe(label); expect(screen.getByTestId('task-hour-value').props.children).not.toBe('14'); });
+  it('switches AM/PM while retaining minutes', () => { renderAt('2026-08-11T14:30:00.000Z'); fireEvent.press(screen.getByRole('radio',{name:'Выбрать AM'})); expect(screen.getByTestId('task-time-display').props.children).toBe('2:30 AM'); expect(screen.getByTestId('task-minute-value').props.children).toBe('30'); fireEvent.press(screen.getByRole('radio',{name:'Выбрать PM'})); expect(screen.getByTestId('task-time-display').props.children).toBe('2:30 PM'); });
+  it('saves identical ISO instants for equivalent H12 and H24 choices', async () => { const iso='2026-08-11T14:30:00.000Z'; renderAt(iso); fireEvent.press(screen.getByText('Сохранить')); await waitFor(()=>expect(mockCreateTask).toHaveBeenCalled()); const saved=mockCreateTask.mock.calls[0][0].startTime; screen.unmount(); jest.clearAllMocks(); mockCreateTask.mockResolvedValue({id:'saved'}); mockTimeFormat='H24'; renderAt(iso); fireEvent.press(screen.getByText('Сохранить')); await waitFor(()=>expect(mockCreateTask).toHaveBeenCalled()); expect(mockCreateTask.mock.calls[0][0].startTime).toBe(saved); expect(saved).toBe(iso); });
 });
