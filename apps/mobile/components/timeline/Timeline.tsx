@@ -5,6 +5,8 @@ import { computeTimelineLayout } from '../../lib/timeline-layout';
 import { NowIndicator } from './NowIndicator';
 import { TaskBlock } from './TaskBlock';
 import type { Task } from '@focus/shared-types';
+import { useAuthStore } from '../../stores/auth.store';
+import { formatWallClock } from '../../lib/time-format';
 
 interface Props {
   tasks: Task[];
@@ -22,6 +24,7 @@ const totalHeight = hours.length * hourHeight;
 
 export function Timeline({ tasks, onToggle, onOpenTask, onCreateAt, shouldAutoScroll = true, currentDate = new Date(), currentTaskId }: Props) {
   const scrollRef = useRef<ScrollView>(null);
+  const timeFormat = useAuthStore((state) => state.user?.timeFormat ?? 'SYSTEM');
   const [hasScrolledToNow, setHasScrolledToNow] = useState(false);
   const layout = useMemo(() => computeTimelineLayout(tasks), [tasks]);
 
@@ -64,7 +67,7 @@ export function Timeline({ tasks, onToggle, onOpenTask, onCreateAt, shouldAutoSc
             key={hour}
             style={[styles.hourRow, { top: (hour - dayStartHour) * hourHeight, height: hourHeight }]}
           >
-            <Text style={styles.hourLabel}>{String(hour % 24).padStart(2, '0')}:00</Text>
+            <Text style={styles.hourLabel}>{formatWallClock(hour % 24, 0, timeFormat)}</Text>
             <View style={styles.hourLine} />
           </View>
         ))}

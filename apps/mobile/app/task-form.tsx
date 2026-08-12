@@ -20,6 +20,7 @@ import {
 } from '../lib/api/tasks';
 import { isFreeTierLimitError } from '../lib/api-error';
 import { useAuthStore } from '../stores/auth.store';
+import { formatWallClock } from '../lib/time-format';
 import {
   TASK_DURATION_PRESETS,
   taskDurationLabel,
@@ -101,6 +102,7 @@ export default function TaskFormScreen() {
 
   // Profile timezone → same canonical cache key as Today and Recovery (0007A).
   const profileTimezone = useAuthStore((s) => s.user?.timezone);
+  const timeFormat = useAuthStore((s) => s.user?.timeFormat ?? 'SYSTEM');
 
   const createTask = useCreateTask(today, profileTimezone);
   const updateTask = useUpdateTask(today, profileTimezone);
@@ -271,6 +273,8 @@ export default function TaskFormScreen() {
       </View>
 
       {hasTime && (
+        <>
+        <Text testID="task-time-display" style={styles.sectionLabel}>{formatWallClock(hour, minute, timeFormat)}</Text>
         <View style={styles.timeStepperRow}>
           <View style={styles.stepper}>
             <Pressable onPress={() => adjustHour(-1)} style={styles.stepperButton}>
@@ -292,6 +296,7 @@ export default function TaskFormScreen() {
             </Pressable>
           </View>
         </View>
+        </>
       )}
 
       {/* Длительность */}

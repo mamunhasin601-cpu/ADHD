@@ -19,6 +19,7 @@ import {
   toCanonicalDateParam,
 } from '../lib/timezone';
 import type { User } from '@focus/shared-types';
+import { formatWallClock, parseClockInput, uses12HourClock } from '../lib/time-format';
 
 /**
  * 5-minute start onboarding.
@@ -31,6 +32,7 @@ import type { User } from '@focus/shared-types';
 export default function OnboardingScreen() {
   const setUser = useAuthStore((s) => s.setUser);
   const profileTimezone = useAuthStore((s) => s.user?.timezone);
+  const timeFormat = useAuthStore((s) => s.user?.timeFormat ?? 'SYSTEM');
   const [step, setStep] = useState(1);
   const [taskTitle, setTaskTitle] = useState('');
   const [taskTime, setTaskTime] = useState('');
@@ -58,7 +60,9 @@ export default function OnboardingScreen() {
     let startTime: Date | null = null;
 
     if (taskTime) {
-      const [hours, minutes] = taskTime.split(':').map(Number);
+      const parsed = parseClockInput(taskTime, timeFormat);
+      if (!parsed) { Alert.alert('Проверьте время', uses12HourClock(timeFormat) ? 'Введите время в формате 2:30 PM' : 'Введите время в формате 14:30'); return; }
+      const { hours, minutes } = parsed;
       if (profileTimezone && isValidIANATimezone(profileTimezone)) {
         startTime = localDateTimeToInstant(
           toCanonicalDateParam(now, profileTimezone),
@@ -133,7 +137,7 @@ export default function OnboardingScreen() {
             <Text style={styles.label}>Во сколько? (опционально)</Text>
             <TextInput
               style={styles.input}
-              placeholder="14:00"
+              placeholder={formatWallClock(14, 0, timeFormat)}
               placeholderTextColor="#9CA3AF"
               value={taskTime}
               onChangeText={setTaskTime}
@@ -180,7 +184,7 @@ export default function OnboardingScreen() {
               <View style={styles.featureText}>
                 <Text style={styles.featureTitle}>Таймлайн</Text>
                 <Text style={styles.featureDescription}>
-                  Все задачи на день с 6:00 до 24:00
+                  Все задачи на день с {formatWallClock(6, 0, timeFormat)} до {formatWallClock(0, 0, timeFormat)}
                 </Text>
               </View>
             </View>

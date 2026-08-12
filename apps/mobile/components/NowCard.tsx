@@ -1,5 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Task } from '@focus/shared-types';
+import { useAuthStore } from '../stores/auth.store';
+import { formatClockTime } from '../lib/time-format';
 
 type NowCardMode = 'current' | 'upcoming';
 
@@ -11,14 +13,6 @@ interface Props {
   isCompleting?: boolean;
 }
 
-function formatTaskTime(task: Task): string | null {
-  if (!task.startTime) return null;
-
-  return new Date(task.startTime).toLocaleTimeString('ru-RU', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 /**
  * Главная точка действия на Today.
@@ -34,7 +28,9 @@ export function NowCard({
   onOpenTask,
   isCompleting = false,
 }: Props) {
-  const time = formatTaskTime(task);
+  const timeFormat = useAuthStore((state) => state.user?.timeFormat ?? 'SYSTEM');
+  const timezone = useAuthStore((state) => state.user?.timezone);
+  const time = task.startTime ? formatClockTime(new Date(task.startTime), timeFormat, timezone ? { timeZone: timezone } : {}) : null;
   const isCurrent = mode === 'current';
 
   return (

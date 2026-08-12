@@ -6,6 +6,7 @@ const user = (hasCompletedOnboarding: boolean): User => ({
   email: 'user@example.com',
   phone: null,
   timezone: 'Europe/Moscow',
+    timeFormat: 'SYSTEM',
   hasCompletedOnboarding,
   plan: 'FREE',
   proExpiresAt: null,

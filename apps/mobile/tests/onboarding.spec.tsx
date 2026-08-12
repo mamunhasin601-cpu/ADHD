@@ -30,7 +30,7 @@ describe('OnboardingScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (useAuthStore as unknown as jest.Mock).mockImplementation((selector: any) =>
-      selector({ setUser, user: { timezone: 'Europe/Moscow' } }),
+      selector({ setUser, user: { timezone: 'Europe/Moscow', timeFormat: 'H24' } }),
     );
   });
 

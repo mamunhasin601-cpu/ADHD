@@ -25,6 +25,8 @@ import {
   isAfterReference,
   formatDestinationLabel,
 } from '../lib/timezone';
+import { useAuthStore } from '../stores/auth.store';
+import { formatWallClock, uses12HourClock } from '../lib/time-format';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -69,6 +71,7 @@ export function RecoveryBanner({
   isConfirming = false,
   mutationError = null,
 }: Props) {
+  const timeFormat = useAuthStore((state) => state.user?.timeFormat ?? 'SYSTEM');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [destinations, setDestinations] = useState<Record<string, RecoveryDestination | null>>({});
@@ -164,7 +167,7 @@ export function RecoveryBanner({
         setDstErrors((prev) => ({
           ...prev,
           [taskId]:
-            `${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')} ` +
+            `${formatWallClock(hours, minutes, timeFormat)} ` +
             `не существует в этот день (переход на летнее время). ` +
             `Выберите другое время.`,
         }));
@@ -213,7 +216,7 @@ export function RecoveryBanner({
   function formatOverdueDate(startTime: Date | string | null): string {
     if (!startTime || !timezoneValid) return '';
     try {
-      return formatDestinationLabel(new Date(startTime), userTimezone);
+      return formatDestinationLabel(new Date(startTime), userTimezone, timeFormat);
     } catch {
       return '';
     }
@@ -231,9 +234,9 @@ export function RecoveryBanner({
       const d = new Date(dest);
       if (isNaN(d.getTime())) return { text: 'Недопустимое время', warn: true };
       if (!isAfterReference(d, now)) {
-        return { text: `→ ${formatDestinationLabel(d, userTimezone)} (уже прошло)`, warn: true };
+        return { text: `→ ${formatDestinationLabel(d, userTimezone, timeFormat)} (уже прошло)`, warn: true };
       }
-      return { text: `→ ${formatDestinationLabel(d, userTimezone)}`, warn: false };
+      return { text: `→ ${formatDestinationLabel(d, userTimezone, timeFormat)}`, warn: false };
     } catch {
       return { text: 'Ошибка формата времени', warn: true };
     }
@@ -413,6 +416,7 @@ export function RecoveryBanner({
 
                               {pickerOpenForThis && pickerState?.phase === 'date' && (
                                 <DateTimePicker
+                                  is24Hour={!uses12HourClock(timeFormat)}
                                   testID={`date-picker-${task.id}`}
                                   value={pickerDateInitial}
                                   mode="date"
@@ -423,6 +427,7 @@ export function RecoveryBanner({
                               )}
                               {pickerOpenForThis && pickerState?.phase === 'time' && (
                                 <DateTimePicker
+                                  is24Hour={!uses12HourClock(timeFormat)}
                                   testID={`time-picker-${task.id}`}
                                   value={pickerDateInitial}
                                   mode="time"

@@ -17,6 +17,8 @@
  *   device tz ≠ profile tz.
  */
 
+import { formatClockTime } from './time-format';
+import type { TimeFormat } from '@focus/shared-types';
 import { toDate, formatInTimeZone } from 'date-fns-tz';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -246,12 +248,7 @@ export function getLocalHoursMinutes(
  * Formats a UTC instant as a human-readable date/time string in the user's
  * IANA timezone, using Russian locale and a compact format.
  */
-export function formatDestinationLabel(instant: Date, timezone: string): string {
-  return instant.toLocaleString('ru-RU', {
-    timeZone: timezone,
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+export function formatDestinationLabel(instant: Date, timezone: string, timeFormat: TimeFormat = 'SYSTEM'): string {
+  const date = new Intl.DateTimeFormat('ru-RU', { timeZone: timezone, day: 'numeric', month: 'short' }).format(instant);
+  return `${date}, ${formatClockTime(instant, timeFormat, { timeZone: timezone })}`;
 }

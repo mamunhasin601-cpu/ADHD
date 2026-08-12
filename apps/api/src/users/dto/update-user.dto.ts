@@ -1,4 +1,5 @@
-import { IsOptional, IsString, IsEmail, IsTimeZone, IsBoolean } from 'class-validator';
+import { IsOptional, IsString, IsEmail, IsTimeZone, IsBoolean, IsEnum, ValidateIf } from 'class-validator';
+import { TimeFormat } from '@prisma/client';
 
 export class UpdateUserDto {
   @IsOptional()
@@ -12,6 +13,10 @@ export class UpdateUserDto {
   @IsOptional()
   @IsTimeZone({ message: 'Некорректный часовой пояс (используйте формат IANA, напр. Europe/Moscow)' })
   timezone?: string;
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsEnum(TimeFormat, { message: 'Формат времени должен быть SYSTEM, H24 или H12' })
+  timeFormat?: TimeFormat;
 
   @IsOptional()
   @IsBoolean()

@@ -15,7 +15,7 @@ jest.mock('../lib/api/tasks', () => ({
   useToggleTask: jest.fn(() => ({ mutate: jest.fn(), isPending: false })),
 }));
 jest.mock('../stores/auth.store', () => ({
-  useAuthStore: jest.fn((selector: any) => selector({ user: { timezone: 'Europe/Moscow' } })),
+  useAuthStore: jest.fn((selector: any) => selector({ user: { timezone: 'Europe/Moscow', timeFormat: 'H24' } })),
 }));
 jest.mock('../components/RecoverySection', () => ({ RecoverySection: () => null }));
 jest.mock('../components/ProgressRing', () => ({ ProgressRing: () => null }));

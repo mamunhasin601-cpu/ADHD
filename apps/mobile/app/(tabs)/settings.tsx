@@ -3,18 +3,34 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../stores/auth.store';
 import { usePlanInfo } from '../../lib/api/plan';
-import { FREE_TIER_LIMITS } from '@focus/shared-types';
+import { FREE_TIER_LIMITS, type TimeFormat, type User } from '@focus/shared-types';
+import { apiClient } from '../../lib/api-client';
+import { useState } from 'react';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const setUser = useAuthStore((s) => s.setUser);
+  const [savingFormat, setSavingFormat] = useState(false);
+  const [formatError, setFormatError] = useState<string | null>(null);
   const { data: planInfo, isLoading: planLoading } = usePlanInfo();
 
   const isPro = planInfo?.isPro ?? false;
   const activeTasks = planInfo?.usage.activeTasks ?? 0;
   const limit = FREE_TIER_LIMITS.maxActiveTasks;
   const usagePercent = Math.min((activeTasks / limit) * 100, 100);
+
+  async function selectTimeFormat(timeFormat: TimeFormat) {
+    if (savingFormat || timeFormat === (user?.timeFormat ?? 'SYSTEM')) return;
+    setSavingFormat(true); setFormatError(null);
+    try {
+      const { data } = await apiClient.patch<User>('/users/me', { timeFormat });
+      setUser(data);
+    } catch {
+      setFormatError('Не удалось сохранить формат времени. Проверьте соединение и попробуйте снова.');
+    } finally { setSavingFormat(false); }
+  }
 
   function handleLogout() {
     Alert.alert('Выйти из аккаунта?', undefined, [
@@ -45,6 +61,25 @@ export default function SettingsScreen() {
             <Text style={styles.rowLabel}>Часовой пояс</Text>
             <Text style={styles.rowValue}>{user?.timezone ?? '—'}</Text>
           </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Формат времени</Text>
+          {([
+            ['SYSTEM', 'Как в системе', 'По настройке устройства'],
+            ['H24', '24-часовой', 'Например, 14:30'],
+            ['H12', '12-часовой', 'Например, 2:30 PM'],
+          ] as const).map(([value, label, example]) => {
+            const selected = (user?.timeFormat ?? 'SYSTEM') === value;
+            return <Pressable key={value} testID={`time-format-${value}`} accessibilityRole="radio"
+              accessibilityLabel={`${label}. ${example}`} accessibilityState={{ selected, disabled: savingFormat }}
+              disabled={savingFormat} onPress={() => selectTimeFormat(value)}
+              style={[styles.formatChoice, selected && styles.formatChoiceSelected, savingFormat && styles.formatChoiceDisabled]}>
+              <Text style={styles.formatRadio}>{selected ? '●' : '○'}</Text><View><Text style={styles.formatLabel}>{label}</Text><Text style={styles.formatExample}>{example}</Text></View>
+            </Pressable>;
+          })}
+          {savingFormat && <ActivityIndicator testID="time-format-saving" color="#6B5BFC" />}
+          {formatError && <Text accessibilityRole="alert" style={styles.formatError}>{formatError}</Text>}
         </View>
 
         {/* Подписка */}
@@ -150,6 +185,14 @@ sectionTitle: {
   },
   rowLabel: { fontSize: 14, color: '#374151' },
   rowValue: { fontSize: 14, color: '#6B5BFC', fontWeight: '600', maxWidth: '60%' },
+
+  formatChoice: { flexDirection: 'row', gap: 12, alignItems: 'center', paddingVertical: 10, paddingHorizontal: 8, borderRadius: 10 },
+  formatChoiceSelected: { backgroundColor: '#F3F1FF' },
+  formatChoiceDisabled: { opacity: 0.55 },
+  formatRadio: { fontSize: 20, color: '#6B5BFC' },
+  formatLabel: { fontSize: 15, fontWeight: '600', color: '#211D2E' },
+  formatExample: { fontSize: 13, color: '#6B7280', marginTop: 2 },
+  formatError: { color: '#9B3A3A', marginTop: 8, lineHeight: 19 },
 
   planBadgeRow: {
     flexDirection: 'row',

@@ -8,6 +8,7 @@
 // ────────────────────────────────────────────────────────────
 
 export type Plan = 'FREE' | 'PRO';
+export type TimeFormat = 'SYSTEM' | 'H24' | 'H12';
 
 export const FREE_TIER_LIMITS = {
   /** Максимальное количество активных задач для Free пользователей */
@@ -19,6 +20,7 @@ export interface User {
   email: string | null;
   phone: string | null;
   timezone: string;
+  timeFormat: TimeFormat;
   hasCompletedOnboarding: boolean;
   plan: Plan;
   proExpiresAt: Date | null;
