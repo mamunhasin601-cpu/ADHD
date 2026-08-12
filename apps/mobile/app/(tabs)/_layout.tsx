@@ -26,7 +26,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="inbox"
         options={{
-          title: 'Inbox',
+          title: 'Мысли',
           tabBarIcon: ({ color, size }) => (
             <TabIcon label="≡" size={size} color={color} />
           ),

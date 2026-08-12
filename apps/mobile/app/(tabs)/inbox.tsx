@@ -14,12 +14,14 @@ import { useInboxTasks, useToggleInboxTask } from '../../lib/api/tasks';
 import type { Task } from '@focus/shared-types';
 
 /**
- * Экран Inbox — задачи без назначенного времени (startTime IS NULL).
+ * Пользовательская зона «Мысли» — технически Inbox-задачи без времени.
  *
  * Назначение:
  * - Отображает задачи, перемещённые сюда через recovery (targetStartTime: null).
  * - Позволяет открыть задачу для редактирования / постановки времени.
  * - Не хранит данные в Zustand — только React Query.
+ * - Пользовательская копия говорит «Мысли», а route/cache/API сохраняют inbox
+ *   как совместимый технический контракт.
  * - После recovery Today, Inbox и recovery-список обновляются без перезапуска приложения.
  */
 export default function InboxScreen() {
@@ -46,8 +48,8 @@ export default function InboxScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Inbox</Text>
-        <Text style={styles.headerSubtitle}>Задачи без назначенного времени</Text>
+        <Text style={styles.headerTitle}>Мысли</Text>
+        <Text style={styles.headerSubtitle}>Запиши, чтобы не держать в голове</Text>
       </View>
 
       {/* Loading */}
@@ -55,7 +57,7 @@ export default function InboxScreen() {
         <View style={styles.centered} accessibilityLiveRegion="polite">
           <ActivityIndicator
             color="#6B5BFC"
-            accessibilityLabel="Загрузка задач Inbox"
+            accessibilityLabel="Загрузка мыслей"
           />
         </View>
       )}
@@ -64,7 +66,7 @@ export default function InboxScreen() {
       {isError && !isLoading && (
         <View style={styles.centered}>
           <Text style={styles.errorText}>
-            Не удалось загрузить задачи. Проверьте соединение.
+            Не удалось загрузить мысли. Проверьте соединение.
           </Text>
           <Pressable
             style={styles.retryButton}
@@ -81,11 +83,11 @@ export default function InboxScreen() {
       {/* Empty state */}
       {!isLoading && !isError && (tasks?.length ?? 0) === 0 && (
         <View style={styles.centered}>
-          <Text style={styles.emptyEmoji}>📥</Text>
-          <Text style={styles.emptyTitle}>Inbox пуст</Text>
+          <Text style={styles.emptyEmoji}>💭</Text>
+          <Text style={styles.emptyTitle}>Здесь пока спокойно</Text>
           <Text style={styles.emptyText}>
-            Сюда попадают задачи без времени.{'\n'}
-            Нажмите + на экране Сегодня, чтобы добавить задачу.
+            Записывай сюда то, что не хочется держать в голове.{'\n'}
+            Планировать время можно позже.
           </Text>
         </View>
       )}
@@ -105,8 +107,8 @@ export default function InboxScreen() {
               accessibilityRole="button"
               accessibilityLabel={
                 item.completedAt
-                  ? `Задача выполнена: ${item.title}. Долгое нажатие отменит отметку.`
-                  : `Задача: ${item.title}. Нажмите для редактирования. Долгое нажатие отметит выполненной.`
+                  ? `Запись выполнена: ${item.title}. Долгое нажатие отменит отметку.`
+                  : `Запись: ${item.title}. Нажмите для редактирования. Долгое нажатие отметит выполненной.`
               }
             >
               <View

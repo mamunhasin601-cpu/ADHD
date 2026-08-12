@@ -199,13 +199,15 @@ describe('RecoveryBanner — Inbox destination', () => {
     fireEvent.press(screen.getByTestId(`checkbox-${task1.id}`));
   }
 
-  it('pressing "В Inbox" sets inbox preview', () => {
+  it('pressing the Thoughts destination sets inbox preview', () => {
     openAndSelect();
-    fireEvent.press(screen.getByTestId(`inbox-btn-${task1.id}`));
-    expect(screen.getByText('→ В Inbox')).toBeTruthy();
+    const thoughtsButton = screen.getByTestId(`inbox-btn-${task1.id}`);
+    expect(thoughtsButton.props.accessibilityLabel).toBe('Переместить в раздел Мысли');
+    fireEvent.press(thoughtsButton);
+    expect(screen.getByText('→ В «Мысли»')).toBeTruthy();
   });
 
-  it('pressing "В Inbox" enables confirm', () => {
+  it('pressing the Thoughts destination enables confirm', () => {
     openAndSelect();
     fireEvent.press(screen.getByTestId(`inbox-btn-${task1.id}`));
     const confirmBtn = screen.getByTestId('confirm-btn');

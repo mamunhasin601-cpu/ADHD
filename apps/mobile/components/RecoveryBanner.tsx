@@ -226,7 +226,7 @@ export function RecoveryBanner({
     const dstErr = dstErrors[taskId];
     if (dstErr) return { text: dstErr, warn: true };
     if (!dest) return { text: 'Выберите, куда перенести', warn: false };
-    if (dest === 'inbox') return { text: '→ В Inbox', warn: false };
+    if (dest === 'inbox') return { text: '→ В «Мысли»', warn: false };
     try {
       const d = new Date(dest);
       if (isNaN(d.getTime())) return { text: 'Недопустимое время', warn: true };
@@ -366,10 +366,10 @@ export function RecoveryBanner({
                                   accessible
                                   accessibilityRole="button"
                                   accessibilityState={{ selected: dest === 'inbox' }}
-                                  accessibilityLabel="Переместить в Inbox"
+                                  accessibilityLabel="Переместить в раздел Мысли"
                                 >
                                   <Text style={[styles.destButtonText, dest === 'inbox' && styles.destButtonTextActive]}>
-                                    В Inbox
+                                    В «Мысли»
                                   </Text>
                                 </Pressable>
 

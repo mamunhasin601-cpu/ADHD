@@ -141,7 +141,7 @@ export default function OnboardingScreen() {
             />
 
             <Text style={styles.hint}>
-              Если не укажете время, задача попадет в Inbox — список незапланированных задач.
+              Если не укажете время, запись останется в «Мыслях». Запланировать её можно позже.
             </Text>
           </View>
 
@@ -198,9 +198,9 @@ export default function OnboardingScreen() {
             <View style={styles.feature}>
               <Text style={styles.featureEmoji}>📥</Text>
               <View style={styles.featureText}>
-                <Text style={styles.featureTitle}>Inbox</Text>
+                <Text style={styles.featureTitle}>Мысли</Text>
                 <Text style={styles.featureDescription}>
-                  Задачи без конкретного времени
+                  Записи, которые пока не нужно планировать
                 </Text>
               </View>
             </View>

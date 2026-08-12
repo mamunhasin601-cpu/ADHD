@@ -158,6 +158,18 @@
 
 ## Current Session
 
+✅ **Completed (2026-08-12, Task 0013 — Thoughts Language Boundary):**
+- Renamed the user-facing `Inbox` zone to `Мысли` in bottom navigation and the
+  unscheduled-item screen.
+- Added calm purpose copy: `Запиши, чтобы не держать в голове`; empty, loading
+  and error states now use the same language.
+- Updated onboarding, Today scheduling entry and Recovery destination copy to
+  consistently name `Мысли`.
+- Preserved `inbox` route names, React Query keys, API parameters, recovery
+  payload values and test IDs as internal compatibility contracts.
+- **Verified:** mobile 264/264 (20 suites), mobile TypeScript clean,
+  `git diff --check` clean.
+
 ✅ **Completed (2026-08-12, Task 0012 — Actionable Now Card):**
 - Replaced the passive Today `Now / Next` block with an isolated `NowCard`
   action surface aligned with PDR-001.

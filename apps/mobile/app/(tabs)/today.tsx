@@ -311,7 +311,7 @@ export default function TodayScreen() {
               emoji="📅"
               title="Таймлайн свободен"
               description="Коснись таймлайна, чтобы запланировать задачу на конкретное время."
-              actionLabel={unscheduledTasks.length > 0 ? "Запланировать из Inbox" : undefined}
+              actionLabel={unscheduledTasks.length > 0 ? 'Запланировать из «Мыслей»' : undefined}
               onAction={
                 unscheduledTasks.length > 0
                   ? () =>

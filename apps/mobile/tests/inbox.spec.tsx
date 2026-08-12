@@ -83,7 +83,7 @@ describe('InboxScreen', () => {
     render(<InboxScreen />);
 
     expect(
-      screen.getByLabelText('Загрузка задач Inbox'),
+      screen.getByLabelText('Загрузка мыслей'),
     ).toBeTruthy();
   });
 
@@ -99,7 +99,9 @@ describe('InboxScreen', () => {
 
     render(<InboxScreen />);
 
-    expect(screen.getByText('Inbox пуст')).toBeTruthy();
+    expect(screen.getByText('Мысли')).toBeTruthy();
+    expect(screen.getByText('Запиши, чтобы не держать в голове')).toBeTruthy();
+    expect(screen.getByText('Здесь пока спокойно')).toBeTruthy();
   });
 
   it('empty: не показывает список задач когда пусто', () => {
@@ -194,7 +196,7 @@ describe('InboxScreen', () => {
 
     // accessibilityLabel содержит "выполнена"
     const element = screen.getByLabelText(
-      `Задача выполнена: ${completedTask.title}. Долгое нажатие отменит отметку.`,
+      `Запись выполнена: ${completedTask.title}. Долгое нажатие отменит отметку.`,
     );
     expect(element).toBeTruthy();
   });
@@ -241,6 +243,6 @@ describe('InboxScreen', () => {
 
     render(<InboxScreen />);
 
-    expect(screen.queryByText('Inbox пуст')).toBeNull();
+    expect(screen.queryByText('Здесь пока спокойно')).toBeNull();
   });
 });
