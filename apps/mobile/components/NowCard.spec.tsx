@@ -13,40 +13,78 @@ const task: Task = {
   color: "#6B5BFC", isRecurring: false, recurrenceRule: null, parentTaskId: null,
   completedAt: null, startedAt: null, createdAt: new Date(), updatedAt: new Date(),
 };
+const props = { onStart: jest.fn(), onComplete: jest.fn(), onOpenTask: jest.fn() };
+
+describe("NowCard regressions", () => {
+  beforeEach(() => { jest.clearAllMocks(); mockUser.timeFormat = "H24"; process.env.TZ = "UTC"; });
+
+  it("shows known and honest unknown duration without fabricating zero", () => {
+    const { rerender } = render(<NowCard task={task} mode="current" {...props} />);
+    expect(screen.getByText(/около 30 мин/)).toBeTruthy();
+    rerender(<NowCard task={{ ...task, durationMinutes: null }} mode="current" {...props} />);
+    expect(screen.getByText(/Длительность: Не знаю/)).toBeTruthy();
+    expect(screen.queryByText(/около 0 мин/)).toBeNull();
+  });
+
+  it("keeps plan editing as a secondary action with the exact task", () => {
+    render(<NowCard task={task} mode="current" {...props} />);
+    fireEvent.press(screen.getByText("Изменить план"));
+    expect(props.onOpenTask).toHaveBeenCalledTimes(1);
+    expect(props.onOpenTask).toHaveBeenCalledWith(task);
+  });
+
+  it("formats H24/H12 without mutating or reinterpreting the supplied instant", () => {
+    const instant = new Date(task.startTime!); const before = instant.getTime();
+    const { rerender } = render(<NowCard task={{ ...task, startTime: instant }} mode="upcoming" {...props} />);
+    expect(screen.getByText(/14:30/)).toBeTruthy();
+    mockUser.timeFormat = "H12";
+    rerender(<NowCard task={{ ...task, startTime: instant }} mode="upcoming" {...props} />);
+    expect(screen.getByText(/2:30.*PM/i)).toBeTruthy();
+    expect(instant.getTime()).toBe(before);
+    expect(task.startTime).toEqual(new Date("2026-08-12T14:30:00.000Z"));
+  });
+});
 
 describe("NowCard explicit start", () => {
-  it.each(["current", "upcoming"] as const)("offers start for an unstarted %s task", (mode) => {
-    const onStart = jest.fn();
-    render(<NowCard task={task} mode={mode} onStart={onStart} onComplete={jest.fn()} onOpenTask={jest.fn()} />);
+  beforeEach(() => jest.clearAllMocks());
+  it.each([
+    ["current", "Запланировано сейчас"], ["upcoming", "Ближайшее действие"],
+  ] as const)("offers one explicit start for an unstarted %s task", (mode, context) => {
+    render(<NowCard task={task} mode={mode} {...props} />);
+    expect(screen.getByText(context)).toBeTruthy();
     expect(screen.getByText("Начать")).toBeTruthy();
     expect(screen.queryByText("Завершить")).toBeNull();
     fireEvent.press(screen.getByText("Начать"));
-    expect(onStart).toHaveBeenCalledTimes(1);
-    expect(onStart).toHaveBeenCalledWith(task.id);
+    expect(props.onStart).toHaveBeenCalledTimes(1);
+    expect(props.onStart).toHaveBeenCalledWith(task.id);
   });
 
-  it("exposes the pending start as busy and disabled", () => {
-    render(<NowCard task={task} mode="current" onStart={jest.fn()} onComplete={jest.fn()} onOpenTask={jest.fn()} isStarting />);
-    expect(screen.getByText("Начинаю…")).toBeDisabled();
-    expect(screen.getByRole("button", { name: `Начать задачу ${task.title}` }).props.accessibilityState).toEqual({ disabled: true, busy: true });
+  it("disables start and secondary actions with busy accessibility while starting", () => {
+    render(<NowCard task={task} mode="current" {...props} isStarting />);
+    const start = screen.getByRole("button", { name: `Начать задачу ${task.title}` });
+    const edit = screen.getByRole("button", { name: `Изменить задачу ${task.title}` });
+    expect(screen.getByText("Начинаю…")).toBeTruthy();
+    expect(start).toBeDisabled(); expect(edit).toBeDisabled();
+    expect(start.props.accessibilityState).toEqual({ disabled: true, busy: true });
+    expect(edit.props.accessibilityState).toEqual({ disabled: true });
   });
 
-  it("only offers completion after the server start exists", () => {
-    const onComplete = jest.fn();
-    render(<NowCard task={{ ...task, startedAt: new Date("2026-08-12T14:31:07Z") }} mode="current" onStart={jest.fn()} onComplete={onComplete} onOpenTask={jest.fn()} />);
+  it("shows confirmed start and delegates completion", () => {
+    render(<NowCard task={{ ...task, startedAt: new Date("2026-08-12T14:31:07Z") }} mode="current" {...props} />);
     expect(screen.getByText("Начато")).toBeTruthy();
     fireEvent.press(screen.getByText("Завершить"));
-    expect(onComplete).toHaveBeenCalledWith(task.id);
+    expect(props.onComplete).toHaveBeenCalledTimes(1);
+    expect(props.onComplete).toHaveBeenCalledWith(task.id);
   });
 
-  it("keeps duration, calm error, and the configured clock convention", () => {
-    process.env.TZ = "UTC";
-    const { rerender } = render(<NowCard task={task} mode="current" onStart={jest.fn()} onComplete={jest.fn()} onOpenTask={jest.fn()} startError="Попробуйте снова" />);
-    expect(screen.getByText(/около 30 мин/)).toBeTruthy();
-    expect(screen.getByRole("alert")).toHaveTextContent("Попробуйте снова");
-    expect(screen.getByText(/14:30/)).toBeTruthy();
-    mockUser.timeFormat = "H12";
-    rerender(<NowCard task={task} mode="current" onStart={jest.fn()} onComplete={jest.fn()} onOpenTask={jest.fn()} />);
-    expect(screen.getByText(/2:30.*PM/i)).toBeTruthy();
+  it("completion pending disables completion and plan editing", () => {
+    render(<NowCard task={{ ...task, startedAt: new Date() }} mode="current" {...props} isCompleting />);
+    expect(screen.getByText("Сохраняю…")).toBeDisabled();
+    expect(screen.getByText("Изменить план")).toBeDisabled();
+  });
+
+  it("exposes a calm start error as an alert", () => {
+    render(<NowCard task={task} mode="current" {...props} startError="Проверьте соединение и попробуйте снова." />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Проверьте соединение и попробуйте снова.");
   });
 });

@@ -1,48 +1,69 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook } from '@testing-library/react-native';
 import { useStartTask } from './tasks';
 import { apiClient } from '../api-client';
 import { cancelLocalReminder } from '../local-notifications';
 
 jest.mock('../api-client', () => ({ apiClient: { patch: jest.fn() } }));
 jest.mock('../local-notifications', () => ({
-  cancelLocalReminder: jest.fn(), scheduleLocalReminder: jest.fn(),
-  getLocalOnlyMode: jest.fn(() => true),
+  cancelLocalReminder: jest.fn(), scheduleLocalReminder: jest.fn(), getLocalOnlyMode: jest.fn(() => true),
 }));
 
-const serverTask = {
-  id: 'task-1', userId: 'user', title: 'Task', startTime: new Date('2026-08-14T10:00:00Z'),
-  durationMinutes: 30, color: '#6B5BFC', isRecurring: false, recurrenceRule: null,
-  parentTaskId: null, completedAt: null, startedAt: new Date('2026-08-14T10:03:19.123Z'),
-  createdAt: new Date(), updatedAt: new Date(),
-};
+const originalStart = new Date('2026-08-14T10:00:00Z');
+const canonicalStart = new Date('2026-08-14T10:03:19.123Z');
+const task = (id: string, startedAt: Date | null = null) => ({
+  id, userId: 'user', title: id, startTime: originalStart, durationMinutes: 30,
+  color: '#6B5BFC', isRecurring: false, recurrenceRule: null, parentTaskId: null,
+  completedAt: null, startedAt, createdAt: new Date(), updatedAt: new Date(),
+});
+
+function setup(date = new Date('2026-08-14T12:00:00Z'), timezone = 'UTC') {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false, gcTime: Infinity } } });
+  const wrapper = ({ children }: { children: React.ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  const hook = renderHook(() => useStartTask(date, timezone), { wrapper });
+  return { client, ...hook, cleanup: () => { hook.unmount(); client.clear(); } };
+}
 
 describe('useStartTask', () => {
-  it('calls the focused endpoint and caches the exact server response while isolating cancellation failure', async () => {
-    (apiClient.patch as jest.Mock).mockResolvedValue({ data: serverTask });
-    (cancelLocalReminder as jest.Mock).mockRejectedValue(new Error('local unavailable'));
-    const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
-    client.setQueryData(['tasks', '2026-08-14'], [{ ...serverTask, startedAt: null }]);
-    const wrapper = ({ children }: { children: React.ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-    const { result } = renderHook(() => useStartTask(new Date('2026-08-14T12:00:00Z'), 'UTC'), { wrapper });
-    await act(async () => { await result.current.mutateAsync(serverTask.id); });
+  beforeEach(() => jest.clearAllMocks());
+
+  it('replaces only the matching task with the exact server response and cancels its reminder', async () => {
+    const server = task('task-1', canonicalStart); const other = task('task-2');
+    (apiClient.patch as jest.Mock).mockResolvedValue({ data: server });
+    (cancelLocalReminder as jest.Mock).mockResolvedValue(undefined);
+    const ctx = setup(); ctx.client.setQueryData(['tasks', '2026-08-14'], [task('task-1'), other]);
+    await act(async () => { await ctx.result.current.mutateAsync('task-1'); });
     expect(apiClient.patch).toHaveBeenCalledTimes(1);
     expect(apiClient.patch).toHaveBeenCalledWith('/tasks/task-1/start');
-    expect((client.getQueryData<any[]>(['tasks', '2026-08-14'])![0])).toEqual(serverTask);
-    expect(cancelLocalReminder).toHaveBeenCalledWith(serverTask.id);
-    client.clear();
+    const cached = ctx.client.getQueryData<any[]>(['tasks', '2026-08-14'])!;
+    expect(cached[0]).toEqual(server); expect(cached[0].startedAt).toBe(canonicalStart);
+    expect(cached[0].startTime).toBe(originalStart); expect(cached[1]).toEqual(other);
+    expect(cancelLocalReminder).toHaveBeenCalledWith('task-1'); ctx.cleanup();
   });
 
-  it('invalidates stale state after a 409 response', async () => {
+  it('isolates local reminder cancellation failure without reverting or rejecting start', async () => {
+    const server = task('task-1', canonicalStart);
+    (apiClient.patch as jest.Mock).mockResolvedValue({ data: server });
+    (cancelLocalReminder as jest.Mock).mockRejectedValue(new Error('local unavailable'));
+    const ctx = setup(); ctx.client.setQueryData(['tasks', '2026-08-14'], [task('task-1')]);
+    await act(async () => { await expect(ctx.result.current.mutateAsync('task-1')).resolves.toEqual(server); });
+    expect(ctx.client.getQueryData(['tasks', '2026-08-14'])).toEqual([server]); ctx.cleanup();
+  });
+
+  it.each([500, 503])('leaves cache unchanged for generic API failure %s', async (status) => {
+    (apiClient.patch as jest.Mock).mockRejectedValue({ response: { status } });
+    const ctx = setup(); const before = [task('task-1'), task('task-2')];
+    ctx.client.setQueryData(['tasks', '2026-08-14'], before);
+    await act(async () => { await expect(ctx.result.current.mutateAsync('task-1')).rejects.toMatchObject({ response: { status } }); });
+    expect(ctx.client.getQueryData(['tasks', '2026-08-14'])).toEqual(before); ctx.cleanup();
+  });
+
+  it('invalidates the correct profile-timezone canonical cache on 409', async () => {
     (apiClient.patch as jest.Mock).mockRejectedValue({ response: { status: 409 } });
-    const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
-    const invalidate = jest.spyOn(client, 'invalidateQueries');
-    const wrapper = ({ children }: { children: React.ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-    const { result } = renderHook(() => useStartTask(new Date('2026-08-14T12:00:00Z'), 'UTC'), { wrapper });
-    act(() => result.current.mutate(serverTask.id));
-    await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tasks', '2026-08-14'] });
-    client.clear();
+    const ctx = setup(new Date('2026-08-14T22:00:00Z'), 'Europe/Moscow');
+    const invalidate = jest.spyOn(ctx.client, 'invalidateQueries');
+    await act(async () => { await expect(ctx.result.current.mutateAsync('task-1')).rejects.toMatchObject({ response: { status: 409 } }); });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tasks', '2026-08-15'] }); ctx.cleanup();
   });
 });

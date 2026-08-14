@@ -127,7 +127,11 @@ export default function TodayScreen() {
   const toggleTask = useToggleTask(selectedDate, profileTimezone);
   const startTask = useStartTask(selectedDate, profileTimezone);
   const startSubmissionPending = useRef(false);
-  const [startError, setStartError] = useState<string | null>(null);
+  const [startError, setStartError] = useState<{
+    taskId: string;
+    dateKey: string;
+    message: string;
+  } | null>(null);
 
   async function handleStart(taskId: string) {
     if (startSubmissionPending.current || startTask.isPending) return;
@@ -136,7 +140,11 @@ export default function TodayScreen() {
     try {
       await startTask.mutateAsync(taskId);
     } catch {
-      setStartError('Не удалось начать задачу. Проверьте соединение и попробуйте снова.');
+      setStartError({
+        taskId,
+        dateKey: toCanonicalDateParam(selectedDate, profileTimezone),
+        message: 'Не удалось начать задачу. Проверьте соединение и попробуйте снова.',
+      });
     } finally {
       startSubmissionPending.current = false;
     }
@@ -315,7 +323,12 @@ export default function TodayScreen() {
               onOpenTask={openTask}
               isCompleting={toggleTask.isPending}
               isStarting={startTask.isPending}
-              startError={startError}
+              startError={
+                startError?.taskId === (currentTask ?? nextTask!).id &&
+                startError.dateKey === toCanonicalDateParam(selectedDate, profileTimezone)
+                  ? startError.message
+                  : null
+              }
             />
           )}
           {unscheduledTasks.length > 0 && (

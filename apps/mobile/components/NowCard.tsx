@@ -9,7 +9,7 @@ interface Props {
   task: Task;
   mode: NowCardMode;
   onComplete: (taskId: string) => void;
-  onStart?: (taskId: string) => void;
+  onStart: (taskId: string) => void;
   onOpenTask: (task: Task) => void;
   isCompleting?: boolean;
   isStarting?: boolean;
@@ -27,7 +27,7 @@ export function NowCard({
   task,
   mode,
   onComplete,
-  onStart = () => {},
+  onStart,
   onOpenTask,
   isCompleting = false,
   isStarting = false,

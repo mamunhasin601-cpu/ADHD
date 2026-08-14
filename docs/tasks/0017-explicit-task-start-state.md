@@ -77,3 +77,31 @@ and mobile mutation 1/2, all passing.
 Residual limitations are intentional: no pause/resume, timer, focus session,
 assistant, decomposition, or global active-task exclusivity exists. Migration
 application awaits an explicitly disposable database.
+
+## Review follow-up verification
+
+The coverage follow-up restores the complete Now Card regression suite, adds
+deterministic concurrent-start and completion-race service tests, expands route
+metadata and production ValidationPipe boundaries, makes `onStart` mandatory,
+scopes Today errors by task and canonical date, and adds focused Today and
+React Query mutation integration suites. Follow-up files are:
+
+- `apps/api/src/tasks/tasks.controller.start.spec.ts`
+- `apps/api/src/tasks/tasks.service.start.spec.ts`
+- `apps/api/src/tasks/dto/task-start-boundary.dto.spec.ts`
+- `apps/mobile/app/(tabs)/today.tsx`
+- `apps/mobile/components/NowCard.tsx`
+- `apps/mobile/components/NowCard.spec.tsx`
+- `apps/mobile/lib/api/tasks.start.spec.tsx`
+- `apps/mobile/tests/today-start-task.spec.tsx`
+- `docs/tasks/0017-explicit-task-start-state.md`
+
+Focused results are API 4 suites / 38 tests and mobile 5 suites / 40 tests.
+The required mutation `--detectOpenHandles` run is 1 suite / 5 tests and exits
+without warnings. Complete results are API 17 suites / 249 tests and mobile 27
+suites / 347 tests. All pass. The complete mobile run still prints established
+React Native `Modal` act warnings from `today-create-task.spec.tsx`; the new
+start mutation and Today start suites produce no warning or open-handle output.
+Both TypeScript checks and Prisma validate/generate pass. The non-connected
+placeholder database URL was used only for static Prisma tooling; migration
+application remains unverified because no disposable running database exists.
