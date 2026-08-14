@@ -218,6 +218,52 @@ describe("NowCard difficult start", () => {
     expect(screen.queryByText("Мне трудно начать")).toBeNull();
   });
 
+  it("clears invalidated save pending on canonical start and ignores its late resolution", async () => {
+    let resolveSave!: (value: Task) => void;
+    const onSaveFirstStep = jest.fn(() => new Promise<Task>((resolve) => { resolveSave = resolve; }));
+    const view = render(<NowCard task={task} mode="current" {...props} onSaveFirstStep={onSaveFirstStep} />);
+    fireEvent.press(screen.getByText("Мне трудно начать"));
+    fireEvent.changeText(screen.getByLabelText("Первый маленький шаг"), "Старый черновик");
+    fireEvent.press(screen.getByText("Сохранить маленький шаг"));
+    expect(screen.getByText("Сохраняю…")).toBeDisabled();
+
+    view.rerender(<NowCard task={{ ...task, startedAt: new Date("2026-08-14T12:00:00Z") }} mode="current" {...props} onSaveFirstStep={onSaveFirstStep} />);
+    await waitFor(() => expect(screen.queryByText("Начать с малого")).toBeNull());
+    expect(screen.getByText("Начато")).toBeTruthy();
+    expect(screen.getByText("Завершить")).not.toBeDisabled();
+
+    await act(async () => resolveSave({ ...task, firstStep: "Устаревший ответ" }));
+    expect(screen.queryByText("Устаревший ответ")).toBeNull();
+    expect(screen.getByText("Завершить")).not.toBeDisabled();
+  });
+
+  it("clears invalidated save pending on canonical completion and ignores its late rejection", async () => {
+    let rejectSave!: (error: Error) => void;
+    const onSaveFirstStep = jest.fn(() => new Promise<Task>((_resolve, reject) => { rejectSave = reject; }));
+    const view = render(<NowCard task={task} mode="current" {...props} onSaveFirstStep={onSaveFirstStep} />);
+    fireEvent.press(screen.getByText("Мне трудно начать"));
+    fireEvent.changeText(screen.getByLabelText("Первый маленький шаг"), "Черновик до завершения");
+    fireEvent.press(screen.getByText("Сохранить маленький шаг"));
+
+    view.rerender(<NowCard task={{ ...task, completedAt: new Date("2026-08-14T12:05:00Z") }} mode="current" {...props} onSaveFirstStep={onSaveFirstStep} />);
+    await waitFor(() => expect(screen.queryByText("Начать с малого")).toBeNull());
+    expect(screen.getByText("Изменить план")).not.toBeDisabled();
+    await act(async () => rejectSave(new Error("late failure")));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText("Черновик до завершения")).toBeNull();
+    expect(screen.getByText("Изменить план")).not.toBeDisabled();
+  });
+
+  it("remains mounted and saves when rendered inside React StrictMode", async () => {
+    const onSaveFirstStep = jest.fn().mockResolvedValue({ ...task, firstStep: "StrictMode шаг" });
+    render(<React.StrictMode><NowCard task={task} mode="current" {...props} onSaveFirstStep={onSaveFirstStep} /></React.StrictMode>);
+    fireEvent.press(screen.getByText("Мне трудно начать"));
+    fireEvent.changeText(screen.getByLabelText("Первый маленький шаг"), "StrictMode draft");
+    fireEvent.press(screen.getByText("Сохранить маленький шаг"));
+    await waitFor(() => expect(screen.getByText("StrictMode шаг")).toBeTruthy());
+    expect(onSaveFirstStep).toHaveBeenCalledTimes(1);
+  });
+
   it("ignores stale task A save resolution while task B remains pending and guarded", async () => {
     let resolveA!: (value: Task) => void;
     let resolveB!: (value: Task) => void;

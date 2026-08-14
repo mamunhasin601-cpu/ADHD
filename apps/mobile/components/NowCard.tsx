@@ -64,10 +64,14 @@ export function NowCard({
   const startGenerationRef = useRef(0);
   renderedTaskIdRef.current = task.id;
 
-  useEffect(() => () => {
-    mountedRef.current = false;
-    saveGenerationRef.current += 1;
-    startGenerationRef.current += 1;
+  useEffect(() => {
+    // React 18 StrictMode may replay setup after cleanup in development.
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      saveGenerationRef.current += 1;
+      startGenerationRef.current += 1;
+    };
   }, []);
 
   useEffect(() => {
@@ -87,6 +91,8 @@ export function NowCard({
     if (task.startedAt || task.completedAt) {
       saveGenerationRef.current += 1;
       startGenerationRef.current += 1;
+      saveGuard.current = false;
+      setLocalSavePending(false);
       setSupportOpen(false);
       setEditing(false);
       setSaveError(null);
