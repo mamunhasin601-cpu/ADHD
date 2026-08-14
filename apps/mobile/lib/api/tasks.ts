@@ -33,6 +33,29 @@ const tasksKey = (dateParam: string) => ['tasks', dateParam] as const;
 const recoveryKey = (dateParam: string) => ['tasks', 'recovery', dateParam] as const;
 const inboxKey = () => ['tasks', 'inbox'] as const;
 
+/** Explicit start command. The returned server timestamp is the only canonical value. */
+export function useStartTask(date: Date, userTimezone?: string | null) {
+  const queryClient = useQueryClient();
+  const dateParam = toDateParam(date, userTimezone);
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data } = await apiClient.patch<Task>(`/tasks/${id}/start`);
+      return data;
+    },
+    onSuccess: (task) => {
+      queryClient.setQueryData<Task[]>(tasksKey(dateParam), (old) =>
+        old?.map((item) => item.id === task.id ? task : item),
+      );
+      cancelLocalReminder(task.id).catch(() => {});
+    },
+    onError: (error: unknown) => {
+      if ((error as { response?: { status?: number } }).response?.status === 409) {
+        queryClient.invalidateQueries({ queryKey: tasksKey(dateParam) });
+      }
+    },
+  });
+}
+
 /**
  * Today's dated task list.
  *
@@ -67,7 +90,7 @@ export function useCreateTask(date: Date, userTimezone?: string | null) {
       // Secondary effect: schedule local reminder for tasks with a future start time.
       // Respects channel policy (localOnly=false when push is active → no-op).
       // .catch() ensures CRUD result is never affected by reminder failures.
-      if (data.startTime && !data.completedAt) {
+      if (data.startTime && !data.completedAt && !data.startedAt) {
         scheduleLocalReminder(data, getLocalOnlyMode()).catch(() => {});
       }
     },
@@ -86,7 +109,7 @@ export function useUpdateTask(date: Date, userTimezone?: string | null) {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: tasksKey(dateParam) });
       // Reschedule or cancel based on updated task state.
-      if (data.startTime && !data.completedAt) {
+      if (data.startTime && !data.completedAt && !data.startedAt) {
         scheduleLocalReminder(data, getLocalOnlyMode()).catch(() => {});
       } else {
         cancelLocalReminder(data.id).catch(() => {});
@@ -129,7 +152,7 @@ export function useToggleTask(date: Date, userTimezone?: string | null) {
       // Secondary effect: cancel reminder when completed; reschedule when uncompleted.
       if (data.completedAt) {
         cancelLocalReminder(data.id).catch(() => {});
-      } else if (data.startTime) {
+      } else if (data.startTime && !data.startedAt) {
         scheduleLocalReminder(data, getLocalOnlyMode()).catch(() => {});
       }
     },

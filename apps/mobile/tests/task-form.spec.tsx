@@ -81,6 +81,7 @@ describe('TaskFormScreen create flow', () => {
       title: 'Новая задача',
       startTime: null,
       completedAt: null,
+  startedAt: null,
     });
     renderTaskForm();
 

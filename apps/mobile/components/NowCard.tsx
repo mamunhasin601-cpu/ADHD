@@ -9,8 +9,11 @@ interface Props {
   task: Task;
   mode: NowCardMode;
   onComplete: (taskId: string) => void;
+  onStart?: (taskId: string) => void;
   onOpenTask: (task: Task) => void;
   isCompleting?: boolean;
+  isStarting?: boolean;
+  startError?: string | null;
 }
 
 /**
@@ -24,8 +27,11 @@ export function NowCard({
   task,
   mode,
   onComplete,
+  onStart = () => {},
   onOpenTask,
   isCompleting = false,
+  isStarting = false,
+  startError = null,
 }: Props) {
   const timeFormat = useAuthStore(
     (state) => state.user?.timeFormat ?? "SYSTEM",
@@ -34,12 +40,14 @@ export function NowCard({
     ? formatClockTime(new Date(task.startTime), timeFormat)
     : null;
   const isCurrent = mode === "current";
+  const isStarted = task.startedAt !== null;
+  const actionsDisabled = isStarting || isCompleting;
 
   return (
     <View style={styles.card} accessibilityRole="summary">
       <Text style={styles.eyebrow}>Сейчас</Text>
       <Text style={styles.context}>
-        {isCurrent ? "Текущее действие" : "Ближайшее действие"}
+        {isStarted ? "Начато" : isCurrent ? "Запланировано сейчас" : "Ближайшее действие"}
       </Text>
       <Text style={styles.title} numberOfLines={2}>
         {task.title}
@@ -47,56 +55,64 @@ export function NowCard({
 
       <Text style={styles.meta}>
         {time
-          ? `${isCurrent ? "Началось" : "Запланировано"} в ${time}  •  `
+          ? `Запланировано на ${time}  •  `
           : ""}
         {task.durationMinutes === null
           ? "Длительность: Не знаю"
           : `около ${task.durationMinutes} мин`}
       </Text>
+      {startError ? <Text accessibilityRole="alert" style={styles.error}>{startError}</Text> : null}
 
       <View style={styles.actions}>
-        {isCurrent ? (
+        {isStarted ? (
           <>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Завершить задачу ${task.title}`}
-              disabled={isCompleting}
+              disabled={actionsDisabled}
+              accessibilityState={{ disabled: actionsDisabled, busy: isCompleting }}
               onPress={() => onComplete(task.id)}
               style={({ pressed }) => [
                 styles.primaryButton,
                 pressed && styles.buttonPressed,
-                isCompleting && styles.buttonDisabled,
+                actionsDisabled && styles.buttonDisabled,
               ]}
             >
               <Text style={styles.primaryButtonText}>
                 {isCompleting ? "Сохраняю…" : "Завершить"}
               </Text>
             </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Изменить задачу ${task.title}`}
-              onPress={() => onOpenTask(task)}
-              style={({ pressed }) => [
-                styles.secondaryButton,
-                pressed && styles.buttonPressed,
-              ]}
-            >
-              <Text style={styles.secondaryButtonText}>Изменить план</Text>
-            </Pressable>
           </>
         ) : (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Открыть задачу ${task.title}`}
-            onPress={() => onOpenTask(task)}
+            accessibilityLabel={`Начать задачу ${task.title}`}
+            accessibilityState={{ disabled: actionsDisabled, busy: isStarting }}
+            disabled={actionsDisabled}
+            onPress={() => onStart(task.id)}
             style={({ pressed }) => [
               styles.primaryButton,
               pressed && styles.buttonPressed,
+              actionsDisabled && styles.buttonDisabled,
             ]}
           >
-            <Text style={styles.primaryButtonText}>Открыть задачу</Text>
+            <Text style={styles.primaryButtonText}>{isStarting ? "Начинаю…" : "Начать"}</Text>
           </Pressable>
         )}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Изменить задачу ${task.title}`}
+          disabled={actionsDisabled}
+          accessibilityState={{ disabled: actionsDisabled }}
+          onPress={() => onOpenTask(task)}
+          style={({ pressed }) => [
+            styles.secondaryButton,
+            pressed && styles.buttonPressed,
+            actionsDisabled && styles.buttonDisabled,
+          ]}
+        >
+          <Text style={styles.secondaryButtonText}>Изменить план</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -178,4 +194,5 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.55,
   },
+  error: { marginTop: 10, color: "#8A3B3B", fontSize: 13 },
 });

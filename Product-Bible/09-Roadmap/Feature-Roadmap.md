@@ -76,6 +76,12 @@ Phase 1 реализует минимальное ядро из [PDR-001](../12-
    поверхностям, не меняя timezone, timestamps, границы дня или scheduling.
    Реализация следует [PDR-002](../12-Decisions/PDR-002-User-Controlled-Time-Format.md).
 
+6. **Task 0017 — explicit task start state — completed.** Пользователь явно
+   начинает задачу из карточки `Сейчас`; сервер сохраняет первый `startedAt`,
+   а расписание само по себе никогда не означает начало. Это историческое,
+   неэксклюзивное событие без focus session, паузы, таймера или поведения
+   помощника и соответствует принятому [PDR-001](../12-Decisions/PDR-001-Timeline-Centered-Day-Experience.md).
+
 Остальные capability Phase 1 остаются на горизонте, но их точный порядок пока
 не принят. Контекстный помощник, overload mode и focus session относятся к
 следующему расширению опыта; AI-декомпозиция, energy-aware suggestions и

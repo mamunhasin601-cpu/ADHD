@@ -42,6 +42,8 @@ export interface Task {
   recurrenceRule: string | null; // iCal RRULE, напр. "FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR"
   parentTaskId: string | null;   // для подзадач
   completedAt: Date | null;
+  /** First explicit user start; a historical event rather than a timer. */
+  startedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   subTasks?: Task[];

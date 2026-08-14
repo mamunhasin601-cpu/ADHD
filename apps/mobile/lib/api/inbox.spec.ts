@@ -109,6 +109,7 @@ describe('useToggleInboxTask (production hook)', () => {
     title: 'Задача',
     startTime: null,
     completedAt: null,
+  startedAt: null,
     color: '#6B5BFC',
   };
 

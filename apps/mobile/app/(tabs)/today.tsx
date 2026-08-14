@@ -22,6 +22,7 @@ import {
   useTasksForDate,
   useCreateTask,
   useToggleTask,
+  useStartTask,
 } from '../../lib/api/tasks';
 import { useAuthStore } from '../../stores/auth.store';
 import {
@@ -124,6 +125,22 @@ export default function TodayScreen() {
   // Same canonical key as the Today query and Recovery invalidation (0007A).
   const createTask = useCreateTask(selectedDate, profileTimezone);
   const toggleTask = useToggleTask(selectedDate, profileTimezone);
+  const startTask = useStartTask(selectedDate, profileTimezone);
+  const startSubmissionPending = useRef(false);
+  const [startError, setStartError] = useState<string | null>(null);
+
+  async function handleStart(taskId: string) {
+    if (startSubmissionPending.current || startTask.isPending) return;
+    startSubmissionPending.current = true;
+    setStartError(null);
+    try {
+      await startTask.mutateAsync(taskId);
+    } catch {
+      setStartError('Не удалось начать задачу. Проверьте соединение и попробуйте снова.');
+    } finally {
+      startSubmissionPending.current = false;
+    }
+  }
 
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [quickAddTime, setQuickAddTime] = useState<Date | null>(null);
@@ -294,8 +311,11 @@ export default function TodayScreen() {
               task={currentTask ?? nextTask!}
               mode={currentTask ? 'current' : 'upcoming'}
               onComplete={(taskId) => toggleTask.mutate(taskId)}
+              onStart={handleStart}
               onOpenTask={openTask}
               isCompleting={toggleTask.isPending}
+              isStarting={startTask.isPending}
+              startError={startError}
             />
           )}
           {unscheduledTasks.length > 0 && (
