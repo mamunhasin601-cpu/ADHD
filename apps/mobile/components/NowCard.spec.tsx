@@ -217,4 +217,109 @@ describe("NowCard difficult start", () => {
     expect(screen.queryByText("Начать с этого шага")).toBeNull();
     expect(screen.queryByText("Мне трудно начать")).toBeNull();
   });
+
+  it("ignores stale task A save resolution while task B remains pending and guarded", async () => {
+    let resolveA!: (value: Task) => void;
+    let resolveB!: (value: Task) => void;
+    const taskA = { ...task, id: "task-a", title: "Задача A" };
+    const taskB = { ...task, id: "task-b", title: "Задача B" };
+    const onSaveFirstStep = jest.fn((id: string) => new Promise<Task>((resolve) => {
+      if (id === taskA.id) resolveA = resolve;
+      else resolveB = resolve;
+    }));
+    const view = render(<NowCard task={taskA} mode="current" {...props} onSaveFirstStep={onSaveFirstStep} />);
+    fireEvent.press(screen.getByText("Мне трудно начать"));
+    fireEvent.changeText(screen.getByLabelText("Первый маленький шаг"), "Черновик A");
+    fireEvent.press(screen.getByText("Сохранить маленький шаг"));
+
+    view.rerender(<NowCard task={taskB} mode="current" {...props} onSaveFirstStep={onSaveFirstStep} />);
+    fireEvent.press(screen.getByText("Мне трудно начать"));
+    fireEvent.changeText(screen.getByLabelText("Первый маленький шаг"), "Черновик B");
+    fireEvent.press(screen.getByText("Сохранить маленький шаг"));
+    expect(onSaveFirstStep).toHaveBeenCalledTimes(2);
+
+    await act(async () => resolveA({ ...taskA, firstStep: "Канонический шаг A" }));
+    expect(screen.queryByText("Канонический шаг A")).toBeNull();
+    expect(screen.getByText("Сохраняю…")).toBeDisabled();
+    fireEvent.press(screen.getByText("Сохраняю…"));
+    expect(onSaveFirstStep).toHaveBeenCalledTimes(2);
+
+    await act(async () => resolveB({ ...taskB, firstStep: "Канонический шаг B" }));
+    expect(screen.getByText("Канонический шаг B")).toBeTruthy();
+    expect(screen.queryByText("Канонический шаг A")).toBeNull();
+  });
+
+  it("ignores stale task A save rejection and lets task B save successfully", async () => {
+    let rejectA!: (error: Error) => void;
+    const taskA = { ...task, id: "task-a", title: "Задача A" };
+    const taskB = { ...task, id: "task-b", title: "Задача B" };
+    const onSaveFirstStep = jest.fn((id: string) => id === taskA.id
+      ? new Promise<Task>((_resolve, reject) => { rejectA = reject; })
+      : Promise.resolve({ ...taskB, firstStep: "Канонический шаг B" }));
+    const view = render(<NowCard task={taskA} mode="current" {...props} onSaveFirstStep={onSaveFirstStep} />);
+    fireEvent.press(screen.getByText("Мне трудно начать"));
+    fireEvent.changeText(screen.getByLabelText("Первый маленький шаг"), "Ошибка A");
+    fireEvent.press(screen.getByText("Сохранить маленький шаг"));
+    view.rerender(<NowCard task={taskB} mode="current" {...props} onSaveFirstStep={onSaveFirstStep} />);
+
+    await act(async () => rejectA(new Error("offline A")));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText("Ошибка A")).toBeNull();
+    fireEvent.press(screen.getByText("Мне трудно начать"));
+    fireEvent.changeText(screen.getByLabelText("Первый маленький шаг"), "Черновик B");
+    fireEvent.press(screen.getByText("Сохранить маленький шаг"));
+    await waitFor(() => expect(screen.getByText("Канонический шаг B")).toBeTruthy());
+  });
+
+  it("ignores stale task A start completion while task B remains pending and guarded", async () => {
+    let resolveA!: () => void;
+    let resolveB!: () => void;
+    const taskA = { ...task, id: "task-a", title: "Задача A", firstStep: "Шаг A" };
+    const taskB = { ...task, id: "task-b", title: "Задача B", firstStep: "Шаг B" };
+    const onStart = jest.fn((id: string) => new Promise<void>((resolve) => {
+      if (id === taskA.id) resolveA = resolve;
+      else resolveB = resolve;
+    }));
+    const view = render(<NowCard task={taskA} mode="current" {...props} onStart={onStart} />);
+    fireEvent.press(screen.getByText("Мне трудно начать"));
+    fireEvent.press(screen.getByText("Начать с этого шага"));
+    view.rerender(<NowCard task={taskB} mode="current" {...props} onStart={onStart} />);
+    fireEvent.press(screen.getByText("Мне трудно начать"));
+    fireEvent.press(screen.getByText("Начать с этого шага"));
+    expect(onStart).toHaveBeenCalledTimes(2);
+
+    await act(async () => resolveA());
+    const startB = screen.getByRole("button", { name: "Начать с маленького шага задачу Задача B" });
+    expect(startB).toBeDisabled();
+    fireEvent.press(startB);
+    expect(onStart).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("Шаг B")).toBeTruthy();
+
+    await act(async () => resolveB());
+    view.rerender(<NowCard task={{ ...taskB, startedAt: new Date("2026-08-14T11:00:00Z") }} mode="current" {...props} onStart={onStart} />);
+    await waitFor(() => expect(screen.queryByText("Начать с малого")).toBeNull());
+    expect(screen.getByText("Начато")).toBeTruthy();
+    expect(screen.queryByText("Шаг A")).toBeNull();
+  });
+
+  it("invalidates unresolved save and start work on unmount without state updates", async () => {
+    const consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
+    let resolveSave!: (value: Task) => void;
+    const saveView = render(<NowCard task={task} mode="current" {...props} onSaveFirstStep={() => new Promise<Task>((resolve) => { resolveSave = resolve; })} />);
+    fireEvent.press(screen.getByText("Мне трудно начать"));
+    fireEvent.changeText(screen.getByLabelText("Первый маленький шаг"), "Черновик");
+    fireEvent.press(screen.getByText("Сохранить маленький шаг"));
+    saveView.unmount();
+    await act(async () => resolveSave({ ...task, firstStep: "Поздний шаг" }));
+
+    let rejectStart!: (error: Error) => void;
+    const startView = render(<NowCard task={{ ...task, firstStep: "Шаг" }} mode="current" {...props} onStart={() => new Promise<void>((_resolve, reject) => { rejectStart = reject; })} />);
+    fireEvent.press(screen.getByText("Мне трудно начать"));
+    fireEvent.press(screen.getByText("Начать с этого шага"));
+    startView.unmount();
+    await act(async () => rejectStart(new Error("late failure")));
+
+    expect(consoleError.mock.calls.flat().join(" ")).not.toMatch(/unmounted component|not wrapped in act/i);
+    consoleError.mockRestore();
+  });
 });

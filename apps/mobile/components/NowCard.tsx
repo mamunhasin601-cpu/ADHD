@@ -58,7 +58,21 @@ export function NowCard({
   const [localSavePending, setLocalSavePending] = useState(false);
   const modalStartGuard = useRef(false);
   const [modalStartPending, setModalStartPending] = useState(false);
+  const mountedRef = useRef(true);
+  const renderedTaskIdRef = useRef(task.id);
+  const saveGenerationRef = useRef(0);
+  const startGenerationRef = useRef(0);
+  renderedTaskIdRef.current = task.id;
+
+  useEffect(() => () => {
+    mountedRef.current = false;
+    saveGenerationRef.current += 1;
+    startGenerationRef.current += 1;
+  }, []);
+
   useEffect(() => {
+    saveGenerationRef.current += 1;
+    startGenerationRef.current += 1;
     setSupportOpen(false);
     setEditing(false);
     setDraft(task.firstStep ?? "");
@@ -71,6 +85,8 @@ export function NowCard({
   }, [task.id]);
   useEffect(() => {
     if (task.startedAt || task.completedAt) {
+      saveGenerationRef.current += 1;
+      startGenerationRef.current += 1;
       setSupportOpen(false);
       setEditing(false);
       setSaveError(null);
@@ -99,17 +115,26 @@ export function NowCard({
   async function saveFirstStep() {
     const value = draft.trim();
     if (!value || saveGuard.current || savePending) return;
+    const requestTaskId = task.id;
+    const requestGeneration = ++saveGenerationRef.current;
+    const requestIsCurrent = () =>
+      mountedRef.current &&
+      renderedTaskIdRef.current === requestTaskId &&
+      saveGenerationRef.current === requestGeneration;
     saveGuard.current = true;
     setLocalSavePending(true);
     setSaveError(null);
     try {
       const canonical = await onSaveFirstStep(task.id, value);
+      if (!requestIsCurrent()) return;
       setSavedStep(canonical.firstStep);
       setDraft(canonical.firstStep ?? "");
       setEditing(false);
     } catch {
+      if (!requestIsCurrent()) return;
       setSaveError("Не удалось сохранить шаг. Проверьте соединение и попробуйте снова.");
     } finally {
+      if (!requestIsCurrent()) return;
       saveGuard.current = false;
       setLocalSavePending(false);
     }
@@ -117,6 +142,12 @@ export function NowCard({
 
   async function startFromStep() {
     if (modalStartGuard.current || isStarting || savePending) return;
+    const requestTaskId = task.id;
+    const requestGeneration = ++startGenerationRef.current;
+    const requestIsCurrent = () =>
+      mountedRef.current &&
+      renderedTaskIdRef.current === requestTaskId &&
+      startGenerationRef.current === requestGeneration;
     modalStartGuard.current = true;
     setModalStartPending(true);
     try {
@@ -124,6 +155,7 @@ export function NowCard({
     } catch {
       // The parent owns the task-scoped retryable error; keep this surface open.
     } finally {
+      if (!requestIsCurrent()) return;
       modalStartGuard.current = false;
       setModalStartPending(false);
     }

@@ -70,3 +70,17 @@ Follow-up files are:
 - `docs/tasks/0018-difficult-start-first-step.md`
 
 Verification on 2026-08-14: focused API DTO/service/start/migration tests passed (6 suites / 65 tests); focused NowCard and real Today integration tests passed (2 / 26); Task Form passed (1 / 13); the focused start mutation `--detectOpenHandles` run passed cleanly (1 / 5). Full API passed (19 / 269) and full mobile passed (27 / 361). Both TypeScript checks and Prisma validate/generate passed, as did `git diff --check`. The complete mobile suite still emits the established React Native Modal `act(...)` cleanup warnings from `today-create-task.spec.tsx`; the new focused suites emit none. A broader, non-required `--detectOpenHandles` run that included the fake-timer Today suite timed out one pre-existing explicit-start test, while the required mutation-only run passed cleanly. npm continues to report the existing unknown `http-proxy` config warning. Migration application remains unverified because no disposable database was available.
+
+## Final race-condition follow-up
+
+Every asynchronous difficult-start save and modal-start request is now scoped to the rendered task ID, a monotonically increasing operation generation, and the mounted NowCard instance. Task changes and unmount invalidate both generations before stale continuations can update state. Each `try`, state-changing `catch`, and `finally` verifies the captured context, so an older task cannot replace a newer task's canonical step or draft, set or clear its error or pending state, release its duplicate guard, or affect its modal. Canonical start/completion, retry, Close, keyboard, and accessibility behavior remain unchanged.
+
+Deterministic component coverage holds separate Task A and Task B promises and proves stale save resolution, stale save rejection, stale start completion, continued Task B pending/duplicate protection, canonical Task B display, and unmount settlement without state-update warnings. No arbitrary sleeps are used.
+
+This final follow-up changes only:
+
+- `apps/mobile/components/NowCard.tsx`
+- `apps/mobile/components/NowCard.spec.tsx`
+- `docs/tasks/0018-difficult-start-first-step.md`
+
+Verification on 2026-08-14: focused NowCard passed (1 suite / 22 tests), real Today difficult-start integration passed (1 / 8), and the focused mutation `--detectOpenHandles` run passed cleanly (1 / 5). Full mobile passed (27 / 365), mobile TypeScript passed, and `git diff --check` passed. The new focused suites have no warning or open-handle output. The complete mobile run retains the established React Native Modal `act(...)` cleanup warnings from `today-create-task.spec.tsx`. npm continues to report the existing unknown `http-proxy` config warning. No API files changed, so API verification was not repeated. Migration application and device/emulator visual smoke remain unverified as documented above.
