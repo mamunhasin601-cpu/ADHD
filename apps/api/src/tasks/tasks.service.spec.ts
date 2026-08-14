@@ -58,6 +58,45 @@ describe('TasksService — синхронизация напоминаний', (
     expect(prisma.task.update.mock.calls[0][0].data).not.toHaveProperty('startedAt');
     expect(prisma.task.update.mock.calls[0][0].data).not.toHaveProperty('completedAt');
     expect(prisma.task.update.mock.calls[0][0].data).not.toHaveProperty('startTime');
+    expect(prisma.task.update.mock.calls[0][0].data).not.toHaveProperty('durationMinutes');
+    expect(prisma.task.update.mock.calls[0][0].data).not.toHaveProperty('isRecurring');
+    expect(prisma.task.update.mock.calls[0][0].data).not.toHaveProperty('recurrenceRule');
+  });
+
+  it('first-step update retains missing and foreign ownership behavior without touching another task', async () => {
+    prisma.task.findUnique.mockResolvedValueOnce(null);
+    await expect(service.update(userId, 'missing', { firstStep: 'Шаг' })).rejects.toMatchObject({ status: 404 });
+    prisma.task.findUnique.mockResolvedValueOnce({ id: 'foreign', userId: 'other-user' });
+    await expect(service.update(userId, 'foreign', { firstStep: 'Шаг' })).rejects.toMatchObject({ status: 403 });
+    expect(prisma.task.update).not.toHaveBeenCalled();
+  });
+
+  it('completion and reopening preserve firstStep and existing reminder semantics', async () => {
+    const firstStep = 'Открыть документ';
+    let stored = { id: 'toggle-step', userId, firstStep, startTime: new Date(Date.now() + 60_000), completedAt: null, startedAt: null };
+    prisma.task.findUnique.mockImplementation(() => Promise.resolve(stored));
+    prisma.task.update.mockImplementation(({ data }: any) => {
+      stored = { ...stored, ...data };
+      return Promise.resolve(stored);
+    });
+
+    await expect(service.toggleComplete(userId, stored.id)).resolves.toMatchObject({ firstStep, completedAt: expect.any(Date) });
+    expect(prisma.task.update.mock.calls[0][0].data).toEqual({ completedAt: expect.any(Date) });
+    expect(notifications.cancelTaskReminder).toHaveBeenCalledWith(stored.id);
+    notifications.cancelTaskReminder.mockClear();
+    await expect(service.toggleComplete(userId, stored.id)).resolves.toMatchObject({ firstStep, completedAt: null });
+    expect(prisma.task.update.mock.calls[1][0].data).toEqual({ completedAt: null });
+    expect(notifications.scheduleTaskReminder).toHaveBeenCalledWith(expect.objectContaining({ id: stored.id, firstStep }));
+  });
+
+  it('first-step-only update follows existing reminder state and leaves another task unchanged', async () => {
+    const other = { id: 'other', firstStep: 'Не менять' };
+    const existing = { id: 'step-reminder', userId, firstStep: null, startTime: new Date(Date.now() + 60_000), completedAt: null, startedAt: null };
+    prisma.task.findUnique.mockResolvedValue(existing);
+    prisma.task.update.mockResolvedValue({ ...existing, firstStep: 'Новый шаг' });
+    await service.update(userId, existing.id, { firstStep: 'Новый шаг' });
+    expect(notifications.scheduleTaskReminder).toHaveBeenCalledWith(expect.objectContaining({ id: existing.id, firstStep: 'Новый шаг' }));
+    expect(other).toEqual({ id: 'other', firstStep: 'Не менять' });
   });
 
   it.each([

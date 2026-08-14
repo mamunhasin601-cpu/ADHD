@@ -1,5 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import type { Task } from "@focus/shared-types";
 import { useAuthStore } from "../stores/auth.store";
 import { formatClockTime } from "../lib/time-format";
@@ -10,9 +21,9 @@ interface Props {
   task: Task;
   mode: NowCardMode;
   onComplete: (taskId: string) => void;
-  onStart: (taskId: string) => void;
+  onStart: (taskId: string) => Promise<void> | void;
   onOpenTask: (task: Task) => void;
-  onSaveFirstStep?: (taskId: string, firstStep: string) => Promise<Task>;
+  onSaveFirstStep: (taskId: string, firstStep: string) => Promise<Task>;
   isCompleting?: boolean;
   isStarting?: boolean;
   startError?: string | null;
@@ -44,13 +55,29 @@ export function NowCard({
   const [savedStep, setSavedStep] = useState(task.firstStep);
   const [saveError, setSaveError] = useState<string | null>(null);
   const saveGuard = useRef(false);
+  const [localSavePending, setLocalSavePending] = useState(false);
+  const modalStartGuard = useRef(false);
+  const [modalStartPending, setModalStartPending] = useState(false);
   useEffect(() => {
     setSupportOpen(false);
     setEditing(false);
     setDraft(task.firstStep ?? "");
     setSavedStep(task.firstStep);
     setSaveError(null);
+    saveGuard.current = false;
+    setLocalSavePending(false);
+    modalStartGuard.current = false;
+    setModalStartPending(false);
   }, [task.id]);
+  useEffect(() => {
+    if (task.startedAt || task.completedAt) {
+      setSupportOpen(false);
+      setEditing(false);
+      setSaveError(null);
+      modalStartGuard.current = false;
+      setModalStartPending(false);
+    }
+  }, [task.startedAt, task.completedAt]);
   useEffect(() => {
     setSavedStep(task.firstStep);
     if (!editing) setDraft(task.firstStep ?? "");
@@ -66,15 +93,16 @@ export function NowCard({
     : null;
   const isCurrent = mode === "current";
   const isStarted = task.startedAt !== null;
-  const actionsDisabled = isStarting || isCompleting;
+  const savePending = isSavingFirstStep || localSavePending;
+  const actionsDisabled = isStarting || isCompleting || savePending || modalStartPending;
 
   async function saveFirstStep() {
     const value = draft.trim();
-    if (!value || saveGuard.current || isSavingFirstStep) return;
+    if (!value || saveGuard.current || savePending) return;
     saveGuard.current = true;
+    setLocalSavePending(true);
     setSaveError(null);
     try {
-      if (!onSaveFirstStep) throw new Error("First-step update is unavailable");
       const canonical = await onSaveFirstStep(task.id, value);
       setSavedStep(canonical.firstStep);
       setDraft(canonical.firstStep ?? "");
@@ -83,6 +111,21 @@ export function NowCard({
       setSaveError("Не удалось сохранить шаг. Проверьте соединение и попробуйте снова.");
     } finally {
       saveGuard.current = false;
+      setLocalSavePending(false);
+    }
+  }
+
+  async function startFromStep() {
+    if (modalStartGuard.current || isStarting || savePending) return;
+    modalStartGuard.current = true;
+    setModalStartPending(true);
+    try {
+      await onStart(task.id);
+    } catch {
+      // The parent owns the task-scoped retryable error; keep this surface open.
+    } finally {
+      modalStartGuard.current = false;
+      setModalStartPending(false);
     }
   }
 
@@ -104,7 +147,7 @@ export function NowCard({
           ? "Длительность: Не знаю"
           : `около ${task.durationMinutes} мин`}
       </Text>
-      {startError ? <Text accessibilityRole="alert" style={styles.error}>{startError}</Text> : null}
+      {startError && !supportOpen && !task.startedAt && !task.completedAt ? <Text accessibilityRole="alert" style={styles.error}>{startError}</Text> : null}
 
       <View style={styles.actions}>
         {isStarted ? (
@@ -166,30 +209,32 @@ export function NowCard({
         </Pressable>
       </View>
       <Modal visible={supportOpen} transparent animationType="slide" onRequestClose={() => setSupportOpen(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard} accessibilityViewIsModal accessibilityLabel={`Первый маленький шаг для задачи ${task.title}`}>
+        <KeyboardAvoidingView testID="difficult-start-keyboard-view" style={styles.modalOverlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+          <SafeAreaView edges={["bottom"]} style={styles.safeArea}>
+          <ScrollView testID="difficult-start-scroll-view" keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalCard} accessibilityViewIsModal accessibilityLabel={`Первый маленький шаг для задачи ${task.title}`}>
             <Text style={styles.modalTitle}>Начать с малого</Text>
             {savedStep && !editing ? (
               <>
                 <Text style={styles.explanation}>Вот выбранный вами конкретный первый шаг:</Text>
                 <Text style={styles.stepText}>{savedStep}</Text>
                 {startError ? <Text accessibilityRole="alert" style={styles.error}>{startError}</Text> : null}
-                <Pressable accessibilityRole="button" disabled={isStarting} accessibilityState={{ disabled: isStarting, busy: isStarting }} onPress={() => onStart(task.id)} style={[styles.primaryButton, isStarting && styles.buttonDisabled]}>
-                  <Text style={styles.primaryButtonText}>{isStarting ? "Начинаю…" : "Начать с этого шага"}</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Начать с маленького шага задачу ${task.title}`} disabled={isStarting || modalStartPending || savePending} accessibilityState={{ disabled: isStarting || modalStartPending || savePending, busy: isStarting || modalStartPending }} onPress={startFromStep} style={[styles.primaryButton, (isStarting || modalStartPending || savePending) && styles.buttonDisabled]}>
+                  <Text style={styles.primaryButtonText}>{isStarting || modalStartPending ? "Начинаю…" : "Начать с этого шага"}</Text>
                 </Pressable>
-                <Pressable accessibilityRole="button" onPress={() => setEditing(true)} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Изменить маленький шаг</Text></Pressable>
+                <Pressable accessibilityRole="button" disabled={savePending || modalStartPending} accessibilityState={{ disabled: savePending || modalStartPending }} onPress={() => { setSaveError(null); setEditing(true); }} style={[styles.secondaryButton, (savePending || modalStartPending) && styles.buttonDisabled]}><Text style={styles.secondaryButtonText}>Изменить маленький шаг</Text></Pressable>
               </>
             ) : (
               <>
                 <Text style={styles.explanation}>Запишите одно небольшое наблюдаемое действие — не всю задачу.</Text>
-                <TextInput autoFocus style={styles.input} value={draft} onChangeText={setDraft} placeholder="Например: открыть документ" placeholderTextColor="#9CA3AF" maxLength={240} accessibilityLabel="Первый маленький шаг" editable={!isSavingFirstStep} returnKeyType="done" onSubmitEditing={saveFirstStep} />
+                <TextInput autoFocus style={styles.input} value={draft} onChangeText={(value) => { setSaveError(null); setDraft(value); }} placeholder="Например: открыть документ" placeholderTextColor="#9CA3AF" maxLength={240} accessibilityLabel="Первый маленький шаг" editable={!savePending} returnKeyType="done" onSubmitEditing={saveFirstStep} />
                 {saveError ? <Text accessibilityRole="alert" style={styles.error}>{saveError}</Text> : null}
-                <Pressable accessibilityRole="button" disabled={!draft.trim() || isSavingFirstStep} accessibilityState={{ disabled: !draft.trim() || isSavingFirstStep, busy: isSavingFirstStep }} onPress={saveFirstStep} style={[styles.primaryButton, (!draft.trim() || isSavingFirstStep) && styles.buttonDisabled]}><Text style={styles.primaryButtonText}>{isSavingFirstStep ? "Сохраняю…" : "Сохранить маленький шаг"}</Text></Pressable>
+                <Pressable accessibilityRole="button" disabled={!draft.trim() || savePending} accessibilityState={{ disabled: !draft.trim() || savePending, busy: savePending }} onPress={saveFirstStep} style={[styles.primaryButton, (!draft.trim() || savePending) && styles.buttonDisabled]}><Text style={styles.primaryButtonText}>{savePending ? "Сохраняю…" : "Сохранить маленький шаг"}</Text></Pressable>
               </>
             )}
             <Pressable accessibilityRole="button" accessibilityLabel="Закрыть помощь с началом" onPress={() => setSupportOpen(false)} style={styles.closeButton}><Text style={styles.closeText}>Закрыть</Text></Pressable>
-          </View>
-        </View>
+          </ScrollView>
+          </SafeAreaView>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -273,7 +318,8 @@ const styles = StyleSheet.create({
   },
   error: { marginTop: 10, color: "#8A3B3B", fontSize: 13 },
   modalOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.35)" },
-  modalCard: { backgroundColor: "#FFFFFF", padding: 24, paddingBottom: 36, borderTopLeftRadius: 22, borderTopRightRadius: 22, gap: 12 },
+  safeArea: { maxHeight: "90%", backgroundColor: "#FFFFFF", borderTopLeftRadius: 22, borderTopRightRadius: 22 },
+  modalCard: { flexGrow: 1, backgroundColor: "#FFFFFF", padding: 24, paddingBottom: 36, gap: 12 },
   modalTitle: { fontSize: 21, fontWeight: "700", color: "#211D2E" },
   explanation: { fontSize: 15, lineHeight: 21, color: "#6B6477" },
   stepText: { fontSize: 18, lineHeight: 25, fontWeight: "600", color: "#211D2E", paddingVertical: 8 },
