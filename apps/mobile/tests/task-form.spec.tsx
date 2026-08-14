@@ -1,6 +1,7 @@
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
 const mockCreateTask = jest.fn();
+const mockUpdateTask = jest.fn();
 const mockInvalidateQueries = jest.fn();
 let mockTimeFormat: 'SYSTEM' | 'H24' | 'H12' = 'H24';
 let mockParams: Record<string, string> = { selectedDate: '2026-08-11T12:00:00.000Z' };
@@ -14,7 +15,7 @@ jest.mock('@tanstack/react-query', () => ({
 }));
 jest.mock('../lib/api/tasks', () => ({
   useCreateTask: () => ({ mutateAsync: mockCreateTask }),
-  useUpdateTask: () => ({ mutateAsync: jest.fn() }),
+  useUpdateTask: () => ({ mutateAsync: mockUpdateTask }),
   useDeleteTask: () => ({ mutateAsync: jest.fn() }),
   createSubtask: jest.fn(),
   deleteTaskById: jest.fn(),
@@ -50,6 +51,30 @@ describe('TaskFormScreen create flow', () => {
     ));
   });
 
+  it('creates with a trimmed first step and keeps it after a failed retry', async () => {
+    mockCreateTask.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ id: 'saved' });
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    renderTaskForm();
+    fireEvent.changeText(screen.getByPlaceholderText('Название задачи'), 'Доклад');
+    fireEvent.changeText(screen.getByLabelText('Первый маленький шаг'), '  Открыть документ  ');
+    fireEvent.press(screen.getByText('Сохранить'));
+    await waitFor(() => expect(alertSpy).toHaveBeenCalled());
+    expect(screen.getByDisplayValue('  Открыть документ  ')).toBeTruthy();
+    fireEvent.press(screen.getByText('Сохранить'));
+    await waitFor(() => expect(mockCreateTask).toHaveBeenLastCalledWith(expect.objectContaining({ firstStep: 'Открыть документ' })));
+    alertSpy.mockRestore();
+  });
+
+  it('edits and clears an existing first step to null', async () => {
+    mockParams = { ...mockParams, task: JSON.stringify({ id: 'edited', title: 'Edit', firstStep: 'Открыть документ', startTime: null, durationMinutes: null, color: '#6B5BFC', recurrenceRule: null, subTasks: [] }) };
+    mockUpdateTask.mockResolvedValue({ id: 'edited' });
+    renderTaskForm();
+    expect(screen.getByDisplayValue('Открыть документ')).toBeTruthy();
+    fireEvent.changeText(screen.getByLabelText('Первый маленький шаг'), '   ');
+    fireEvent.press(screen.getByText('Сохранить'));
+    await waitFor(() => expect(mockUpdateTask).toHaveBeenCalledWith(expect.objectContaining({ id: 'edited', dto: expect.objectContaining({ firstStep: null }) })));
+  });
+
   it('sends an exact numeric preset and preserves numeric prefill', async () => {
     mockParams = { ...mockParams, prefillDurationMinutes: '90' };
     mockCreateTask.mockResolvedValue({ id: 'task-90' });
@@ -81,7 +106,7 @@ describe('TaskFormScreen create flow', () => {
       title: 'Новая задача',
       startTime: null,
       completedAt: null,
-  startedAt: null,
+  startedAt: null, firstStep: null,
     });
     renderTaskForm();
 

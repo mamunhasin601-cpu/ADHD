@@ -3,7 +3,7 @@ jest.mock("../stores/auth.store", () => ({
   useAuthStore: (selector: any) => selector({ user: mockUser }),
 }));
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react-native";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import type { Task } from "@focus/shared-types";
 import { NowCard } from "./NowCard";
 
@@ -11,7 +11,7 @@ const task: Task = {
   id: "task-1", userId: "user-1", title: "Подготовить один слайд",
   startTime: new Date("2026-08-12T14:30:00.000Z"), durationMinutes: 30,
   color: "#6B5BFC", isRecurring: false, recurrenceRule: null, parentTaskId: null,
-  completedAt: null, startedAt: null, createdAt: new Date(), updatedAt: new Date(),
+  completedAt: null, startedAt: null, firstStep: null, createdAt: new Date(), updatedAt: new Date(),
 };
 const props = { onStart: jest.fn(), onComplete: jest.fn(), onOpenTask: jest.fn() };
 
@@ -86,5 +86,41 @@ describe("NowCard explicit start", () => {
   it("exposes a calm start error as an alert", () => {
     render(<NowCard task={task} mode="current" {...props} startError="Проверьте соединение и попробуйте снова." />);
     expect(screen.getByRole("alert")).toHaveTextContent("Проверьте соединение и попробуйте снова.");
+  });
+});
+
+describe("NowCard difficult start", () => {
+  it("opens without mutation and saves a user-authored step without starting", async () => {
+    const onSaveFirstStep = jest.fn().mockResolvedValue({ ...task, firstStep: "Открыть документ" });
+    render(<NowCard task={task} mode="current" {...props} onSaveFirstStep={onSaveFirstStep} />);
+    fireEvent.press(screen.getByText("Мне трудно начать"));
+    expect(onSaveFirstStep).not.toHaveBeenCalled();
+    expect(props.onStart).not.toHaveBeenCalled();
+    const save = screen.getByText("Сохранить маленький шаг");
+    expect(save).toBeDisabled();
+    fireEvent.changeText(screen.getByLabelText("Первый маленький шаг"), "  Открыть документ  ");
+    fireEvent.press(screen.getByText("Сохранить маленький шаг"));
+    await waitFor(() => expect(screen.getByText("Открыть документ")).toBeTruthy());
+    expect(onSaveFirstStep).toHaveBeenCalledWith(task.id, "Открыть документ");
+    expect(props.onStart).not.toHaveBeenCalled();
+  });
+
+  it("shows a persisted step and delegates its explicit start exactly once", () => {
+    render(<NowCard task={{ ...task, firstStep: "Открыть документ" }} mode="current" {...props} />);
+    fireEvent.press(screen.getByText("Мне трудно начать"));
+    expect(screen.getByText("Открыть документ")).toBeTruthy();
+    fireEvent.press(screen.getByText("Начать с этого шага"));
+    expect(props.onStart).toHaveBeenCalledTimes(1);
+    expect(props.onStart).toHaveBeenCalledWith(task.id);
+  });
+
+  it("does not offer difficult-start support after start", () => {
+    render(<NowCard task={{ ...task, startedAt: new Date() }} mode="current" {...props} />);
+    expect(screen.queryByText("Мне трудно начать")).toBeNull();
+  });
+
+  it("does not offer difficult-start support after completion", () => {
+    render(<NowCard task={{ ...task, completedAt: new Date() }} mode="current" {...props} />);
+    expect(screen.queryByText("Мне трудно начать")).toBeNull();
   });
 });

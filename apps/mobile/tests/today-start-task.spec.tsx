@@ -11,6 +11,7 @@ jest.mock('../lib/api/tasks', () => {
   return {
     useTasksForDate: () => ({ data: mockTasks, isLoading: false, isError: false }),
     useCreateTask: () => ({ mutateAsync: jest.fn(), isPending: false }),
+    useUpdateTask: () => ({ mutateAsync: jest.fn(), isPending: false }),
     useToggleTask: () => ({ mutate: mockToggle, isPending: false }),
     useStartTask: () => {
       const [isPending, setPending] = React.useState(false);
@@ -44,7 +45,7 @@ import TodayScreen from '../app/(tabs)/today';
 const scheduled = (id: string, startTime: string) => ({
   id, userId: 'user', title: `Задача ${id}`, startTime: new Date(startTime), durationMinutes: 30,
   color: '#6B5BFC', isRecurring: false, recurrenceRule: null, parentTaskId: null,
-  completedAt: null, startedAt: null, createdAt: new Date(), updatedAt: new Date(),
+  completedAt: null, startedAt: null, firstStep: null, createdAt: new Date(), updatedAt: new Date(),
 });
 
 describe('Today explicit task start', () => {

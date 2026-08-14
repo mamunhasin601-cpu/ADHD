@@ -22,6 +22,7 @@ jest.mock("../lib/api/tasks", () => ({
   })),
   useToggleTask: jest.fn(() => ({ mutate: jest.fn(), isPending: false })),
   useStartTask: jest.fn(() => ({ mutateAsync: jest.fn(), isPending: false })),
+  useUpdateTask: jest.fn(() => ({ mutateAsync: jest.fn(), isPending: false })),
 }));
 jest.mock("../stores/auth.store", () => ({
   useAuthStore: jest.fn((selector: any) =>
@@ -90,7 +91,7 @@ const scheduledTask = {
   title: "Существующая задача",
   startTime: "2026-08-12T08:00:00.000Z",
   completedAt: null,
-  startedAt: null,
+  startedAt: null, firstStep: null,
   durationMinutes: 30,
 };
 

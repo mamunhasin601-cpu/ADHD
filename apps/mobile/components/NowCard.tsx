@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { Task } from "@focus/shared-types";
 import { useAuthStore } from "../stores/auth.store";
 import { formatClockTime } from "../lib/time-format";
@@ -11,9 +12,11 @@ interface Props {
   onComplete: (taskId: string) => void;
   onStart: (taskId: string) => void;
   onOpenTask: (task: Task) => void;
+  onSaveFirstStep?: (taskId: string, firstStep: string) => Promise<Task>;
   isCompleting?: boolean;
   isStarting?: boolean;
   startError?: string | null;
+  isSavingFirstStep?: boolean;
 }
 
 /**
@@ -29,10 +32,32 @@ export function NowCard({
   onComplete,
   onStart,
   onOpenTask,
+  onSaveFirstStep,
   isCompleting = false,
   isStarting = false,
   startError = null,
+  isSavingFirstStep = false,
 }: Props) {
+  const [supportOpen, setSupportOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(task.firstStep ?? "");
+  const [savedStep, setSavedStep] = useState(task.firstStep);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const saveGuard = useRef(false);
+  useEffect(() => {
+    setSupportOpen(false);
+    setEditing(false);
+    setDraft(task.firstStep ?? "");
+    setSavedStep(task.firstStep);
+    setSaveError(null);
+  }, [task.id]);
+  useEffect(() => {
+    setSavedStep(task.firstStep);
+    if (!editing) setDraft(task.firstStep ?? "");
+  // A canonical mutation response may replace the persisted value. Editing is
+  // intentionally not a dependency: opening the editor must never erase input.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task.firstStep]);
   const timeFormat = useAuthStore(
     (state) => state.user?.timeFormat ?? "SYSTEM",
   );
@@ -42,6 +67,24 @@ export function NowCard({
   const isCurrent = mode === "current";
   const isStarted = task.startedAt !== null;
   const actionsDisabled = isStarting || isCompleting;
+
+  async function saveFirstStep() {
+    const value = draft.trim();
+    if (!value || saveGuard.current || isSavingFirstStep) return;
+    saveGuard.current = true;
+    setSaveError(null);
+    try {
+      if (!onSaveFirstStep) throw new Error("First-step update is unavailable");
+      const canonical = await onSaveFirstStep(task.id, value);
+      setSavedStep(canonical.firstStep);
+      setDraft(canonical.firstStep ?? "");
+      setEditing(false);
+    } catch {
+      setSaveError("Не удалось сохранить шаг. Проверьте соединение и попробуйте снова.");
+    } finally {
+      saveGuard.current = false;
+    }
+  }
 
   return (
     <View style={styles.card} accessibilityRole="summary">
@@ -84,7 +127,7 @@ export function NowCard({
             </Pressable>
           </>
         ) : (
-          <Pressable
+          <><Pressable
             accessibilityRole="button"
             accessibilityLabel={`Начать задачу ${task.title}`}
             accessibilityState={{ disabled: actionsDisabled, busy: isStarting }}
@@ -98,6 +141,14 @@ export function NowCard({
           >
             <Text style={styles.primaryButtonText}>{isStarting ? "Начинаю…" : "Начать"}</Text>
           </Pressable>
+          {!task.completedAt && <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Помощь с началом задачи ${task.title}`}
+            disabled={actionsDisabled}
+            accessibilityState={{ disabled: actionsDisabled }}
+            onPress={() => { setDraft(savedStep ?? ""); setEditing(!savedStep); setSaveError(null); setSupportOpen(true); }}
+            style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed, actionsDisabled && styles.buttonDisabled]}
+          ><Text style={styles.secondaryButtonText}>Мне трудно начать</Text></Pressable>}</>
         )}
         <Pressable
           accessibilityRole="button"
@@ -114,6 +165,32 @@ export function NowCard({
           <Text style={styles.secondaryButtonText}>Изменить план</Text>
         </Pressable>
       </View>
+      <Modal visible={supportOpen} transparent animationType="slide" onRequestClose={() => setSupportOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard} accessibilityViewIsModal accessibilityLabel={`Первый маленький шаг для задачи ${task.title}`}>
+            <Text style={styles.modalTitle}>Начать с малого</Text>
+            {savedStep && !editing ? (
+              <>
+                <Text style={styles.explanation}>Вот выбранный вами конкретный первый шаг:</Text>
+                <Text style={styles.stepText}>{savedStep}</Text>
+                {startError ? <Text accessibilityRole="alert" style={styles.error}>{startError}</Text> : null}
+                <Pressable accessibilityRole="button" disabled={isStarting} accessibilityState={{ disabled: isStarting, busy: isStarting }} onPress={() => onStart(task.id)} style={[styles.primaryButton, isStarting && styles.buttonDisabled]}>
+                  <Text style={styles.primaryButtonText}>{isStarting ? "Начинаю…" : "Начать с этого шага"}</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" onPress={() => setEditing(true)} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Изменить маленький шаг</Text></Pressable>
+              </>
+            ) : (
+              <>
+                <Text style={styles.explanation}>Запишите одно небольшое наблюдаемое действие — не всю задачу.</Text>
+                <TextInput autoFocus style={styles.input} value={draft} onChangeText={setDraft} placeholder="Например: открыть документ" placeholderTextColor="#9CA3AF" maxLength={240} accessibilityLabel="Первый маленький шаг" editable={!isSavingFirstStep} returnKeyType="done" onSubmitEditing={saveFirstStep} />
+                {saveError ? <Text accessibilityRole="alert" style={styles.error}>{saveError}</Text> : null}
+                <Pressable accessibilityRole="button" disabled={!draft.trim() || isSavingFirstStep} accessibilityState={{ disabled: !draft.trim() || isSavingFirstStep, busy: isSavingFirstStep }} onPress={saveFirstStep} style={[styles.primaryButton, (!draft.trim() || isSavingFirstStep) && styles.buttonDisabled]}><Text style={styles.primaryButtonText}>{isSavingFirstStep ? "Сохраняю…" : "Сохранить маленький шаг"}</Text></Pressable>
+              </>
+            )}
+            <Pressable accessibilityRole="button" accessibilityLabel="Закрыть помощь с началом" onPress={() => setSupportOpen(false)} style={styles.closeButton}><Text style={styles.closeText}>Закрыть</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -195,4 +272,12 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
   error: { marginTop: 10, color: "#8A3B3B", fontSize: 13 },
+  modalOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.35)" },
+  modalCard: { backgroundColor: "#FFFFFF", padding: 24, paddingBottom: 36, borderTopLeftRadius: 22, borderTopRightRadius: 22, gap: 12 },
+  modalTitle: { fontSize: 21, fontWeight: "700", color: "#211D2E" },
+  explanation: { fontSize: 15, lineHeight: 21, color: "#6B6477" },
+  stepText: { fontSize: 18, lineHeight: 25, fontWeight: "600", color: "#211D2E", paddingVertical: 8 },
+  input: { borderWidth: 1, borderColor: "#D8D3E8", borderRadius: 12, padding: 12, fontSize: 16, color: "#211D2E" },
+  closeButton: { minHeight: 44, alignItems: "center", justifyContent: "center" },
+  closeText: { color: "#6B6477", fontSize: 15, fontWeight: "600" },
 });

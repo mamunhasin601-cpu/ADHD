@@ -28,6 +28,7 @@ export class TasksService {
       data: {
         userId,
         title: dto.title,
+        firstStep: dto.firstStep ?? null,
         startTime: dto.startTime ? new Date(dto.startTime) : null,
         durationMinutes: dto.durationMinutes ?? null,
         color: dto.color ?? '#6B5BFC',
@@ -116,6 +117,7 @@ export class TasksService {
       where: { id: taskId },
       data: {
         ...(dto.title !== undefined && { title: dto.title }),
+        ...(dto.firstStep !== undefined && { firstStep: dto.firstStep }),
         ...(dto.startTime !== undefined && {
           startTime: dto.startTime ? new Date(dto.startTime) : null,
         }),

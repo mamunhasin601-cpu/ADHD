@@ -45,6 +45,21 @@ describe('TasksService — синхронизация напоминаний', (
     expect(notifications.cancelTaskReminder).not.toHaveBeenCalled();
   });
 
+  it('create/update persist firstStep without changing unrelated state', async () => {
+    const existing = { id: 'step', userId, startTime: new Date(), durationMinutes: 45, isRecurring: true, recurrenceRule: 'FREQ=DAILY', startedAt: new Date(), completedAt: new Date(), firstStep: null };
+    prisma.task.create.mockResolvedValue({ ...existing, firstStep: 'Открыть документ' });
+    await service.create(userId, { title: 'Task', firstStep: 'Открыть документ' });
+    expect(prisma.task.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ firstStep: 'Открыть документ' }) }));
+
+    prisma.task.findUnique.mockResolvedValue(existing);
+    prisma.task.update.mockResolvedValue({ ...existing, firstStep: null });
+    await service.update(userId, existing.id, { firstStep: null });
+    expect(prisma.task.update.mock.calls[0][0].data).toEqual({ firstStep: null });
+    expect(prisma.task.update.mock.calls[0][0].data).not.toHaveProperty('startedAt');
+    expect(prisma.task.update.mock.calls[0][0].data).not.toHaveProperty('completedAt');
+    expect(prisma.task.update.mock.calls[0][0].data).not.toHaveProperty('startTime');
+  });
+
   it.each([
     ['omitted', undefined, null],
     ['explicit null', null, null],
@@ -119,7 +134,7 @@ describe('TasksService — синхронизация напоминаний', (
   });
 
   it('start(): atomically preserves the first server timestamp and cancels its reminder', async () => {
-    const original = { id: 'started', userId, startTime: new Date('2026-08-14T10:00:00Z'), durationMinutes: 45, isRecurring: true, recurrenceRule: 'FREQ=DAILY', completedAt: null, startedAt: null };
+    const original = { id: 'started', userId, startTime: new Date('2026-08-14T10:00:00Z'), durationMinutes: 45, isRecurring: true, recurrenceRule: 'FREQ=DAILY', completedAt: null, startedAt: null, firstStep: 'Открыть документ' };
     let stored = original;
     prisma.task.findUnique.mockImplementation(() => Promise.resolve(stored));
     prisma.task.updateMany.mockImplementation(({ where, data }: any) => {
@@ -135,7 +150,7 @@ describe('TasksService — синхронизация напоминаний', (
     expect(prisma.task.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: original.id, userId, startedAt: null, completedAt: null },
     }));
-    expect(second).toMatchObject({ startTime: original.startTime, durationMinutes: 45, recurrenceRule: 'FREQ=DAILY', completedAt: null });
+    expect(second).toMatchObject({ startTime: original.startTime, durationMinutes: 45, recurrenceRule: 'FREQ=DAILY', completedAt: null, firstStep: original.firstStep });
     expect(notifications.cancelTaskReminder).toHaveBeenCalledWith(original.id);
   });
 

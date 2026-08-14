@@ -46,7 +46,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     recurrenceRule: null,
     parentTaskId: null,
     completedAt: null,
-  startedAt: null,
+  startedAt: null, firstStep: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
@@ -238,7 +238,7 @@ describe('reconcileLocalReminders', () => {
       id: 'done',
       startTime: new Date(Date.now() + 60 * 60 * 1000),
       completedAt: new Date(),
-  startedAt: null,
+  startedAt: null, firstStep: null,
     });
 
     await reconcileLocalReminders([completed], true);

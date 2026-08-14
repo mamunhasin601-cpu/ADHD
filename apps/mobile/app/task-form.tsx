@@ -108,6 +108,7 @@ export default function TaskFormScreen() {
   const [title, setTitle] = useState(
     existingTask?.title ?? params.prefillTitle ?? "",
   );
+  const [firstStep, setFirstStep] = useState(existingTask?.firstStep ?? "");
 
   const initialStartTime =
     existingTask?.startTime ??
@@ -195,6 +196,7 @@ export default function TaskFormScreen() {
 
     const dto = {
       title: title.trim(),
+      firstStep: firstStep.trim() || null,
       startTime: startTimeIso,
       durationMinutes,
       color,
@@ -265,6 +267,20 @@ export default function TaskFormScreen() {
         value={title}
         onChangeText={setTitle}
         autoFocus={!isEditMode}
+      />
+
+      <Text style={styles.sectionLabel}>Первый маленький шаг</Text>
+      <Text style={styles.supportingText}>Одно конкретное действие, с которого можно начать, а не вся задача.</Text>
+      <TextInput
+        style={styles.firstStepInput}
+        value={firstStep}
+        onChangeText={setFirstStep}
+        placeholder="Например: открыть документ"
+        placeholderTextColor="#9CA3AF"
+        maxLength={240}
+        accessibilityLabel="Первый маленький шаг"
+        editable={!saving}
+        returnKeyType="done"
       />
 
       {/* Время */}
@@ -461,6 +477,11 @@ const styles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 8,
     textTransform: "uppercase",
+  },
+  supportingText: { fontSize: 13, lineHeight: 18, color: "#6B7280", marginBottom: 8 },
+  firstStepInput: {
+    borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: "#111827",
   },
   row: { flexDirection: "row", gap: 8 },
   toggleChip: {

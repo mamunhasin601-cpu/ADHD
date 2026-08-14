@@ -5,7 +5,7 @@ const task = (id: string, start: string, durationMinutes: number | null): Task =
   id, userId: 'u', title: id, startTime: new Date(start), durationMinutes,
   color: '#6B5BFC', isRecurring: false, recurrenceRule: null, parentTaskId: null,
   completedAt: null,
-  startedAt: null, createdAt: new Date(), updatedAt: new Date(),
+  startedAt: null, firstStep: null, createdAt: new Date(), updatedAt: new Date(),
 });
 
 it('keeps unknown duration current until the next task rather than one hour', () => {

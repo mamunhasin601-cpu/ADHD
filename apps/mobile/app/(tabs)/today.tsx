@@ -23,6 +23,7 @@ import {
   useCreateTask,
   useToggleTask,
   useStartTask,
+  useUpdateTask,
 } from '../../lib/api/tasks';
 import { useAuthStore } from '../../stores/auth.store';
 import {
@@ -126,6 +127,7 @@ export default function TodayScreen() {
   const createTask = useCreateTask(selectedDate, profileTimezone);
   const toggleTask = useToggleTask(selectedDate, profileTimezone);
   const startTask = useStartTask(selectedDate, profileTimezone);
+  const updateTask = useUpdateTask(selectedDate, profileTimezone);
   const startSubmissionPending = useRef(false);
   const [startError, setStartError] = useState<{
     taskId: string;
@@ -321,8 +323,10 @@ export default function TodayScreen() {
               onComplete={(taskId) => toggleTask.mutate(taskId)}
               onStart={handleStart}
               onOpenTask={openTask}
+              onSaveFirstStep={async (taskId, firstStep) => updateTask.mutateAsync({ id: taskId, dto: { firstStep } })}
               isCompleting={toggleTask.isPending}
               isStarting={startTask.isPending}
+              isSavingFirstStep={updateTask.isPending}
               startError={
                 startError?.taskId === (currentTask ?? nextTask!).id &&
                 startError.dateKey === toCanonicalDateParam(selectedDate, profileTimezone)

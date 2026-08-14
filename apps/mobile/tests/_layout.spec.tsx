@@ -375,7 +375,7 @@ describe('RootLayout — granted → revoked on app resume', () => {
     // Even if a task fetch were attempted and returned upcoming work...
     (apiClient.get as jest.Mock).mockResolvedValue({
       data: [{ id: 'task-1', startTime: new Date(Date.now() + 3_600_000), completedAt: null }],
-  startedAt: null,
+  startedAt: null, firstStep: null,
     });
 
     await simulateAppResume();

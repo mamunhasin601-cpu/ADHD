@@ -44,6 +44,8 @@ export interface Task {
   completedAt: Date | null;
   /** First explicit user start; a historical event rather than a timer. */
   startedAt: Date | null;
+  /** Optional user-authored, observable entry action; not a subtask or start state. */
+  firstStep: string | null;
   createdAt: Date;
   updatedAt: Date;
   subTasks?: Task[];
@@ -51,6 +53,7 @@ export interface Task {
 
 export interface CreateTaskDto {
   title: string;
+  firstStep?: string | null;
   startTime?: string | null; // ISO 8601
   durationMinutes?: number | null;
   color?: string;
