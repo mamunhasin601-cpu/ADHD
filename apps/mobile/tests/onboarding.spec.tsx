@@ -1,5 +1,5 @@
 const mockMutate = jest.fn();
-let mockTimeFormat: "H24" | "H12" = "H24";
+let mockTimeFormat: "SYSTEM" | "H24" | "H12" = "H24";
 
 jest.mock("expo-router", () => ({}));
 jest.mock("../lib/api/tasks", () => ({
@@ -109,7 +109,7 @@ describe("Onboarding time-format parsing", () => {
     jest.useFakeTimers().setSystemTime(new Date("2026-08-11T12:00:00.000Z"));
   });
   afterEach(() => jest.useRealTimers());
-  function renderEntry(format: "H12" | "H24") {
+  function renderEntry(format: "SYSTEM" | "H12" | "H24") {
     mockTimeFormat = format;
     (useAuthStore as unknown as jest.Mock).mockImplementation((selector: any) =>
       selector({
@@ -165,5 +165,78 @@ describe("Onboarding time-format parsing", () => {
   it("shows the H12 placeholder", () => {
     renderEntry("H12");
     expect(screen.getByPlaceholderText("2:00 PM")).toBeTruthy();
+  });
+});
+
+
+describe("Onboarding time keyboard and accessibility", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers().setSystemTime(new Date("2026-08-11T12:00:00.000Z"));
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+  });
+
+  function renderFor(format: "SYSTEM" | "H12" | "H24") {
+    mockTimeFormat = format;
+    (useAuthStore as unknown as jest.Mock).mockImplementation((selector: any) =>
+      selector({ setUser: jest.fn(), user: { timezone: "Europe/Moscow", timeFormat: format } }),
+    );
+    render(<OnboardingScreen />);
+    fireEvent.press(screen.getByText("Начать"));
+    return screen.getByTestId("onboarding-time-input");
+  }
+
+  it("uses an alphabetic keyboard and explicit format guidance for H12", () => {
+    const input = renderFor("H12");
+    expect(input.props.keyboardType).toBe("default");
+    expect(input.props.autoCorrect).toBe(false);
+    expect(input.props.accessibilityLabel).toContain("2:30 PM");
+    expect(input.props.accessibilityHint).toContain("AM или PM");
+  });
+
+  it("retains the numeric/punctuation keyboard and H24 guidance", () => {
+    const input = renderFor("H24");
+    expect(input.props.keyboardType).toBe("numbers-and-punctuation");
+    expect(input.props.accessibilityLabel).toContain("14:30");
+  });
+
+  it.each([["h12", "default"], ["h23", "numbers-and-punctuation"]] as const)(
+    "SYSTEM with %s uses %s keyboard",
+    (hourCycle, keyboardType) => {
+      jest.spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions").mockReturnValue({
+        locale: "en-US", calendar: "gregory", numberingSystem: "latn",
+        timeZone: "UTC", hourCycle, hour12: hourCycle === "h12",
+      } as Intl.ResolvedDateTimeFormatOptions);
+      expect(renderFor("SYSTEM").props.keyboardType).toBe(keyboardType);
+    },
+  );
+
+  it.each([["2:30 pm", "2026-08-11T11:30:00.000Z"], ["12:00 am", "2026-08-10T21:00:00.000Z"]] as const)(
+    "accepts lowercase marker in %s",
+    (value, expectedIso) => {
+      const input = renderFor("H12");
+      fireEvent.changeText(screen.getByPlaceholderText("Например: Позвонить маме"), "Задача");
+      fireEvent.changeText(input, value);
+      fireEvent.press(screen.getByText("Создать"));
+      expect(mockMutate).toHaveBeenCalledWith(expect.objectContaining({ startTime: expectedIso }), expect.any(Object));
+    },
+  );
+
+  it("keeps equivalent H12 and H24 wall clocks at the same instant", () => {
+    let input = renderFor("H12");
+    fireEvent.changeText(screen.getByPlaceholderText("Например: Позвонить маме"), "H12");
+    fireEvent.changeText(input, "2:30 PM");
+    fireEvent.press(screen.getByText("Создать"));
+    const h12Iso = mockMutate.mock.calls[0][0].startTime;
+    screen.unmount();
+    jest.clearAllMocks();
+    input = renderFor("H24");
+    fireEvent.changeText(screen.getByPlaceholderText("Например: Позвонить маме"), "H24");
+    fireEvent.changeText(input, "14:30");
+    fireEvent.press(screen.getByText("Создать"));
+    expect(mockMutate.mock.calls[0][0].startTime).toBe(h12Iso);
   });
 });
