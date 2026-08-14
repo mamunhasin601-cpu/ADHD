@@ -9,11 +9,19 @@ import {
   IsHexColor,
   IsUUID,
   Matches,
+  MaxLength,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class CreateTaskDto {
   @IsString()
   title: string;
+
+  @IsOptional()
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() || null : value)
+  @IsString()
+  @MaxLength(240)
+  firstStep?: string | null;
 
   @IsOptional()
   @IsISO8601({}, { message: 'startTime должен быть в формате ISO 8601' })

@@ -77,6 +77,7 @@ model Task {
   subTasks        Task[]    @relation("SubTasks")
   completedAt     DateTime?
   startedAt       DateTime?
+  firstStep       String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 

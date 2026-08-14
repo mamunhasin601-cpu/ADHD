@@ -1,8 +1,10 @@
 const mockPush = jest.fn();
 const mockStart = jest.fn();
 const mockToggle = jest.fn();
+const mockUpdate = jest.fn();
 let mockTasks: any[] = [];
 let mockStartImplementation: (id: string) => Promise<any>;
+let mockUpdateImplementation: (input: { id: string; dto: { firstStep: string } }) => Promise<any>;
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 jest.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ refetchQueries: jest.fn() }) }));
@@ -11,6 +13,17 @@ jest.mock('../lib/api/tasks', () => {
   return {
     useTasksForDate: () => ({ data: mockTasks, isLoading: false, isError: false }),
     useCreateTask: () => ({ mutateAsync: jest.fn(), isPending: false }),
+    useUpdateTask: () => {
+      const [isPending, setPending] = React.useState(false);
+      const [, forceRender] = React.useState(0);
+      return {
+        isPending,
+        mutateAsync: async (input: { id: string; dto: { firstStep: string } }) => {
+          mockUpdate(input); setPending(true);
+          try { return await mockUpdateImplementation(input); } finally { setPending(false); forceRender((value: number) => value + 1); }
+        },
+      };
+    },
     useToggleTask: () => ({ mutate: mockToggle, isPending: false }),
     useStartTask: () => {
       const [isPending, setPending] = React.useState(false);
@@ -44,7 +57,7 @@ import TodayScreen from '../app/(tabs)/today';
 const scheduled = (id: string, startTime: string) => ({
   id, userId: 'user', title: `Задача ${id}`, startTime: new Date(startTime), durationMinutes: 30,
   color: '#6B5BFC', isRecurring: false, recurrenceRule: null, parentTaskId: null,
-  completedAt: null, startedAt: null, createdAt: new Date(), updatedAt: new Date(),
+  completedAt: null, startedAt: null, firstStep: null, createdAt: new Date(), updatedAt: new Date(),
 });
 
 describe('Today explicit task start', () => {
@@ -54,6 +67,10 @@ describe('Today explicit task start', () => {
     jest.clearAllMocks(); mockTasks = [scheduled('current', '2026-08-14T10:00:00Z')];
     mockStartImplementation = async (id) => {
       const server = { ...mockTasks.find((task) => task.id === id), startedAt: new Date('2026-08-14T10:16:27.456Z') };
+      mockTasks = mockTasks.map((task) => task.id === id ? server : task); return server;
+    };
+    mockUpdateImplementation = async ({ id, dto }) => {
+      const server = { ...mockTasks.find((task) => task.id === id), firstStep: dto.firstStep };
       mockTasks = mockTasks.map((task) => task.id === id ? server : task); return server;
     };
   });
@@ -103,5 +120,60 @@ describe('Today explicit task start', () => {
     await act(async () => { fireEvent.press(screen.getByText('Начать')); }); expect(screen.getByRole('alert')).toBeTruthy();
     fireEvent.press(screen.getByText('›'));
     expect(screen.queryByText('Начать')).toBeNull(); expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('saves a canonical first step from Today without starting, then closes on canonical start', async () => {
+    mockUpdateImplementation = async ({ id }) => {
+      const server = { ...mockTasks[0], id, firstStep: 'Канонический шаг Today' };
+      mockTasks = [server]; return server;
+    };
+    render(<TodayScreen />);
+    fireEvent.press(screen.getByText('Мне трудно начать'));
+    expect(mockUpdate).not.toHaveBeenCalled(); expect(mockStart).not.toHaveBeenCalled();
+    fireEvent.changeText(screen.getByLabelText('Первый маленький шаг'), 'Черновик Today');
+    await act(async () => fireEvent.press(screen.getByText('Сохранить маленький шаг')));
+    expect(mockUpdate).toHaveBeenCalledWith({ id: 'current', dto: { firstStep: 'Черновик Today' } });
+    expect(screen.getByText('Канонический шаг Today')).toBeTruthy();
+    expect(mockStart).not.toHaveBeenCalled();
+    await act(async () => fireEvent.press(screen.getByText('Начать с этого шага')));
+    expect(mockStart).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Начать с малого')).toBeNull();
+    expect(screen.getByText('Начато')).toBeTruthy();
+  });
+
+  it('retains Today save failure for retry and guards rapid duplicate saves', async () => {
+    let reject!: (error: Error) => void;
+    mockUpdateImplementation = () => new Promise((_resolve, fail) => { reject = fail; });
+    render(<TodayScreen />); fireEvent.press(screen.getByText('Мне трудно начать'));
+    fireEvent.changeText(screen.getByLabelText('Первый маленький шаг'), 'Черновик retry');
+    const save = screen.getByText('Сохранить маленький шаг'); fireEvent.press(save); fireEvent.press(save);
+    expect(mockUpdate).toHaveBeenCalledTimes(1); expect(screen.getByText('Сохраняю…')).toBeDisabled();
+    await act(async () => reject(new Error('offline')));
+    expect(screen.getByRole('alert')).toHaveTextContent(/Не удалось сохранить шаг/);
+    expect(screen.getByDisplayValue('Черновик retry')).toBeTruthy();
+    mockUpdateImplementation = async ({ id }) => { const server = { ...mockTasks[0], id, firstStep: 'Retry canonical' }; mockTasks = [server]; return server; };
+    await act(async () => fireEvent.press(screen.getByText('Сохранить маленький шаг')));
+    expect(mockUpdate).toHaveBeenCalledTimes(2); expect(screen.getByText('Retry canonical')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull(); expect(mockStart).not.toHaveBeenCalled();
+  });
+
+  it('keeps start failure retryable, guards rapid modal start, and scopes support by date', async () => {
+    mockTasks = [{ ...mockTasks[0], firstStep: 'Сохранённый шаг' }];
+    let reject!: (error: Error) => void;
+    mockStartImplementation = () => new Promise((_resolve, fail) => { reject = fail; });
+    render(<TodayScreen />); fireEvent.press(screen.getByText('Мне трудно начать'));
+    const start = screen.getByText('Начать с этого шага'); fireEvent.press(start); fireEvent.press(start);
+    expect(mockStart).toHaveBeenCalledTimes(1); expect(screen.getByRole('button', { name: 'Начать с маленького шага задачу Задача current' })).toBeDisabled();
+    await act(async () => reject(new Error('offline')));
+    expect(screen.getByText('Сохранённый шаг')).toBeTruthy(); expect(screen.getByRole('alert')).toBeTruthy();
+    fireEvent.press(screen.getByText('›'));
+    expect(screen.queryByText('Начать с малого')).toBeNull(); expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.press(screen.getByText('‹'));
+    expect(screen.getByText('Мне трудно начать')).toBeTruthy();
+    fireEvent.press(screen.getByText('Мне трудно начать'));
+    expect(screen.getByText('Сохранённый шаг')).toBeTruthy();
+    mockStartImplementation = async () => { const server = { ...mockTasks[0], startedAt: new Date('2026-08-14T10:30:00Z') }; mockTasks = [server]; return server; };
+    await act(async () => fireEvent.press(screen.getByText('Начать с этого шага')));
+    expect(mockStart).toHaveBeenCalledTimes(2); expect(screen.getByText('Начато')).toBeTruthy();
   });
 });

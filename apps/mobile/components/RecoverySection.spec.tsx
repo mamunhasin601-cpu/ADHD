@@ -60,7 +60,7 @@ function makeTask(id: string, title: string) {
     title,
     startTime: new Date('2026-08-03T09:00:00.000Z'),
     completedAt: null,
-  startedAt: null,
+  startedAt: null, firstStep: null,
     isRecurring: false,
     parentTaskId: null,
     durationMinutes: 30,
