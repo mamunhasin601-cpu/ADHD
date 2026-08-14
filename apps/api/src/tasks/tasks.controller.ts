@@ -89,6 +89,16 @@ export class TasksController {
     return this.tasksService.update(user.id, id, dto);
   }
 
+  /** PATCH /tasks/:id/start */
+  @Patch(':id/start')
+  @HttpCode(HttpStatus.OK)
+  start(
+    @CurrentUser() user: User,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.tasksService.start(user.id, id);
+  }
+
   /** PATCH /tasks/:id/toggle — быстрое переключение completed */
   @Patch(':id/toggle')
   @HttpCode(HttpStatus.OK)

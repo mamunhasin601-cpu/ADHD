@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, ConflictException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PlanService } from '../plan/plan.service';
@@ -140,6 +140,25 @@ export class TasksService {
     await this.safeCancelReminder(taskId);
   }
 
+  /** Atomically records the first explicit start; concurrent retries cannot replace it. */
+  async start(userId: string, taskId: string): Promise<Task> {
+    const existing = await this.findOne(userId, taskId);
+    if (existing.completedAt) {
+      throw new ConflictException('Завершённую задачу нельзя начать');
+    }
+
+    await this.prisma.task.updateMany({
+      where: { id: taskId, userId, startedAt: null, completedAt: null },
+      data: { startedAt: new Date() },
+    });
+    const task = await this.findOne(userId, taskId);
+    if (task.completedAt && !task.startedAt) {
+      throw new ConflictException('Завершённую задачу нельзя начать');
+    }
+    await this.safeCancelReminder(taskId);
+    return task;
+  }
+
   /** Отметить задачу как выполненную / невыполненную */
   async toggleComplete(userId: string, taskId: string): Promise<Task> {
     const task = await this.findOne(userId, taskId);
@@ -171,7 +190,7 @@ export class TasksService {
    */
   private async syncReminder(task: Task): Promise<void> {
     try {
-      if (task.completedAt || !task.startTime) {
+      if (task.completedAt || task.startedAt || !task.startTime) {
         await this.notifications.cancelTaskReminder(task.id);
       } else {
         await this.notifications.scheduleTaskReminder(task);

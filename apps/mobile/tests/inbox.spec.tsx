@@ -45,6 +45,7 @@ const baseTask = {
   title: 'Задача без времени',
   startTime: null,
   completedAt: null,
+  startedAt: null,
   isRecurring: false,
   parentTaskId: null,
   durationMinutes: 30,

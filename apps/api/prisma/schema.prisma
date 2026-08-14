@@ -76,6 +76,7 @@ model Task {
   parentTask      Task?     @relation("SubTasks", fields: [parentTaskId], references: [id])
   subTasks        Task[]    @relation("SubTasks")
   completedAt     DateTime?
+  startedAt       DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 

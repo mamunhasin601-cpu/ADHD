@@ -13,6 +13,7 @@ describe('TasksService — синхронизация напоминаний', (
       task: {
         create: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
         delete: jest.fn(),
         findUnique: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
@@ -115,6 +116,42 @@ describe('TasksService — синхронизация напоминаний', (
 
     const result = await service.create(userId, { title: 'Тест' } as any);
     expect(result).toEqual(task); // create не бросило исключение, задача уже сохранена в БД
+  });
+
+  it('start(): atomically preserves the first server timestamp and cancels its reminder', async () => {
+    const original = { id: 'started', userId, startTime: new Date('2026-08-14T10:00:00Z'), durationMinutes: 45, isRecurring: true, recurrenceRule: 'FREQ=DAILY', completedAt: null, startedAt: null };
+    let stored = original;
+    prisma.task.findUnique.mockImplementation(() => Promise.resolve(stored));
+    prisma.task.updateMany.mockImplementation(({ where, data }: any) => {
+      if (stored.startedAt === where.startedAt && stored.completedAt === null) stored = { ...stored, ...data };
+      return Promise.resolve({ count: 1 });
+    });
+
+    const first = await service.start(userId, original.id);
+    const second = await service.start(userId, original.id);
+
+    expect(first.startedAt).toBeInstanceOf(Date);
+    expect(second.startedAt).toBe(first.startedAt);
+    expect(prisma.task.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: original.id, userId, startedAt: null, completedAt: null },
+    }));
+    expect(second).toMatchObject({ startTime: original.startTime, durationMinutes: 45, recurrenceRule: 'FREQ=DAILY', completedAt: null });
+    expect(notifications.cancelTaskReminder).toHaveBeenCalledWith(original.id);
+  });
+
+  it('start(): rejects a completed task without writing', async () => {
+    prisma.task.findUnique.mockResolvedValue({ id: 'done', userId, completedAt: new Date(), startedAt: null });
+    await expect(service.start(userId, 'done')).rejects.toMatchObject({ status: 409 });
+    expect(prisma.task.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('update(): never reschedules a reminder for a previously started task', async () => {
+    const started = { id: 's', userId, startTime: new Date(), completedAt: null, startedAt: new Date() };
+    prisma.task.findUnique.mockResolvedValue(started);
+    prisma.task.update.mockResolvedValue(started);
+    await service.update(userId, started.id, { title: 'Edited' });
+    expect(notifications.cancelTaskReminder).toHaveBeenCalledWith(started.id);
+    expect(notifications.scheduleTaskReminder).not.toHaveBeenCalled();
   });
 });
 

@@ -4,7 +4,8 @@ import { computeTimelineLayout, UNKNOWN_DURATION_LAYOUT_MINUTES } from './timeli
 const task = (id: string, start: string, durationMinutes: number | null): Task => ({
   id, userId: 'u', title: id, startTime: new Date(start), durationMinutes,
   color: '#6B5BFC', isRecurring: false, recurrenceRule: null, parentTaskId: null,
-  completedAt: null, createdAt: new Date(), updatedAt: new Date(),
+  completedAt: null,
+  startedAt: null, createdAt: new Date(), updatedAt: new Date(),
 });
 
 it('uses a documented visual-only interval for unknown duration without mutation', () => {

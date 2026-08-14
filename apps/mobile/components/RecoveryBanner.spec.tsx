@@ -62,6 +62,7 @@ const makeTask = (id: string, title = `Задача ${id}`) => ({
   title,
   startTime: new Date("2026-08-03T10:00:00.000Z"),
   completedAt: null,
+  startedAt: null,
   isRecurring: false,
   parentTaskId: null,
   durationMinutes: 30,
