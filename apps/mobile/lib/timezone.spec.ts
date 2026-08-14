@@ -330,7 +330,7 @@ describe('pickerTimeToLocalFields', () => {
     const instant = localDateTimeToInstant(dateStr, hours, minutes, 'America/New_York');
     expect(instant.toISOString()).toBe('2026-08-05T13:00:00.000Z');
     // Preview in New York shows 09:00
-    const label = formatDestinationLabel(instant, 'America/New_York');
+    const label = formatDestinationLabel(instant, 'America/New_York', 'H24');
     expect(label).toContain('09');
   });
 
@@ -347,7 +347,7 @@ describe('pickerTimeToLocalFields', () => {
     const { hours, minutes } = pickerTimeToLocalFields(mockDate);
     const instant = localDateTimeToInstant(dateStr, hours, minutes, 'Asia/Tokyo');
     expect(instant.toISOString()).toBe('2026-08-04T14:00:00.000Z');
-    const label = formatDestinationLabel(instant, 'Asia/Tokyo');
+    const label = formatDestinationLabel(instant, 'Asia/Tokyo', 'H24');
     expect(label).toContain('23');
   });
 

@@ -19,6 +19,7 @@ import {
   toCanonicalDateParam,
 } from '../lib/timezone';
 import type { User } from '@focus/shared-types';
+import { formatWallClock, parseClockInput, uses12HourClock } from '../lib/time-format';
 
 /**
  * 5-minute start onboarding.
@@ -31,6 +32,8 @@ import type { User } from '@focus/shared-types';
 export default function OnboardingScreen() {
   const setUser = useAuthStore((s) => s.setUser);
   const profileTimezone = useAuthStore((s) => s.user?.timezone);
+  const timeFormat = useAuthStore((s) => s.user?.timeFormat ?? 'SYSTEM');
+  const uses12Hour = uses12HourClock(timeFormat);
   const [step, setStep] = useState(1);
   const [taskTitle, setTaskTitle] = useState('');
   const [taskTime, setTaskTime] = useState('');
@@ -58,7 +61,9 @@ export default function OnboardingScreen() {
     let startTime: Date | null = null;
 
     if (taskTime) {
-      const [hours, minutes] = taskTime.split(':').map(Number);
+      const parsed = parseClockInput(taskTime, timeFormat);
+      if (!parsed) { Alert.alert('Проверьте время', uses12Hour ? 'Введите время в формате 2:30 PM' : 'Введите время в формате 14:30'); return; }
+      const { hours, minutes } = parsed;
       if (profileTimezone && isValidIANATimezone(profileTimezone)) {
         startTime = localDateTimeToInstant(
           toCanonicalDateParam(now, profileTimezone),
@@ -132,12 +137,17 @@ export default function OnboardingScreen() {
 
             <Text style={styles.label}>Во сколько? (опционально)</Text>
             <TextInput
+              testID="onboarding-time-input"
               style={styles.input}
-              placeholder="14:00"
+              accessibilityLabel={uses12Hour ? 'Время задачи, формат: например, 2:30 PM' : 'Время задачи, формат: например, 14:30'}
+              accessibilityHint={uses12Hour ? 'Введите часы и минуты, затем AM или PM' : 'Введите часы и минуты в 24-часовом формате'}
+              placeholder={formatWallClock(14, 0, timeFormat)}
               placeholderTextColor="#9CA3AF"
               value={taskTime}
               onChangeText={setTaskTime}
-              keyboardType="numbers-and-punctuation"
+              keyboardType={uses12Hour ? 'default' : 'numbers-and-punctuation'}
+              autoCorrect={false}
+              autoCapitalize={uses12Hour ? 'characters' : 'none'}
             />
 
             <Text style={styles.hint}>
@@ -180,7 +190,7 @@ export default function OnboardingScreen() {
               <View style={styles.featureText}>
                 <Text style={styles.featureTitle}>Таймлайн</Text>
                 <Text style={styles.featureDescription}>
-                  Все задачи на день с 6:00 до 24:00
+                  Все задачи на день с {formatWallClock(6, 0, timeFormat)} до {formatWallClock(0, 0, timeFormat)}
                 </Text>
               </View>
             </View>

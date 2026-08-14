@@ -32,6 +32,7 @@ import {
 } from '../../lib/timezone';
 import { isFreeTierLimitError } from '../../lib/api-error';
 import type { Task } from '@focus/shared-types';
+import { formatClockTime } from '../../lib/time-format';
 import { findCurrentTask } from '../../lib/current-task';
 import {
   TASK_DURATION_PRESETS,
@@ -52,6 +53,7 @@ export default function TodayScreen() {
   // invalid if the stored value is corrupt. Never substituted with UTC for
   // Recovery — RecoverySection owns that guard (Task 0006C/0007A).
   const profileTimezone = useAuthStore((s) => s.user?.timezone);
+  const timeFormat = useAuthStore((s) => s.user?.timeFormat ?? 'SYSTEM');
 
   // isToday for the non-Recovery parts of Today (progress ring, Now/Next,
   // timeline autoscroll). Both sides go through the canonical date helper, so
@@ -396,10 +398,7 @@ export default function TodayScreen() {
             />
             <Text style={styles.timeHint}>
               {quickAddTime
-                ? `Выбранное время: ${quickAddTime.toLocaleTimeString('ru-RU', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}`
+                ? `Выбранное время: ${formatClockTime(quickAddTime, timeFormat)}`
                 : 'Без времени — запись сохранится в «Мысли»'}
             </Text>
             <Text style={styles.durationLabel}>Примерная длительность</Text>
@@ -464,7 +463,7 @@ export default function TodayScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={
                   quickAddTime
-                    ? `Добавить задачу на ${quickAddTime.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`
+                    ? `Добавить задачу на ${formatClockTime(quickAddTime, timeFormat)}`
                     : 'Сохранить задачу в Мысли'
                 }
                 accessibilityState={{ disabled: !title.trim() || createTask.isPending }}
@@ -472,7 +471,7 @@ export default function TodayScreen() {
               >
                 <Text style={styles.modalSubmitText}>
                   {quickAddTime
-                    ? `Добавить на ${quickAddTime.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`
+                    ? `Добавить на ${formatClockTime(quickAddTime, timeFormat)}`
                     : 'Сохранить в Мысли'}
                 </Text>
               </Pressable>

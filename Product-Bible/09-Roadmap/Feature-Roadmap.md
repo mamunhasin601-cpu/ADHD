@@ -70,6 +70,12 @@ Phase 1 реализует минимальное ядро из [PDR-001](../12-
    [PDR-001](../12-Decisions/PDR-001-Timeline-Centered-Day-Experience.md) и
    [Future Screen Map](../05-Experience/Future-Screen-Map.md).
 
+5. **Task 0016 — user-controlled time format — completed.** Профиль хранит
+   независимое предпочтение `SYSTEM | H24 | H12`; настройка применяется через
+   единый presentation-only контракт ко всем существующим мобильным clock-time
+   поверхностям, не меняя timezone, timestamps, границы дня или scheduling.
+   Реализация следует [PDR-002](../12-Decisions/PDR-002-User-Controlled-Time-Format.md).
+
 Остальные capability Phase 1 остаются на горизонте, но их точный порядок пока
 не принят. Контекстный помощник, overload mode и focus session относятся к
 следующему расширению опыта; AI-декомпозиция, energy-aware suggestions и

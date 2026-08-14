@@ -25,6 +25,7 @@ const user: User = {
   email: 'user@example.com',
   phone: null,
   timezone: 'Europe/Moscow',
+    timeFormat: 'SYSTEM',
   hasCompletedOnboarding: true,
   plan: 'FREE',
   proExpiresAt: null,

@@ -19,6 +19,12 @@ enum Plan {
   PRO
 }
 
+enum TimeFormat {
+  SYSTEM
+  H24
+  H12
+}
+
 // ──────────────────────────────────────────────
 // User
 // ──────────────────────────────────────────────
@@ -29,6 +35,7 @@ model User {
   phone                   String?  @unique
   passwordHash            String
   timezone                String   @default("Europe/Moscow")
+  timeFormat              TimeFormat @default(SYSTEM)
   hasCompletedOnboarding  Boolean  @default(false)
   plan   Plan     @default(FREE)
   proExpiresAt            DateTime? // null = навсегда (если Pro) или не Pro

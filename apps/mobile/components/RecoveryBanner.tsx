@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,12 +8,12 @@ import {
   ScrollView,
   ActivityIndicator,
   Platform,
-} from 'react-native';
+} from "react-native";
 import DateTimePicker, {
   type DateTimePickerEvent,
-} from '@react-native-community/datetimepicker';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import type { Task } from '@focus/shared-types';
+} from "@react-native-community/datetimepicker";
+import { SafeAreaView } from "react-native-safe-area-context";
+import type { Task } from "@focus/shared-types";
 import {
   pickerDateToLocalString,
   pickerTimeToLocalFields,
@@ -24,7 +24,9 @@ import {
   todayLocalDateString,
   isAfterReference,
   formatDestinationLabel,
-} from '../lib/timezone';
+} from "../lib/timezone";
+import { useAuthStore } from "../stores/auth.store";
+import { formatWallClock, uses12HourClock } from "../lib/time-format";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -36,7 +38,7 @@ import {
  * ISO string → targetStartTime: future UTC instant interpreted in profile tz
  * 'today' alias is intentionally absent. No silent default.
  */
-export type RecoveryDestination = 'inbox' | string;
+export type RecoveryDestination = "inbox" | string;
 
 export interface RecoveryItemSelection {
   taskId: string;
@@ -55,8 +57,8 @@ interface Props {
 }
 
 type PickerState =
-  | { taskId: string; phase: 'date' }
-  | { taskId: string; phase: 'time'; dateStr: string };
+  | { taskId: string; phase: "date" }
+  | { taskId: string; phase: "time"; dateStr: string };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Component
@@ -69,9 +71,14 @@ export function RecoveryBanner({
   isConfirming = false,
   mutationError = null,
 }: Props) {
+  const timeFormat = useAuthStore(
+    (state) => state.user?.timeFormat ?? "SYSTEM",
+  );
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [destinations, setDestinations] = useState<Record<string, RecoveryDestination | null>>({});
+  const [destinations, setDestinations] = useState<
+    Record<string, RecoveryDestination | null>
+  >({});
   // DST error per task: taskId → error message if nonexistent wall-clock time
   const [dstErrors, setDstErrors] = useState<Record<string, string | null>>({});
   const [pickerState, setPickerState] = useState<PickerState | null>(null);
@@ -105,8 +112,16 @@ export function RecoveryBanner({
       const next = new Set(prev);
       if (next.has(taskId)) {
         next.delete(taskId);
-        setDestinations((d) => { const c = { ...d }; delete c[taskId]; return c; });
-        setDstErrors((e) => { const c = { ...e }; delete c[taskId]; return c; });
+        setDestinations((d) => {
+          const c = { ...d };
+          delete c[taskId];
+          return c;
+        });
+        setDstErrors((e) => {
+          const c = { ...e };
+          delete c[taskId];
+          return c;
+        });
       } else {
         next.add(taskId);
       }
@@ -119,43 +134,48 @@ export function RecoveryBanner({
   const setInbox = useCallback((taskId: string) => {
     setPickerState(null);
     setDstErrors((prev) => ({ ...prev, [taskId]: null }));
-    setDestinations((prev) => ({ ...prev, [taskId]: 'inbox' }));
+    setDestinations((prev) => ({ ...prev, [taskId]: "inbox" }));
   }, []);
 
   const openDatePicker = useCallback((taskId: string) => {
     setDstErrors((prev) => ({ ...prev, [taskId]: null }));
-    setPickerState({ taskId, phase: 'date' });
+    setPickerState({ taskId, phase: "date" });
   }, []);
 
   // ── Picker handlers ───────────────────────────────────────────────────────
 
   const handleDatePickerChange = useCallback(
     (_event: DateTimePickerEvent, date?: Date) => {
-      if (!pickerState || pickerState.phase !== 'date') return;
+      if (!pickerState || pickerState.phase !== "date") return;
       const taskId = pickerState.taskId;
-      if (_event.type === 'dismissed' || !date) {
+      if (_event.type === "dismissed" || !date) {
         setPickerState(null);
         return;
       }
       // Read device-local calendar fields — exactly what the user saw on the picker.
       const dateStr = pickerDateToLocalString(date);
-      setPickerState({ taskId, phase: 'time', dateStr });
+      setPickerState({ taskId, phase: "time", dateStr });
     },
     [pickerState],
   );
 
   const handleTimePickerChange = useCallback(
     (_event: DateTimePickerEvent, date?: Date) => {
-      if (!pickerState || pickerState.phase !== 'time') return;
+      if (!pickerState || pickerState.phase !== "time") return;
       const { taskId, dateStr } = pickerState;
-      if (_event.type === 'dismissed' || !date) {
+      if (_event.type === "dismissed" || !date) {
         setPickerState(null);
         return;
       }
       // Read device-local clock fields — exactly what the user saw on the picker.
       // Interpret those same fields in the profile timezone (not device tz).
       const { hours, minutes } = pickerTimeToLocalFields(date);
-      const validation = validateWallClock(dateStr, hours, minutes, userTimezone);
+      const validation = validateWallClock(
+        dateStr,
+        hours,
+        minutes,
+        userTimezone,
+      );
 
       setPickerState(null);
 
@@ -164,7 +184,7 @@ export function RecoveryBanner({
         setDstErrors((prev) => ({
           ...prev,
           [taskId]:
-            `${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')} ` +
+            `${formatWallClock(hours, minutes, timeFormat)} ` +
             `не существует в этот день (переход на летнее время). ` +
             `Выберите другое время.`,
         }));
@@ -173,7 +193,10 @@ export function RecoveryBanner({
       }
 
       setDstErrors((prev) => ({ ...prev, [taskId]: null }));
-      setDestinations((prev) => ({ ...prev, [taskId]: validation.instant.toISOString() }));
+      setDestinations((prev) => ({
+        ...prev,
+        [taskId]: validation.instant.toISOString(),
+      }));
     },
     [pickerState, userTimezone],
   );
@@ -182,17 +205,22 @@ export function RecoveryBanner({
 
   const now = new Date();
 
-  function isValidDestination(dest: RecoveryDestination | null | undefined, taskId: string): boolean {
+  function isValidDestination(
+    dest: RecoveryDestination | null | undefined,
+    taskId: string,
+  ): boolean {
     if (dstErrors[taskId]) return false;
     if (!dest) return false;
-    if (dest === 'inbox') return true;
+    if (dest === "inbox") return true;
     const d = new Date(dest);
     return !isNaN(d.getTime()) && isAfterReference(d, now);
   }
 
   const allValid =
     selectedIds.size > 0 &&
-    Array.from(selectedIds).every((id) => isValidDestination(destinations[id], id));
+    Array.from(selectedIds).every((id) =>
+      isValidDestination(destinations[id], id),
+    );
 
   const canConfirm = allValid && !isConfirming;
 
@@ -211,11 +239,15 @@ export function RecoveryBanner({
   // ── Display helpers ───────────────────────────────────────────────────────
 
   function formatOverdueDate(startTime: Date | string | null): string {
-    if (!startTime || !timezoneValid) return '';
+    if (!startTime || !timezoneValid) return "";
     try {
-      return formatDestinationLabel(new Date(startTime), userTimezone);
+      return formatDestinationLabel(
+        new Date(startTime),
+        userTimezone,
+        timeFormat,
+      );
     } catch {
-      return '';
+      return "";
     }
   }
 
@@ -225,26 +257,32 @@ export function RecoveryBanner({
   ): { text: string; warn: boolean } {
     const dstErr = dstErrors[taskId];
     if (dstErr) return { text: dstErr, warn: true };
-    if (!dest) return { text: 'Выберите, куда перенести', warn: false };
-    if (dest === 'inbox') return { text: '→ В «Мысли»', warn: false };
+    if (!dest) return { text: "Выберите, куда перенести", warn: false };
+    if (dest === "inbox") return { text: "→ В «Мысли»", warn: false };
     try {
       const d = new Date(dest);
-      if (isNaN(d.getTime())) return { text: 'Недопустимое время', warn: true };
+      if (isNaN(d.getTime())) return { text: "Недопустимое время", warn: true };
       if (!isAfterReference(d, now)) {
-        return { text: `→ ${formatDestinationLabel(d, userTimezone)} (уже прошло)`, warn: true };
+        return {
+          text: `→ ${formatDestinationLabel(d, userTimezone, timeFormat)} (уже прошло)`,
+          warn: true,
+        };
       }
-      return { text: `→ ${formatDestinationLabel(d, userTimezone)}`, warn: false };
+      return {
+        text: `→ ${formatDestinationLabel(d, userTimezone, timeFormat)}`,
+        warn: false,
+      };
     } catch {
-      return { text: 'Ошибка формата времени', warn: true };
+      return { text: "Ошибка формата времени", warn: true };
     }
   }
 
-  const todayStr = timezoneValid ? todayLocalDateString(userTimezone) : '';
+  const todayStr = timezoneValid ? todayLocalDateString(userTimezone) : "";
   const minimumPickerDate = todayStr
     ? new Date(Date.parse(`${todayStr}T00:00:00Z`))
     : new Date();
   const pickerDateInitial = new Date(
-    Date.parse(`${addCalendarDays(todayStr || '2000-01-01', 0)}T12:00:00Z`),
+    Date.parse(`${addCalendarDays(todayStr || "2000-01-01", 0)}T12:00:00Z`),
   );
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -267,7 +305,7 @@ export function RecoveryBanner({
           <View style={styles.bannerTextCol}>
             <Text style={styles.bannerTitle}>
               {overdueTasks.length === 1
-                ? '1 незавершённая задача'
+                ? "1 незавершённая задача"
                 : `${overdueTasks.length} незавершённых задачи`}
             </Text>
             <Text style={styles.bannerSubtitle}>
@@ -289,13 +327,12 @@ export function RecoveryBanner({
       >
         <SafeAreaView style={styles.overlay}>
           <View style={styles.sheet}>
-
             {/* Invalid timezone — neutral retryable error */}
             {!timezoneValid ? (
               <View style={styles.timezoneError} testID="timezone-error-state">
                 <Text style={styles.timezoneErrorText}>
-                  Не удалось определить ваш часовой пояс.
-                  Обновите приложение или проверьте настройки профиля.
+                  Не удалось определить ваш часовой пояс. Обновите приложение
+                  или проверьте настройки профиля.
                 </Text>
                 <Pressable
                   testID="timezone-error-close"
@@ -313,8 +350,8 @@ export function RecoveryBanner({
                 <View style={styles.sheetHeader}>
                   <Text style={styles.sheetTitle}>Незавершённые задачи</Text>
                   <Text style={styles.sheetSubtitle}>
-                    Выберите задачи и куда их перенести.
-                    Неотмеченные задачи останутся без изменений.
+                    Выберите задачи и куда их перенести. Неотмеченные задачи
+                    останутся без изменений.
                   </Text>
                 </View>
 
@@ -330,23 +367,35 @@ export function RecoveryBanner({
                     const pickerOpenForThis = pickerState?.taskId === task.id;
 
                     return (
-                      <View key={task.id} style={styles.taskRow} testID={`task-row-${task.id}`}>
+                      <View
+                        key={task.id}
+                        style={styles.taskRow}
+                        testID={`task-row-${task.id}`}
+                      >
                         <Pressable
                           testID={`checkbox-${task.id}`}
-                          style={[styles.checkbox, isSelected && styles.checkboxChecked]}
+                          style={[
+                            styles.checkbox,
+                            isSelected && styles.checkboxChecked,
+                          ]}
                           onPress={() => toggleTask(task.id)}
                           accessible
                           accessibilityRole="checkbox"
                           accessibilityState={{ checked: isSelected }}
                           accessibilityLabel={`Выбрать задачу: ${task.title}`}
                         >
-                          {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                          {isSelected && (
+                            <Text style={styles.checkmark}>✓</Text>
+                          )}
                         </Pressable>
 
                         <View style={styles.taskInfo}>
                           <Text
                             testID={`task-title-${task.id}`}
-                            style={[styles.taskTitle, !isSelected && styles.taskTitleUnselected]}
+                            style={[
+                              styles.taskTitle,
+                              !isSelected && styles.taskTitleUnselected,
+                            ]}
                             numberOfLines={2}
                           >
                             {task.title}
@@ -356,19 +405,35 @@ export function RecoveryBanner({
                           </Text>
 
                           {isSelected && (
-                            <View style={styles.destinationArea} testID={`dest-area-${task.id}`}>
-                              <Text style={styles.destinationLabel}>Перенести:</Text>
+                            <View
+                              style={styles.destinationArea}
+                              testID={`dest-area-${task.id}`}
+                            >
+                              <Text style={styles.destinationLabel}>
+                                Перенести:
+                              </Text>
                               <View style={styles.destinationButtons}>
                                 <Pressable
                                   testID={`inbox-btn-${task.id}`}
-                                  style={[styles.destButton, dest === 'inbox' && styles.destButtonActive]}
+                                  style={[
+                                    styles.destButton,
+                                    dest === "inbox" && styles.destButtonActive,
+                                  ]}
                                   onPress={() => setInbox(task.id)}
                                   accessible
                                   accessibilityRole="button"
-                                  accessibilityState={{ selected: dest === 'inbox' }}
+                                  accessibilityState={{
+                                    selected: dest === "inbox",
+                                  }}
                                   accessibilityLabel="Переместить в раздел Мысли"
                                 >
-                                  <Text style={[styles.destButtonText, dest === 'inbox' && styles.destButtonTextActive]}>
+                                  <Text
+                                    style={[
+                                      styles.destButtonText,
+                                      dest === "inbox" &&
+                                        styles.destButtonTextActive,
+                                    ]}
+                                  >
                                     В «Мысли»
                                   </Text>
                                 </Pressable>
@@ -423,6 +488,7 @@ export function RecoveryBanner({
                               )}
                               {pickerOpenForThis && pickerState?.phase === 'time' && (
                                 <DateTimePicker
+                                  is24Hour={!uses12HourClock(timeFormat)}
                                   testID={`time-picker-${task.id}`}
                                   value={pickerDateInitial}
                                   mode="time"
@@ -439,7 +505,10 @@ export function RecoveryBanner({
                 </ScrollView>
 
                 {mutationError && (
-                  <View testID="mutation-error-banner" style={styles.errorBanner}>
+                  <View
+                    testID="mutation-error-banner"
+                    style={styles.errorBanner}
+                  >
                     <Text style={styles.errorText}>{mutationError}</Text>
                   </View>
                 )}
@@ -497,92 +566,179 @@ export function RecoveryBanner({
 
 const styles = StyleSheet.create({
   banner: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginHorizontal: 20, marginVertical: 8, paddingHorizontal: 16, paddingVertical: 14,
-    minHeight: 56, backgroundColor: '#FFF7ED', borderRadius: 10,
-    borderWidth: 1, borderColor: '#FED7AA',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginHorizontal: 20,
+    marginVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 56,
+    backgroundColor: "#FFF7ED",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#FED7AA",
   },
-  bannerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  bannerLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
   bannerTextCol: { flex: 1 },
-  bannerIcon: { fontSize: 20, color: '#EA580C' },
-  bannerTitle: { fontSize: 14, fontWeight: '600', color: '#9A3412' },
-  bannerSubtitle: { fontSize: 12, color: '#C2410C', marginTop: 2 },
-  bannerChevron: { fontSize: 22, color: '#EA580C', fontWeight: '600' },
+  bannerIcon: { fontSize: 20, color: "#EA580C" },
+  bannerTitle: { fontSize: 14, fontWeight: "600", color: "#9A3412" },
+  bannerSubtitle: { fontSize: 12, color: "#C2410C", marginTop: 2 },
+  bannerChevron: { fontSize: 22, color: "#EA580C", fontWeight: "600" },
 
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
   sheet: {
-    backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    paddingTop: 20, paddingBottom: 8, maxHeight: '90%',
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 20,
+    paddingBottom: 8,
+    maxHeight: "90%",
   },
   sheetHeader: { paddingHorizontal: 24, marginBottom: 16 },
-  sheetTitle: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 6 },
-  sheetSubtitle: { fontSize: 13, color: '#6B7280', lineHeight: 18 },
+  sheetTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 6,
+  },
+  sheetSubtitle: { fontSize: 13, color: "#6B7280", lineHeight: 18 },
 
   timezoneError: {
-    padding: 24, alignItems: 'center',
+    padding: 24,
+    alignItems: "center",
   },
   timezoneErrorText: {
-    fontSize: 14, color: '#374151', textAlign: 'center', lineHeight: 20, marginBottom: 16,
+    fontSize: 14,
+    color: "#374151",
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 16,
   },
   timezoneErrorClose: {
-    paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#F3F4F6', borderRadius: 8,
-    minHeight: 44, justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: "#F3F4F6",
+    borderRadius: 8,
+    minHeight: 44,
+    justifyContent: "center",
   },
-  timezoneErrorCloseText: { fontSize: 15, color: '#374151', fontWeight: '600' },
+  timezoneErrorCloseText: { fontSize: 15, color: "#374151", fontWeight: "600" },
 
-  taskList: { flexGrow: 0, maxHeight: '55%' },
+  taskList: { flexGrow: 0, maxHeight: "55%" },
   taskListContent: { paddingHorizontal: 24, paddingBottom: 8 },
   taskRow: {
-    flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: '#F3F4F6', gap: 12,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+    gap: 12,
   },
   checkbox: {
-    width: 44, height: 44, borderRadius: 8, borderWidth: 2, borderColor: '#D1D5DB',
-    backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: "#D1D5DB",
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
-  checkboxChecked: { backgroundColor: '#6B5BFC', borderColor: '#6B5BFC' },
-  checkmark: { color: '#FFFFFF', fontSize: 18, fontWeight: '700', lineHeight: 22 },
+  checkboxChecked: { backgroundColor: "#6B5BFC", borderColor: "#6B5BFC" },
+  checkmark: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "700",
+    lineHeight: 22,
+  },
 
   taskInfo: { flex: 1 },
-  taskTitle: { fontSize: 15, fontWeight: '500', color: '#111827', lineHeight: 20 },
-  taskTitleUnselected: { color: '#6B7280' },
-  taskDate: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
+  taskTitle: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#111827",
+    lineHeight: 20,
+  },
+  taskTitleUnselected: { color: "#6B7280" },
+  taskDate: { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
 
   destinationArea: { marginTop: 10 },
-  destinationLabel: { fontSize: 12, color: '#374151', fontWeight: '500', marginBottom: 8 },
-  destinationButtons: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
-  destButton: {
-    minHeight: 44, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10,
-    backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB',
-    alignItems: 'center', justifyContent: 'center',
+  destinationLabel: {
+    fontSize: 12,
+    color: "#374151",
+    fontWeight: "500",
+    marginBottom: 8,
   },
-  destButtonActive: { backgroundColor: '#EDE9FE', borderColor: '#6B5BFC' },
-  destButtonPicking: { backgroundColor: '#F5F3FF', borderColor: '#8B5CF6' },
-  destButtonText: { fontSize: 14, color: '#374151', fontWeight: '500' },
-  destButtonTextActive: { color: '#6B5BFC', fontWeight: '600' },
+  destinationButtons: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  destButton: {
+    minHeight: 44,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#F3F4F6",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  destButtonActive: { backgroundColor: "#EDE9FE", borderColor: "#6B5BFC" },
+  destButtonPicking: { backgroundColor: "#F5F3FF", borderColor: "#8B5CF6" },
+  destButtonText: { fontSize: 14, color: "#374151", fontWeight: "500" },
+  destButtonTextActive: { color: "#6B5BFC", fontWeight: "600" },
 
-  destinationPreview: { fontSize: 13, color: '#6B5BFC', marginTop: 8, fontStyle: 'italic' },
-  destinationPreviewWarn: { color: '#DC2626', fontStyle: 'normal' },
-  destinationPreviewEmpty: { color: '#9CA3AF', fontStyle: 'normal' },
+  destinationPreview: {
+    fontSize: 13,
+    color: "#6B5BFC",
+    marginTop: 8,
+    fontStyle: "italic",
+  },
+  destinationPreviewWarn: { color: "#DC2626", fontStyle: "normal" },
+  destinationPreviewEmpty: { color: "#9CA3AF", fontStyle: "normal" },
 
   errorBanner: {
-    marginHorizontal: 24, marginTop: 8, marginBottom: 4, padding: 10,
-    backgroundColor: '#FEF2F2', borderRadius: 8, borderWidth: 1, borderColor: '#FECACA',
+    marginHorizontal: 24,
+    marginTop: 8,
+    marginBottom: 4,
+    padding: 10,
+    backgroundColor: "#FEF2F2",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#FECACA",
   },
-  errorText: { fontSize: 13, color: '#DC2626' },
+  errorText: { fontSize: 13, color: "#DC2626" },
 
   actions: {
-    flexDirection: 'row', paddingHorizontal: 24, paddingTop: 12, paddingBottom: 16, gap: 12,
+    flexDirection: "row",
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 16,
+    gap: 12,
   },
   cancelButton: {
-    flex: 1, minHeight: 48, paddingVertical: 12, borderRadius: 10,
-    backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center',
+    flex: 1,
+    minHeight: 48,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  cancelButtonText: { fontSize: 15, color: '#374151', fontWeight: '600' },
+  cancelButtonText: { fontSize: 15, color: "#374151", fontWeight: "600" },
   confirmButton: {
-    flex: 2, minHeight: 48, paddingVertical: 12, borderRadius: 10,
-    backgroundColor: '#6B5BFC', alignItems: 'center', justifyContent: 'center',
+    flex: 2,
+    minHeight: 48,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: "#6B5BFC",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  confirmButtonDisabled: { backgroundColor: '#D1D5DB' },
-  confirmButtonText: { fontSize: 15, color: '#FFFFFF', fontWeight: '600' },
+  confirmButtonDisabled: { backgroundColor: "#D1D5DB" },
+  confirmButtonText: { fontSize: 15, color: "#FFFFFF", fontWeight: "600" },
 });
