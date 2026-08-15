@@ -7,6 +7,7 @@ let mockTimeFormat: "H24" | "H12" = "H24";
 jest.mock("../lib/notification-lifecycle", () => ({ useNotificationLifecycle: () => ({ permission: "not-asked", invitation: "deferred", busy: false, error: null, requestPermission: jest.fn(), deferInvitation: jest.fn(), openSettings: jest.fn() }) }));
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush }),
+  usePathname: () => "/today",
 }));
 jest.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ refetchQueries: mockRefetchQueries }),
@@ -85,6 +86,7 @@ import {
   waitFor,
 } from "@testing-library/react-native";
 import TodayScreen from "../app/(tabs)/today";
+import { GlobalCaptureProvider } from "../components/GlobalCapture";
 import { useTasksForDate } from "../lib/api/tasks";
 
 const scheduledTask = {
@@ -97,7 +99,7 @@ const scheduledTask = {
 };
 
 function openGlobalCapture() {
-  fireEvent.press(screen.getByLabelText("Быстро добавить задачу"));
+  fireEvent.press(screen.getByLabelText("Добавить задачу"));
 }
 
 function renderWithTimeline() {
@@ -106,7 +108,7 @@ function renderWithTimeline() {
     isLoading: false,
     isError: false,
   });
-  render(<TodayScreen />);
+  render(<GlobalCaptureProvider><TodayScreen /></GlobalCaptureProvider>);
   fireEvent.press(screen.getByText('Выбрать 14:30'));
 }
 
@@ -121,7 +123,7 @@ describe('Today quick capture destinations', () => {
   });
 
   it('keeps the empty-state full task form CTA behavior', () => {
-    render(<TodayScreen />);
+    render(<GlobalCaptureProvider><TodayScreen /></GlobalCaptureProvider>);
     fireEvent.press(screen.getByText('Создать задачу'));
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/task-form',
@@ -139,7 +141,7 @@ describe('Today quick capture destinations', () => {
   ])('keeps canonical date navigation available in loading, error, and empty states', ({ state, label }) => {
     jest.useFakeTimers().setSystemTime(new Date('2026-08-12T12:00:00.000Z'));
     (useTasksForDate as jest.Mock).mockReturnValue(state);
-    render(<TodayScreen />);
+    render(<GlobalCaptureProvider><TodayScreen /></GlobalCaptureProvider>);
     fireEvent.press(screen.getByLabelText(label));
     const queriedDate = (useTasksForDate as jest.Mock).mock.calls.at(-1)[0] as Date;
     expect(queriedDate.toISOString()).toBe('2026-08-12T21:00:00.000Z');
@@ -151,7 +153,7 @@ describe('Today quick capture destinations', () => {
 
   it('passes a selected profile-local day to task-form navigation without drift', () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-08-12T12:00:00.000Z'));
-    render(<TodayScreen />);
+    render(<GlobalCaptureProvider><TodayScreen /></GlobalCaptureProvider>);
     fireEvent.press(screen.getByLabelText(/четверг, 13 августа 2026/));
     fireEvent.press(screen.getByText('Создать задачу'));
     expect(mockPush).toHaveBeenCalledWith({
@@ -163,7 +165,7 @@ describe('Today quick capture destinations', () => {
   });
 
   it('labels global capture with Thoughts language and creates without a start time', async () => {
-    render(<TodayScreen />);
+    render(<GlobalCaptureProvider><TodayScreen /></GlobalCaptureProvider>);
     openGlobalCapture();
 
     expect(screen.getByText('Сохранить в Мысли')).toBeTruthy();
@@ -175,7 +177,7 @@ describe('Today quick capture destinations', () => {
       startTime: null,
       durationMinutes: null,
     }));
-    expect(mockRefetchQueries).toHaveBeenCalledWith({ queryKey: ['tasks'] });
+    expect(mockRefetchQueries).toHaveBeenCalledWith({ queryKey: ['tasks', 'inbox'] });
   });
 
   it('creates timeline capture at the selected ISO time', async () => {
@@ -225,7 +227,7 @@ describe('Today quick capture destinations', () => {
   });
 
   it('passes numeric duration to the full form', () => {
-    render(<TodayScreen />);
+    render(<GlobalCaptureProvider><TodayScreen /></GlobalCaptureProvider>);
     openGlobalCapture();
     fireEvent.press(screen.getByLabelText('Длительность 120 мин'));
     fireEvent.press(screen.getByText('Подробнее →'));
@@ -236,7 +238,7 @@ describe('Today quick capture destinations', () => {
 
   it('keeps selected duration after a failed creation', async () => {
     mockMutateAsync.mockRejectedValueOnce(new Error('network'));
-    render(<TodayScreen />);
+    render(<GlobalCaptureProvider><TodayScreen /></GlobalCaptureProvider>);
     openGlobalCapture();
     fireEvent.press(screen.getByLabelText('Длительность 60 мин'));
     fireEvent.changeText(screen.getByLabelText('Название задачи'), 'Retry me');
@@ -247,7 +249,7 @@ describe('Today quick capture destinations', () => {
   });
 
   it('preserves the trimmed title in the full-form prefill', () => {
-    render(<TodayScreen />);
+    render(<GlobalCaptureProvider><TodayScreen /></GlobalCaptureProvider>);
     openGlobalCapture();
     fireEvent.changeText(screen.getByLabelText('Название задачи'), '  Разобрать почту  ');
     fireEvent.press(screen.getByText('Подробнее →'));
@@ -279,11 +281,11 @@ describe('Today quick capture destinations', () => {
   });
 
   it('does not submit a blank title', () => {
-    render(<TodayScreen />);
+    render(<GlobalCaptureProvider><TodayScreen /></GlobalCaptureProvider>);
     openGlobalCapture();
     const submit = screen.getByLabelText('Сохранить задачу в Мысли');
 
-    expect(submit.props.accessibilityState).toEqual({ disabled: true });
+    expect(submit.props.accessibilityState).toEqual(expect.objectContaining({ disabled: true, busy: false }));
     fireEvent.press(submit);
     fireEvent(screen.getByLabelText('Название задачи'), 'submitEditing');
     expect(mockMutateAsync).not.toHaveBeenCalled();
@@ -298,8 +300,8 @@ describe('Today quick capture destinations', () => {
     const timed = screen.getByLabelText('Добавить задачу на 14:30');
     const thoughts = screen.getByLabelText('Сохранить задачу в Мысли без времени');
     const fullForm = screen.getByLabelText('Открыть полную форму задачи');
-    expect(timed.props.accessibilityState).toEqual({ disabled: true });
-    expect(thoughts.props.accessibilityState).toEqual({ disabled: true });
+    expect(timed.props.accessibilityState).toEqual(expect.objectContaining({ disabled: true, busy: true }));
+    expect(thoughts.props.accessibilityState).toEqual(expect.objectContaining({ disabled: true, busy: true }));
     expect(fullForm.props.accessibilityState).toEqual({ disabled: true });
 
     fireEvent.press(timed);

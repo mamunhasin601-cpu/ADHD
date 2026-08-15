@@ -110,6 +110,13 @@ Phase 1 реализует минимальное ядро из [PDR-001](../12-
     complete start/stop transitions, atomic history-preserving edits, bounded batched renewal, and idempotent generation are defined in
     [the Task 0022 record](../../docs/tasks/0022-honest-basic-recurring-tasks.md).
 
+12. **Task 0023 — calm global title-first capture — completed.** Один владелец
+    глобального `+` теперь доступен в Today, Thoughts, Focus и Settings. Он
+    сохраняет название первым, честно оставляет длительность неизвестной и по
+    умолчанию отправляет запись в «Мысли», а Today передаёт тому же владельцу
+    точный выбранный instant таймлайна. Подробности и границы проверки записаны
+    в [Task 0023](../../docs/tasks/0023-calm-global-title-first-capture.md).
+
 Остальные capability Phase 1 остаются на горизонте, но их точный порядок пока
 не принят. Контекстный помощник, overload mode и focus session относятся к
 следующему расширению опыта; AI-декомпозиция, energy-aware suggestions и
