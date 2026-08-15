@@ -14,6 +14,7 @@ import { TaskBlock } from "./TaskBlock";
 import type { Task } from "@focus/shared-types";
 import { useAuthStore } from "../../stores/auth.store";
 import { formatWallClock } from "../../lib/time-format";
+import { calendarDayWallTimeToInstant, toCanonicalDateParam } from "../../lib/timezone";
 
 interface Props {
   tasks: Task[];
@@ -22,6 +23,8 @@ interface Props {
   onCreateAt: (startTime: Date) => void;
   shouldAutoScroll?: boolean;
   currentDate?: Date;
+  currentDateKey?: string;
+  profileTimezone?: string | null;
   currentTaskId?: string;
 }
 
@@ -39,6 +42,8 @@ export function Timeline({
   onCreateAt,
   shouldAutoScroll = true,
   currentDate = new Date(),
+  currentDateKey,
+  profileTimezone,
   currentTaskId,
 }: Props) {
   const scrollRef = useRef<ScrollView>(null);
@@ -72,11 +77,14 @@ export function Timeline({
     const y = event.nativeEvent.locationY;
     const minutesFromStart = (y / hourHeight) * 60;
 
-    const start = new Date(currentDate);
-    start.setHours(dayStartHour, 0, 0, 0);
-    start.setMinutes(
-      start.getMinutes() + Math.round(minutesFromStart / 15) * 15,
-    ); // округляем до 15 мин
+    const roundedMinutes = Math.round(minutesFromStart / 15) * 15;
+    const totalMinutes = dayStartHour * 60 + roundedMinutes;
+    const start = calendarDayWallTimeToInstant(
+      currentDateKey ?? toCanonicalDateParam(currentDate, profileTimezone),
+      Math.floor(totalMinutes / 60),
+      totalMinutes % 60,
+      profileTimezone,
+    );
     onCreateAt(start);
   }
 

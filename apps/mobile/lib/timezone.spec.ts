@@ -19,7 +19,28 @@ import {
   isValidIANATimezone,
   getDeviceLocalDateString,
   toCanonicalDateParam,
+  calendarDayWallTimeToInstant,
 } from './timezone';
+
+describe('calendarDayWallTimeToInstant', () => {
+  it.each([
+    ['Europe/Moscow', '2026-08-13', '2026-08-13T11:30:00.000Z'],
+    ['America/New_York', '2026-08-13', '2026-08-13T18:30:00.000Z'],
+    ['Europe/Moscow', '2027-01-01', '2027-01-01T11:30:00.000Z'],
+  ])('keeps 14:30 on canonical profile day in %s', (timezone, dateKey, expected) => {
+    const instant = calendarDayWallTimeToInstant(dateKey, 14, 30, timezone);
+    expect(instant.toISOString()).toBe(expected);
+    expect(toCanonicalDateParam(instant, timezone)).toBe(dateKey);
+    expect(getLocalHoursMinutes(instant, timezone)).toEqual({ hours: 14, minutes: 30 });
+  });
+
+  it.each([undefined, 'Not/AZone'])('uses device-local fields for %p timezone', (timezone) => {
+    const instant = calendarDayWallTimeToInstant('2026-08-13', 14, 30, timezone);
+    expect(getDeviceLocalDateString(instant)).toBe('2026-08-13');
+    expect(instant.getHours()).toBe(14);
+    expect(instant.getMinutes()).toBe(30);
+  });
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // getLocalDateString

@@ -37,6 +37,7 @@ import type { Task } from '@focus/shared-types';
 import { formatClockTime } from '../../lib/time-format';
 import { findCurrentTask } from '../../lib/current-task';
 import { NotificationInvitation } from '../../components/NotificationInvitation';
+import { WeekStrip } from '../../components/WeekStrip';
 import { useNotificationLifecycle } from '../../lib/notification-lifecycle';
 import {
   TASK_DURATION_PRESETS,
@@ -72,10 +73,27 @@ export default function TodayScreen() {
     [selectedDate, profileTimezone],
   );
 
-  const dateLabel = selectedDate.toLocaleDateString('ru-RU', {
+  const selectedDateKey = toCanonicalDateParam(selectedDate, profileTimezone);
+  const todayDateKey = toCanonicalDateParam(new Date(), profileTimezone);
+
+  function instantForCalendarDay(date: string): Date {
+    if (profileTimezone && isValidIANATimezone(profileTimezone)) {
+      return localMidnightToInstant(date, profileTimezone);
+    }
+    const [year, month, day] = date.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  }
+
+  function selectCalendarDay(date: string) {
+    setSelectedDate(instantForCalendarDay(date));
+  }
+
+  const [selectedYear, selectedMonth, selectedDay] = selectedDateKey.split('-').map(Number);
+  const dateLabel = new Date(Date.UTC(selectedYear, selectedMonth - 1, selectedDay, 12)).toLocaleDateString('ru-RU', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
+    timeZone: 'UTC',
   });
 
   // Profile timezone is passed so the Today query key and its `?date=` param
@@ -177,6 +195,7 @@ export default function TodayScreen() {
       params: {
         task: JSON.stringify(task),
         selectedDate: selectedDate.toISOString(),
+        selectedDateKey,
       },
     });
   }
@@ -230,6 +249,7 @@ export default function TodayScreen() {
           ? { prefillDurationMinutes: String(quickAddDuration) }
           : {}),
         selectedDate: selectedDate.toISOString(),
+        selectedDateKey,
       },
     });
   }
@@ -245,7 +265,7 @@ export default function TodayScreen() {
           )}
           {!isToday && (
             <Pressable
-              onPress={() => setSelectedDate(new Date())}
+              onPress={() => selectCalendarDay(todayDateKey)}
               style={styles.todayButton}
             >
               <Text style={styles.todayButtonText}>Сегодня</Text>
@@ -255,9 +275,7 @@ export default function TodayScreen() {
         <View style={styles.dateNav}>
           <Pressable
             onPress={() => {
-              const prev = new Date(selectedDate);
-              prev.setDate(prev.getDate() - 1);
-              setSelectedDate(prev);
+              selectCalendarDay(addCalendarDays(selectedDateKey, -1));
             }}
             style={styles.navButton}
           >
@@ -266,15 +284,18 @@ export default function TodayScreen() {
           <Text style={styles.headerDate}>{dateLabel}</Text>
           <Pressable
             onPress={() => {
-              const next = new Date(selectedDate);
-              next.setDate(next.getDate() + 1);
-              setSelectedDate(next);
+              selectCalendarDay(addCalendarDays(selectedDateKey, 1));
             }}
             style={styles.navButton}
           >
             <Text style={styles.navButtonText}>›</Text>
           </Pressable>
         </View>
+        <WeekStrip
+          selectedDate={selectedDateKey}
+          todayDate={todayDateKey}
+          onSelectDate={selectCalendarDay}
+        />
       </View>
 
       {isLoading && (
@@ -304,7 +325,7 @@ export default function TodayScreen() {
           onAction={() =>
             router.push({
               pathname: '/task-form',
-              params: { selectedDate: selectedDate.toISOString() },
+              params: { selectedDate: selectedDate.toISOString(), selectedDateKey },
             })
           }
         />
@@ -312,11 +333,13 @@ export default function TodayScreen() {
 
       {/* Recovery — production coordinator owns timezone guard, query,
           mutation, banner lifecycle and the Today-level partial notice. */}
-      <RecoverySection
-        selectedDate={selectedDate}
-        profileTimezone={profileTimezone}
-        onTimezoneInvalid={() => router.push('/settings')}
-      />
+      {isToday && (
+        <RecoverySection
+          selectedDate={selectedDate}
+          profileTimezone={profileTimezone}
+          onTimezoneInvalid={() => router.push('/settings')}
+        />
+      )}
 
       {!isLoading && !isError && totalCount > 0 && (
         <>
@@ -355,6 +378,7 @@ export default function TodayScreen() {
                       params: {
                         task: JSON.stringify(task),
                         selectedDate: selectedDate.toISOString(),
+                        selectedDateKey,
                       },
                     })
                   }
@@ -392,6 +416,7 @@ export default function TodayScreen() {
                         params: {
                           task: JSON.stringify(unscheduledTasks[0]),
                           selectedDate: selectedDate.toISOString(),
+                          selectedDateKey,
                         },
                       })
                   : undefined
@@ -405,6 +430,8 @@ export default function TodayScreen() {
               onCreateAt={(startTime) => openQuickAdd(startTime)}
               shouldAutoScroll={isToday}
               currentDate={selectedDate}
+              currentDateKey={selectedDateKey}
+              profileTimezone={profileTimezone}
               currentTaskId={currentTask?.id}
             />
           )}

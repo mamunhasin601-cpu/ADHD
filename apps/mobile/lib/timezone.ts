@@ -211,6 +211,24 @@ export function addCalendarDays(dateStr: string, days: number): string {
   return formatInTimeZone(d, 'UTC', 'yyyy-MM-dd');
 }
 
+/**
+ * Combines canonical calendar-day identity with wall-clock fields.
+ * A valid profile timezone owns the interpretation. Without one, the fields
+ * are interpreted explicitly in the device timezone (never silently in UTC).
+ */
+export function calendarDayWallTimeToInstant(
+  dateStr: string,
+  hours: number,
+  minutes: number,
+  userTimezone?: string | null,
+): Date {
+  if (userTimezone && isValidIANATimezone(userTimezone)) {
+    return localDateTimeToInstant(dateStr, hours, minutes, userTimezone);
+  }
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day, hours, minutes, 0, 0);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Validation helpers
 // ─────────────────────────────────────────────────────────────────────────────
