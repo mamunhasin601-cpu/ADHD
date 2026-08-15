@@ -1,6 +1,7 @@
 import { View, Pressable, Text, StyleSheet } from 'react-native';
 import type { Task } from '@focus/shared-types';
 import { TIMELINE_CONFIG } from '../../lib/timeline-config';
+import { getTimelineMinutesFromStart } from '../../lib/timeline-geometry';
 
 interface Props {
   task: Task;
@@ -9,10 +10,7 @@ interface Props {
   columnIndex?: number;
   columnCount?: number;
   isCurrent?: boolean;
-}
-
-function minutesFromDayStart(date: Date): number {
-  return (date.getHours() - TIMELINE_CONFIG.dayStartHour) * 60 + date.getMinutes();
+  profileTimezone?: string | null;
 }
 
 /**
@@ -24,10 +22,10 @@ function minutesFromDayStart(date: Date): number {
  * на равные колонки через проценты — так раскладку считает сам RN layout,
  * без ручных измерений ширины экрана.
  */
-export function TaskBlock({ task, onToggle, onOpen, columnIndex = 0, columnCount = 1, isCurrent = false }: Props) {
+export function TaskBlock({ task, onToggle, onOpen, columnIndex = 0, columnCount = 1, isCurrent = false, profileTimezone }: Props) {
   if (!task.startTime) return null;
 
-  const startMinutes = minutesFromDayStart(new Date(task.startTime));
+  const startMinutes = getTimelineMinutesFromStart(new Date(task.startTime), profileTimezone);
   const top = Math.max(0, (startMinutes / 60) * TIMELINE_CONFIG.hourHeight);
   const height = Math.max(
     TIMELINE_CONFIG.minBlockHeight,
@@ -42,7 +40,7 @@ export function TaskBlock({ task, onToggle, onOpen, columnIndex = 0, columnCount
   const columnWidthPercent = 100 / columnCount;
 
   return (
-    <View style={[styles.row, { top, height }]}>
+    <View testID={`task-block-row-${task.id}`} style={[styles.row, { top, height }]}>
       <Pressable
         onPress={() => onToggle(task.id)}
         onLongPress={() => onOpen(task)}

@@ -1,5 +1,6 @@
 import type { Task } from '@focus/shared-types';
 import { TIMELINE_CONFIG } from './timeline-config';
+import { getTimelineMinutesFromStart } from './timeline-geometry';
 
 export interface TaskLayout {
   columnIndex: number;
@@ -10,21 +11,23 @@ export interface TaskLayout {
 export const UNKNOWN_DURATION_LAYOUT_MINUTES =
   (TIMELINE_CONFIG.minBlockHeight / TIMELINE_CONFIG.hourHeight) * 60;
 
-function minutesFromDayStart(date: Date): number {
-  return (date.getHours() - TIMELINE_CONFIG.dayStartHour) * 60 + date.getMinutes();
-}
-
 /**
  * Раскладка пересекающихся по времени задач в колонки (как в календарях).
  * Задачи без пересечений остаются в одной колонке на всю ширину.
  */
-export function computeTimelineLayout(tasks: Task[]): Map<string, TaskLayout> {
+export function computeTimelineLayout(
+  tasks: Task[],
+  profileTimezone?: string | null,
+): Map<string, TaskLayout> {
   const layout = new Map<string, TaskLayout>();
 
   const intervals = tasks
     .filter((task) => !!task.startTime)
     .map((task) => {
-            const start = minutesFromDayStart(new Date(task.startTime as unknown as string));
+      const start = getTimelineMinutesFromStart(
+        new Date(task.startTime as unknown as string),
+        profileTimezone,
+      );
       return {
         task,
         start,

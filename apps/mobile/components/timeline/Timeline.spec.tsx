@@ -2,7 +2,10 @@ const mockUser: { timeFormat: string; timezone?: string } = { timeFormat: "H24" 
 jest.mock("../../stores/auth.store", () => ({
   useAuthStore: (selector: any) => selector({ user: mockUser }),
 }));
-jest.mock("./NowIndicator", () => ({ NowIndicator: () => null }));
+jest.mock("./NowIndicator", () => {
+  const { View } = require("react-native");
+  return { NowIndicator: (props: any) => <View testID="now-indicator" {...props} /> };
+});
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react-native";
 import { Timeline } from "./Timeline";
@@ -81,5 +84,15 @@ describe("Timeline clock labels", () => {
       nativeEvent: { locationY: 8 * 64 + 32 },
     });
     expect(props.onCreateAt).toHaveBeenLastCalledWith(new Date(expected));
+  });
+  it("renders NowIndicator only for Today and passes the profile timezone", () => {
+    jest.useFakeTimers().setSystemTime(new Date("2026-08-13T00:30:00.000Z"));
+    const { rerender } = render(<Timeline {...props} shouldAutoScroll={false} profileTimezone="Europe/Moscow" />);
+    expect(screen.queryByTestId("now-indicator")).toBeNull();
+    rerender(<Timeline {...props} shouldAutoScroll profileTimezone="Europe/Moscow" />);
+    expect(screen.getByTestId("now-indicator").props.profileTimezone).toBe("Europe/Moscow");
+    rerender(<Timeline {...props} shouldAutoScroll={false} profileTimezone="Europe/Moscow" />);
+    expect(screen.queryByTestId("now-indicator")).toBeNull();
+    jest.useRealTimers();
   });
 });

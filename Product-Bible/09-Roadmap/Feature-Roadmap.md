@@ -117,6 +117,14 @@ Phase 1 реализует минимальное ядро из [PDR-001](../12-
     точный выбранный instant таймлайна. Подробности и границы проверки записаны
     в [Task 0023](../../docs/tasks/0023-calm-global-title-first-capture.md).
 
+13. **Task 0024 — profile-local timeline geometry — completed.** Вертикальные
+    координаты задач, пересечений, линии «сейчас» и начального autoscroll теперь
+    используют одну profile-local wall-clock систему. Валидная IANA timezone
+    профиля имеет приоритет, а отсутствующая или невалидная timezone явно
+    использует device-local поля без UTC fallback. Planning views другой даты
+    не показывают и не имитируют текущий момент. Контракт и проверка описаны в
+    [Task 0024](../../docs/tasks/0024-profile-local-timeline-geometry.md).
+
 Остальные capability Phase 1 остаются на горизонте, но их точный порядок пока
 не принят. Контекстный помощник, overload mode и focus session относятся к
 следующему расширению опыта; AI-декомпозиция, energy-aware suggestions и
