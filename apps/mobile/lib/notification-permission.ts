@@ -19,8 +19,43 @@ import * as Notifications from 'expo-notifications';
 import { Linking } from 'react-native';
 
 const PERM_KEY = 'focus:notif_permission_state';
+const INVITATION_KEY = 'focus:notif_invitation_disposition';
 
 export type NotifPermState = 'not-asked' | 'granted' | 'denied';
+export type NotificationInvitationDisposition = 'available' | 'deferred';
+
+export async function getInvitationDisposition(): Promise<NotificationInvitationDisposition> {
+  try {
+    return (await SecureStore.getItemAsync(INVITATION_KEY)) === 'deferred'
+      ? 'deferred'
+      : 'available';
+  } catch {
+    return 'available';
+  }
+}
+
+export async function deferNotificationInvitation(): Promise<void> {
+  try {
+    await SecureStore.setItemAsync(INVITATION_KEY, 'deferred');
+  } catch {
+    // A storage failure must not affect task use.
+  }
+}
+
+/** Passive bootstrap inspection. It never opens the native permission dialog. */
+export async function inspectNotificationPermission(): Promise<NotifPermState> {
+  const stored = await getStoredPermissionState();
+  const { status, canAskAgain } = await Notifications.getPermissionsAsync();
+  if (status === 'granted') {
+    await setStoredPermissionState('granted');
+    return 'granted';
+  }
+  if (stored === 'granted' || stored === 'denied' || canAskAgain === false) {
+    await setStoredPermissionState('denied');
+    return 'denied';
+  }
+  return 'not-asked';
+}
 
 /**
  * Read the persisted permission state for this installation.
@@ -88,6 +123,11 @@ export async function requestNotificationPermissionOnce(): Promise<NotifPermStat
   const finalState: NotifPermState = newStatus === 'granted' ? 'granted' : 'denied';
   await setStoredPermissionState(finalState);
   return finalState;
+}
+
+/** Explicit first-time request. Callers must invoke this only from a user action. */
+export async function requestNotificationPermissionExplicitly(): Promise<NotifPermState> {
+  return requestNotificationPermissionOnce();
 }
 
 /**

@@ -36,6 +36,8 @@ import { isFreeTierLimitError } from '../../lib/api-error';
 import type { Task } from '@focus/shared-types';
 import { formatClockTime } from '../../lib/time-format';
 import { findCurrentTask } from '../../lib/current-task';
+import { NotificationInvitation } from '../../components/NotificationInvitation';
+import { useNotificationLifecycle } from '../../lib/notification-lifecycle';
 import {
   TASK_DURATION_PRESETS,
   type TaskDurationPreset,
@@ -56,6 +58,8 @@ export default function TodayScreen() {
   // Recovery — RecoverySection owns that guard (Task 0006C/0007A).
   const profileTimezone = useAuthStore((s) => s.user?.timezone);
   const timeFormat = useAuthStore((s) => s.user?.timeFormat ?? 'SYSTEM');
+  const hasCompletedOnboarding = useAuthStore((s) => Boolean(s.user?.hasCompletedOnboarding));
+  const notificationLifecycle = useNotificationLifecycle();
 
   // isToday for the non-Recovery parts of Today (progress ring, Now/Next,
   // timeline autoscroll). Both sides go through the canonical date helper, so
@@ -317,7 +321,7 @@ export default function TodayScreen() {
       {!isLoading && !isError && totalCount > 0 && (
         <>
           {isToday && (currentTask || nextTask) && (
-            <NowCard
+            <><NowCard
               task={currentTask ?? nextTask!}
               mode={currentTask ? 'current' : 'upcoming'}
               onComplete={(taskId) => toggleTask.mutate(taskId)}
@@ -334,6 +338,9 @@ export default function TodayScreen() {
                   : null
               }
             />
+            {hasCompletedOnboarding && notificationLifecycle.permission === 'not-asked' && notificationLifecycle.invitation === 'available' && (
+              <NotificationInvitation />
+            )}</>
           )}
           {unscheduledTasks.length > 0 && (
             <View style={styles.unscheduledList}>

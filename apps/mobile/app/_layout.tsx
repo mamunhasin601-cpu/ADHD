@@ -1,22 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, AppStateStatus, StyleSheet, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Stack, useRootNavigationState, useRouter, useSegments } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from '../stores/auth.store';
 import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
-import { apiClient } from '../lib/api-client';
-import {
-  reconcileLocalReminders,
-  setLocalOnlyMode,
-  LOCAL_REMINDER_HORIZON_DAYS,
-} from '../lib/local-notifications';
-import {
-  requestNotificationPermissionOnce,
-  refreshPermissionState,
-  type NotifPermState,
-} from '../lib/notification-permission';
 import { NotificationPermissionBanner } from '../components/NotificationPermissionBanner';
+import { NotificationLifecycleProvider, useNotificationLifecycle } from '../lib/notification-lifecycle';
 import { resolveAuthRedirect } from '../lib/auth-routing';
 
 // Настройка обработчика уведомлений
@@ -52,14 +41,6 @@ export default function RootLayout() {
   routerRef.current = router;
   isNavigatorMountedRef.current = isNavigatorMounted;
 
-  // Permission state for showing the actionable banner when denied.
-  // null = not yet determined (first bootstrap still running).
-  const [notifPermState, setNotifPermState] = useState<NotifPermState | null>(null);
-
-  // Guard to prevent overlapping registration/revocation calls when AppState
-  // fires multiple rapid 'active' transitions.
-  const isHandlingTransition = useRef(false);
-
   useEffect(() => {
     void bootstrap();
   }, [bootstrap]);
@@ -80,69 +61,6 @@ export default function RootLayout() {
     );
     return () => subscription.remove();
   }, []);
-
-  // AppState listener: on every resume for an authenticated user, re-check OS
-  // notification state without showing an automatic prompt (0011C fix).
-  //
-  // Handles both directions:
-  //   denied → granted: re-run push registration and restore remote-primary.
-  //   granted → revoked: switch to local-fallback and reconcile reminders.
-  useEffect(() => {
-    const handleAppStateChange = async (nextState: AppStateStatus) => {
-      // Only act on foreground transitions when we have a known prior state.
-      if (nextState !== 'active' || !user || notifPermState === null) return;
-
-      // Acquire the transition guard SYNCHRONOUSLY, before the first await
-      // (Task 0011E finding 1). Setting it after `await refreshPermissionState()`
-      // left a window where two concurrent 'active' events both passed the check
-      // and ran overlapping registration/reconciliation paths.
-      if (isHandlingTransition.current) return;
-      isHandlingTransition.current = true;
-
-      try {
-        const refreshed = await refreshPermissionState().catch(
-          () => 'denied' as NotifPermState,
-        );
-
-        // No change — nothing to do.
-        if (refreshed === notifPermState) return;
-
-        setNotifPermState(refreshed);
-
-        if (refreshed === 'granted' && notifPermState !== 'granted') {
-          // denied → granted: user re-enabled notifications in OS settings.
-          // Re-run registration to restore the remote-primary channel.
-          await runPushRegistration(user.id, setNotifPermState);
-        } else if (refreshed === 'denied' && notifPermState === 'granted') {
-          // granted → revoked: user disabled notifications in OS settings.
-          // NO channel is available (local notifications need the same OS
-          // permission as push), so owned reminders are cancelled, not rescheduled.
-          await handlePermissionRevoked();
-        }
-      } finally {
-        isHandlingTransition.current = false;
-      }
-    };
-
-    const sub = AppState.addEventListener('change', handleAppStateChange);
-    return () => sub.remove();
-  }, [notifPermState, user]);
-
-  // Register device token and reconcile local reminders after successful auth.
-  //
-  // Shares the SAME transition guard as the AppState listener (audit defect 2).
-  // Without it, an 'active' event landing while mount registration is still in
-  // flight runs overlapping setLocalOnlyMode/reconcile paths — the identical race
-  // fixed in 0011E, on the other entry point. Acquired synchronously, released
-  // when registration settles.
-  useEffect(() => {
-    if (!user) return;
-    if (isHandlingTransition.current) return;
-    isHandlingTransition.current = true;
-    void runPushRegistration(user.id, setNotifPermState).finally(() => {
-      isHandlingTransition.current = false;
-    });
-  }, [user]);
 
   const authRedirect = resolveAuthRedirect({
     segments,
@@ -167,14 +85,9 @@ export default function RootLayout() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <NotificationLifecycleProvider userId={user?.id}>
       <View style={styles.rootContainer}>
-        {notifPermState === 'denied' && (
-          <NotificationPermissionBanner
-            onSettingsOpened={() => {
-              // Settings opened; AppState listener will pick up the change on resume.
-            }}
-          />
-        )}
+        <PermissionBanner authenticated={Boolean(user)} />
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="login" />
           <Stack.Screen name="register" />
@@ -197,8 +110,14 @@ export default function RootLayout() {
           </View>
         )}
       </View>
+      </NotificationLifecycleProvider>
     </QueryClientProvider>
   );
+}
+
+function PermissionBanner({ authenticated }: { authenticated: boolean }) {
+  const { permission } = useNotificationLifecycle();
+  return authenticated && permission === 'denied' ? <NotificationPermissionBanner onSettingsOpened={() => undefined} /> : null;
 }
 
 const styles = StyleSheet.create({
@@ -213,94 +132,3 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
 });
-
-/**
- * Push registration and bootstrap reconciliation.
- * Called on first authenticated mount and when denied→granted transition is
- * detected on app resume.
- */
-async function runPushRegistration(
-  userId: string,
-  setPermState: (s: NotifPermState) => void,
-): Promise<void> {
-  // requestNotificationPermissionOnce reads the stored state. If previously
-  // denied, it returns 'denied' immediately without showing another prompt.
-  const permState = await requestNotificationPermissionOnce().catch(
-    () => 'denied' as NotifPermState,
-  );
-  setPermState(permState);
-
-  if (permState !== 'granted') {
-    return;
-  }
-
-  // ── Push token registration (remote-primary channel) ─────────────────
-  let localOnly = true;
-  try {
-    const tokenData = await Notifications.getExpoPushTokenAsync({
-      ...(Platform.OS !== 'web' ? {} : {}),
-    });
-    const token = tokenData.data;
-
-    await apiClient.post('/notifications/devices', {
-      token,
-      platform: Platform.OS === 'ios' ? 'apns' : Platform.OS === 'android' ? 'fcm' : 'expo',
-    });
-
-    localOnly = false;
-  } catch {
-    localOnly = true;
-  }
-
-  setLocalOnlyMode(localOnly);
-
-  // ── Bounded bootstrap reconciliation ─────────────────────────────────
-  const now = new Date();
-  const horizon = new Date(
-    now.getTime() + LOCAL_REMINDER_HORIZON_DAYS * 24 * 60 * 60 * 1000,
-  );
-
-  try {
-    const { data: tasks } = await apiClient.get('/tasks', {
-      params: {
-        includeSubTasks: false,
-        scheduledFrom: now.toISOString(),
-        scheduledTo: horizon.toISOString(),
-      },
-    });
-    await reconcileLocalReminders(tasks, localOnly);
-  } catch {
-    // Reconciliation failure is non-fatal.
-  }
-}
-
-/**
- * Called when OS permission transitions from granted → denied/revoked.
- *
- * Cancels every Focus-owned local reminder. Does NOT select "local fallback".
- *
- * Why (corrected after 0011E audit): expo-notifications LOCAL scheduling requires
- * the same OS permission as remote push. `scheduleNotificationAsync` still resolves
- * successfully after revocation — the notification simply never displays. So a
- * revoked permission kills BOTH channels, and rescheduling local reminders here
- * would only create silent phantom entries.
- *
- * This is distinct from the local-fallback case in ADR-009 D-7, which applies when
- * push REGISTRATION fails while permission is still granted — there local genuinely
- * works. The earlier implementation conflated the two.
- *
- * `localOnly=false` is set because neither flag value means "no channel available";
- * false is the one whose behavior (mutation hooks skip local scheduling) is correct
- * here. The neutral banner carries the user-facing state.
- */
-async function handlePermissionRevoked(): Promise<void> {
-  setLocalOnlyMode(false);
-
-  try {
-    // Empty task list + localOnly=false → cancels all Focus-owned reminders,
-    // schedules nothing. The correct end state when no channel can deliver.
-    await reconcileLocalReminders([], false);
-  } catch {
-    // Non-fatal; task CRUD is unaffected.
-  }
-}

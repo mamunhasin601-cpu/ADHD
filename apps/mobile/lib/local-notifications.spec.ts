@@ -183,6 +183,56 @@ describe('cancelLocalReminder', () => {
 // ── reconcileLocalReminders ───────────────────────────────────────────────────
 
 describe('reconcileLocalReminders', () => {
+  it('keeps backward-compatible behavior when no continuation guard is supplied', async () => {
+    mockGetAll.mockResolvedValue([{ identifier: 'focus-task-reminder-existing' }]);
+    await reconcileLocalReminders([makeTask({ id: 'new' })], true);
+    expect(mockCancel).toHaveBeenCalledWith('focus-task-reminder-existing');
+    expect(mockSchedule).toHaveBeenCalledWith(
+      expect.objectContaining({ identifier: 'focus-task-reminder-new' }),
+    );
+  });
+
+  it('does not cancel a current-owner reminder when stale ownership ends during OS lookup', async () => {
+    let resolveLookup!: (value: any[]) => void;
+    mockGetAll.mockReturnValue(new Promise((resolve) => { resolveLookup = resolve; }));
+    let current = true;
+    const reconciliation = reconcileLocalReminders([], false, () => current);
+    current = false;
+    resolveLookup([{ identifier: 'focus-task-reminder-user-b' }]);
+    await reconciliation;
+    expect(mockCancel).not.toHaveBeenCalled();
+  });
+
+  it('cleans up the exact stale notification when scheduling settles after invalidation', async () => {
+    let resolveSchedule!: (identifier: string) => void;
+    mockSchedule.mockReturnValue(new Promise((resolve) => { resolveSchedule = resolve; }));
+    let current = true;
+    const reconciliation = reconcileLocalReminders(
+      [makeTask({ id: 'user-a' })],
+      true,
+      () => current,
+    );
+    for (let index = 0; index < 6; index += 1) await Promise.resolve();
+    expect(mockSchedule).toHaveBeenCalledTimes(1);
+    current = false;
+    resolveSchedule('focus-task-reminder-user-a');
+    await reconciliation;
+    expect(mockCancel).toHaveBeenLastCalledWith('focus-task-reminder-user-a');
+    expect(mockSchedule).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops between cancellations after ownership changes', async () => {
+    mockGetAll.mockResolvedValue([
+      { identifier: 'focus-task-reminder-a-1' },
+      { identifier: 'focus-task-reminder-b-current' },
+    ]);
+    let current = true;
+    mockCancel.mockImplementationOnce(async () => { current = false; });
+    await reconcileLocalReminders([], false, () => current);
+    expect(mockCancel).toHaveBeenCalledTimes(1);
+    expect(mockCancel).not.toHaveBeenCalledWith('focus-task-reminder-b-current');
+  });
+
   it('cancels ONLY focus-task-reminder- prefixed notifications (not unrelated ones)', async () => {
     // Mix of Focus-owned and unrelated OS notifications
     mockGetAll.mockResolvedValue([
