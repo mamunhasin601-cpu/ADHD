@@ -8,6 +8,7 @@ import {
   IsBoolean,
   IsHexColor,
   IsUUID,
+  IsTimeZone,
   IsIn,
   MaxLength,
   Validate,
@@ -65,6 +66,19 @@ export class CreateTaskDto {
     message: 'Поддерживаются только ежедневное повторение и будни (Пн–Пт)',
   })
   recurrenceRule?: string | null;
+
+  /** Explicit device fallback; used only when the profile timezone is invalid. */
+  @IsOptional()
+  @IsTimeZone({ message: 'deviceTimezone должен быть допустимым IANA timezone' })
+  deviceTimezone?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  editRecurrenceAnchor?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  editRecurrencePattern?: boolean;
 
   @IsOptional()
   @IsUUID('4', { message: 'parentTaskId должен быть UUID' })

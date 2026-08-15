@@ -5,6 +5,8 @@ import {
   scheduleLocalReminder,
   cancelLocalReminder,
   getLocalOnlyMode,
+  reconcileLocalReminders,
+  LOCAL_REMINDER_HORIZON_DAYS,
 } from '../local-notifications';
 import type {
   Task,
@@ -14,6 +16,26 @@ import type {
   RescheduleRecoveryRequest,
   RescheduleRecoveryResponse,
 } from '@focus/shared-types';
+import { useAuthStore } from '../../stores/auth.store';
+
+async function cleanAffectedLocalReminders(ids: string[], owner: string | undefined): Promise<void> {
+  for (const id of ids) {
+    if (useAuthStore.getState().user?.id !== owner) return;
+    await cancelLocalReminder(id);
+  }
+}
+
+async function reconcileAfterSeriesMutation(owner: string | undefined): Promise<void> {
+  const guard = () => useAuthStore.getState().user?.id === owner;
+  if (!guard()) return;
+  const now = new Date();
+  const horizon = new Date(now.getTime() + LOCAL_REMINDER_HORIZON_DAYS * 86400000);
+  const { data } = await apiClient.get<Task[]>('/tasks', { params: {
+    scheduledFrom: now.toISOString(), scheduledTo: horizon.toISOString(), includeSubTasks: false,
+  }});
+  if (!guard()) return;
+  await reconcileLocalReminders(data, getLocalOnlyMode(), guard);
+}
 
 /**
  * ONE canonical date key for every hook that refers to the same server day
@@ -68,11 +90,11 @@ export function useTasksForDate(date: Date, userTimezone?: string | null) {
   return useQuery({
     queryKey: tasksKey(dateParam),
     queryFn: async () => {
-      // Explicit lifecycle write extends every owned series around this selected
-      // calendar day. The subsequent GET remains strictly read-only.
-      await apiClient.post('/tasks/recurrence/extend', { date: dateParam });
+      // Explicit lifecycle check; the server alone derives its rolling boundary
+      // from profile-local today. The subsequent GET remains strictly read-only.
+      await apiClient.post('/tasks/recurrence/extend');
       const { data } = await apiClient.get<Task[]>('/tasks', {
-        params: { date: dateParam, includeSubTasks: true },
+        params: { date: dateParam, includeSubTasks: true, deviceTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
       });
       return data;
     },
@@ -102,6 +124,7 @@ export function useCreateTask(date: Date, userTimezone?: string | null) {
 
 export function useUpdateTask(date: Date, userTimezone?: string | null) {
   const queryClient = useQueryClient();
+  const owner = useAuthStore((state) => state.user?.id);
   const dateParam = toDateParam(date, userTimezone);
 
   return useMutation({
@@ -109,8 +132,11 @@ export function useUpdateTask(date: Date, userTimezone?: string | null) {
       const { data } = await apiClient.patch<Task>(`/tasks/${id}`, dto);
       return data;
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: tasksKey(dateParam) });
+    onSuccess: async (data) => {
+      await cleanAffectedLocalReminders(data?.affectedOccurrenceIds ?? [], owner);
+      if (useAuthStore.getState().user?.id !== owner) return;
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      if (data.affectedOccurrenceIds?.length) await reconcileAfterSeriesMutation(owner).catch(() => undefined);
       // Reschedule or cancel based on updated task state.
       if (data.startTime && !data.completedAt && !data.startedAt && !data.isRecurring) {
         scheduleLocalReminder(data, getLocalOnlyMode()).catch(() => {});
@@ -167,17 +193,22 @@ export function useToggleTask(date: Date, userTimezone?: string | null) {
 
 export function useDeleteTask(date: Date, userTimezone?: string | null) {
   const queryClient = useQueryClient();
+  const owner = useAuthStore((state) => state.user?.id);
   const dateParam = toDateParam(date, userTimezone);
 
   return useMutation({
     mutationFn: async (id: string) => {
-      await apiClient.delete(`/tasks/${id}`);
+      const { data } = await apiClient.delete<{ affectedOccurrenceIds: string[] }>(`/tasks/${id}`);
+      return data;
     },
-    onSuccess: async (_data, id) => {
+    onSuccess: async (data, id) => {
+      await cleanAffectedLocalReminders(data?.affectedOccurrenceIds ?? [], owner);
+      if (useAuthStore.getState().user?.id !== owner) return;
       queryClient.setQueryData<Task[]>(tasksKey(dateParam), (old) =>
         old?.filter((task) => task.id !== id),
       );
-      await queryClient.invalidateQueries({ queryKey: tasksKey(dateParam) });
+      await queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      if (data?.affectedOccurrenceIds?.length) await reconcileAfterSeriesMutation(owner).catch(() => undefined);
       // Cancel local reminder for the deleted task.
       cancelLocalReminder(id).catch(() => {});
     },

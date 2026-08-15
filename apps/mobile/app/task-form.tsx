@@ -123,12 +123,15 @@ export default function TaskFormScreen() {
   const [firstStep, setFirstStep] = useState(existingTask?.firstStep ?? "");
 
   const initialStartTime =
-    existingTask?.startTime ??
+    (existingTask?.seriesId && existingTask.seriesStartTime
+      ? new Date(existingTask.seriesStartTime)
+      : existingTask?.startTime) ??
     (params.prefillStartTime ? new Date(params.prefillStartTime) : null);
 
-  const initialWallClock = initialStartTime && profileTimezone &&
-    isValidIANATimezone(profileTimezone) && params.selectedDateKey
-    ? getLocalHoursMinutes(initialStartTime, profileTimezone)
+  const editTimezone = existingTask?.seriesTimezone ?? profileTimezone;
+  const initialWallClock = initialStartTime && editTimezone &&
+    isValidIANATimezone(editTimezone) && params.selectedDateKey
+    ? getLocalHoursMinutes(initialStartTime, editTimezone)
     : initialStartTime
       ? { hours: initialStartTime.getHours(), minutes: initialStartTime.getMinutes() }
       : null;
@@ -159,7 +162,10 @@ export default function TaskFormScreen() {
   );
   const [color, setColor] = useState(existingTask?.color ?? COLOR_PRESETS[0]);
   const [recurrencePreset, setRecurrencePreset] = useState<RecurrencePreset>(
-    recurrencePresetFromRule(existingTask?.recurrenceRule ?? null),
+    recurrencePresetFromRule(existingTask?.seriesRecurrenceRule ?? existingTask?.recurrenceRule ?? null),
+  );
+  const initialRecurrencePreset = recurrencePresetFromRule(
+    existingTask?.seriesRecurrenceRule ?? existingTask?.recurrenceRule ?? null,
   );
 
   const [existingSubtasks, setExistingSubtasks] = useState(
@@ -214,11 +220,15 @@ export default function TaskFormScreen() {
     if (!title.trim()) return;
     setSaving(true);
 
+    const recurrenceAnchorKey = existingTask?.seriesStartTime
+      ? toCanonicalDateParam(new Date(existingTask.seriesStartTime), existingTask.seriesTimezone)
+      : selectedDateKey;
     const startTimeIso = hasTime
       ? initialStartTime && !wallClockEdited
         ? initialStartTime.toISOString()
         : calendarDayWallTimeToInstant(
-            selectedDateKey, hour, minute, profileTimezone,
+            existingTask?.seriesId ? recurrenceAnchorKey : selectedDateKey,
+            hour, minute, existingTask?.seriesTimezone ?? profileTimezone,
           ).toISOString()
       : null;
 
@@ -230,6 +240,9 @@ export default function TaskFormScreen() {
       color,
       isRecurring: recurrencePreset !== "none",
       recurrenceRule: RECURRENCE_RULES[recurrencePreset],
+      deviceTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      editRecurrenceAnchor: !!existingTask?.seriesId && wallClockEdited,
+      editRecurrencePattern: !!existingTask?.seriesId && recurrencePreset !== initialRecurrencePreset,
     };
 
     try {
@@ -409,7 +422,13 @@ export default function TaskFormScreen() {
             accessibilityLabel={RECURRENCE_LABELS[preset]}
             accessibilityState={{ selected: recurrencePreset === preset }}
             style={[styles.chip, recurrencePreset === preset && styles.chipActive]}
-            onPress={() => setRecurrencePreset(preset)}
+            onPress={() => {
+              if (preset !== "none" && (existingSubtasks.length || newSubtasks.length)) {
+                Alert.alert("Сначала уберите шаги", "Шаги пока недоступны для повторяющихся задач.");
+                return;
+              }
+              setRecurrencePreset(preset);
+            }}
           >
             <Text
               style={[styles.chipText, recurrencePreset === preset && styles.chipTextActive]}
@@ -425,6 +444,9 @@ export default function TaskFormScreen() {
         </Text>
       )}
 
+      {recurrencePreset !== "none" ? (
+        <Text style={styles.supportingText}>Шаги пока недоступны для повторяющихся задач.</Text>
+      ) : <>
       {/* Подзадачи */}
       <Text style={styles.sectionLabel}>Разбить на шаги</Text>
       <View style={styles.chipsWrap}>
@@ -473,6 +495,7 @@ export default function TaskFormScreen() {
           <Text style={styles.subtaskAddButtonText}>+</Text>
         </Pressable>
       </View>
+      </>}
 
       {/* Действия */}
       <Pressable

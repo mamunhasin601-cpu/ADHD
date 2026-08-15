@@ -1,56 +1,67 @@
 # Task 0022 — Honest basic recurring tasks
 
-## Status and bounded scope
+## Status and supported scope
 
-Focus supports exactly two server-owned patterns: `FREQ=DAILY` (every profile
-calendar day) and `FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR` (Monday–Friday). A series must
-be timed. The API rejects missing anchors, recurring subtasks, inconsistent flags,
-and every other RRULE; client text is never executed as an arbitrary rule.
+Completed for exactly `FREQ=DAILY` and
+`FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR`. A repeat is a timed root task. The API rejects
+all other new rules, inconsistent flags, and recurring subtasks. The mobile form
+hides the subtask controls after recurrence is selected and explains calmly that
+steps are not yet available for repeating tasks.
 
-The user-authored `Task.id` is the stable **series identity** and is a non-actionable
-template. Each materialized task has its own UUID, `seriesId`, and profile-local
-`recurrenceDateKey` (`YYYY-MM-DD`). The database unique constraint on
-`(seriesId, recurrenceDateKey)`, deterministic generation, and `createMany` with
-`skipDuplicates` make retries and concurrent extension idempotent. Start and
-completion timestamps live only on occurrences. Series templates are excluded
-from dated Today results, so acting on one day cannot mutate later days.
+The user-authored `Task.id` is the stable, non-actionable series identity. Every
+occurrence has its own UUID, `seriesId`, and profile-local `recurrenceDateKey`.
+The unique `(seriesId, recurrenceDateKey)` database constraint plus
+`createMany(skipDuplicates)` protects concurrent generation. Start and completion
+belong only to occurrences; generated rows do not count as free-tier authored
+tasks.
 
-## Calendar, timezone, and horizon contract
+## Calendar, timezone, and bounded renewal
 
-Creation snapshots the valid profile IANA timezone and derives the anchor calendar
-day and wall clock from the submitted instant. Each occurrence recombines its
-calendar key and that wall clock in the snapshot timezone. It therefore preserves
-wall time through DST and preserves day identity across month/year boundaries; it
-is not a 24-hour UTC loop. Missing or invalid profile zones are rejected with an
-explicit request to refresh the profile from the device, rather than substituting
-UTC. The existing mobile device-local fallback remains the producer of the anchor
-instant when profile timezone is unavailable.
+The series stores its anchor instant, calendar key, wall clock, and timezone
+snapshot. A valid profile IANA timezone is preferred. If it is missing or invalid,
+the API accepts the mobile request's explicitly supplied, validated device IANA
+timezone. UTC is never substituted silently, and creation is rejected only when
+neither candidate is valid. Occurrences recombine local calendar keys with the
+stored wall clock, preserving Moscow/New York wall time through DST and preserving
+month/year identity.
 
-Generation is bounded to the anchor plus 60 calendar days. Creation invokes it;
-`POST /tasks/recurrence/extend` (all owned series around the selected day) and
-`POST /tasks/:id/recurrence/extend` are explicit idempotent lifecycle extension
-mechanisms. GET is read-only and never creates rows. Legacy supported recurring
-rows remain their original series identity; the additive migration snapshots the
-owner timezone and they enter the same explicit extension path without copying or
-orphaning the row.
+`recurrenceGeneratedThrough` is authoritative. Generation starts only after that
+boundary and targets profile-local today plus 60 calendar days. An equal boundary
+is a zero-write, zero-reminder no-op. A client-selected future date is not a
+materialization authority. The authenticated lifecycle endpoint may request a
+check, but the server computes its own boundary. A server-owned UTC 01:00 daily
+scheduler renews every active series independently of app navigation. History is
+retained indefinitely; only future materialization is bounded.
 
-## Limits, reminders, recovery, and mutation scope
+## Series edits, reminders, and cache integrity
 
-One series is one free-tier task: plan counts exclude occurrence rows. Every
-concrete occurrence in the bounded horizon is passed through the existing Focus
-reminder-channel scheduler. Series edit/delete first cancels Focus-owned reminders
-for all materialized occurrences; edit replaces the bounded projection and delete
-removes it by cascade. Mobile edit and delete explicitly say the whole repeat is
-affected. “Only this occurrence” editing is not offered.
+Series changes are effective from profile-local today. Completed, started, and
+past occurrences survive byte-for-byte. Content-only changes update eligible
+future untouched occurrences in place, retaining UUIDs and the original series
+anchor. The occurrence edit payload carries the immutable series anchor/timezone;
+only explicit wall-clock or pattern controls set the dedicated recurrence-edit
+flags. Schedule changes replace only eligible future untouched rows.
 
-Recovery sees occurrences as normal independently actionable tasks and never the
-series template. Rescheduling one occurrence therefore changes only that row.
-Existing non-recurring task CRUD, Today date keys, WeekStrip, Now Card, progress,
-and notification invitation keep their existing paths.
+The series update and eligible occurrence writes run in one database transaction.
+Reminder cancellation/scheduling happens only after commit and only for affected
+or newly inserted occurrence IDs. Delete returns every affected occurrence ID.
+Mobile cancels those exact Focus-owned local notification IDs with the Task 0020
+user/lifecycle guard and invalidates the entire `tasks` React Query prefix so
+previously visited dates cannot retain stale occurrences. BullMQ cleanup follows
+the same concrete IDs. Recovery continues to mutate only a selected occurrence.
 
-## Explicitly deferred
+## Legacy policy
+
+The additive migration turns supported legacy rows into series in place and
+snapshots their owner's timezone. A previously accepted unsupported or missing
+rule is converted in place to one visible non-recurring task: identity, ownership,
+title, instant, duration, color, first step, start/completion state, and timestamps
+remain unchanged; only recurrence fields are cleared. Nothing is hidden, copied,
+or deleted.
+
+## Deferred
 
 Arbitrary weekday selection, custom intervals, monthly/yearly recurrence, end
-dates, editing only one occurrence, streaks, missed counters, AI suggestions, an
-advanced recurrence editor, and a calendar screen are deferred. Android runtime
-validation is not claimed by Jest or TypeScript checks.
+dates, edit-only-this-occurrence, recurring subtasks, streaks, missed counters,
+AI suggestions, an advanced editor, and a calendar screen remain deferred.
+Android runtime validation is not claimed by Jest or TypeScript checks.

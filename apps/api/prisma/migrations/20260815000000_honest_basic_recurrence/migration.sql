@@ -17,3 +17,16 @@ UPDATE "tasks" AS t SET "recurrenceTimezone" = u."timezone"
 FROM "users" AS u
 WHERE t."userId" = u."id" AND t."isRecurring" = true
   AND t."recurrenceRule" IN ('FREQ=DAILY', 'FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR');
+
+-- Unsupported rules were accepted by the old /^FREQ=/ validator. Preserve the
+-- original row and all user state as one ordinary actionable task instead of
+-- hiding it as a series template.
+UPDATE "tasks"
+SET "isRecurring" = false,
+    "recurrenceRule" = NULL,
+    "recurrenceTimezone" = NULL,
+    "recurrenceDateKey" = NULL,
+    "recurrenceGeneratedThrough" = NULL
+WHERE "isRecurring" = true
+  AND ("recurrenceRule" IS NULL OR "recurrenceRule" NOT IN
+    ('FREQ=DAILY', 'FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR'));

@@ -44,6 +44,10 @@ export interface Task {
   seriesId?: string | null;
   /** Profile-local YYYY-MM-DD occurrence identity. */
   recurrenceDateKey?: string | null;
+  /** Immutable series anchor metadata supplied for occurrence editing. */
+  seriesStartTime?: Date | null;
+  seriesTimezone?: string | null;
+  seriesRecurrenceRule?: string | null;
   parentTaskId: string | null;   // для подзадач
   completedAt: Date | null;
   /** First explicit user start; a historical event rather than a timer. */
@@ -53,6 +57,7 @@ export interface Task {
   createdAt: Date;
   updatedAt: Date;
   subTasks?: Task[];
+  affectedOccurrenceIds?: string[];
 }
 
 export interface CreateTaskDto {
@@ -63,6 +68,9 @@ export interface CreateTaskDto {
   color?: string;
   isRecurring?: boolean;
   recurrenceRule?: string | null;
+  deviceTimezone?: string;
+  editRecurrenceAnchor?: boolean;
+  editRecurrencePattern?: boolean;
   parentTaskId?: string | null;
 }
 
