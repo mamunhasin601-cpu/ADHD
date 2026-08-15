@@ -22,7 +22,7 @@ export class TasksService {
     private readonly planService: PlanService,
   ) {}
 
-  async create(userId: string, dto: CreateTaskDto): Promise<Task> {
+  async create(userId: string, dto: CreateTaskDto): Promise<Task & { newOccurrenceIds?: string[] }> {
     this.assertRecurrence(dto.isRecurring, dto.recurrenceRule, dto.startTime, dto.parentTaskId);
     if (dto.parentTaskId) {
       const parent = await this.findOne(userId, dto.parentTaskId);
@@ -38,8 +38,7 @@ export class TasksService {
     const timezone = dto.isRecurring ? await this.profileTimezone(userId, dto.deviceTimezone) : null;
     const start = dto.startTime ? new Date(dto.startTime) : null;
     const anchorKey = start && timezone ? formatInTimeZone(start, timezone, 'yyyy-MM-dd') : null;
-    const task = await this.prisma.task.create({
-      data: {
+    const data: Prisma.TaskUncheckedCreateInput = {
         userId,
         title: dto.title,
         firstStep: dto.firstStep ?? null,
@@ -51,13 +50,40 @@ export class TasksService {
         recurrenceTimezone: timezone,
         recurrenceDateKey: anchorKey,
         parentTaskId: dto.parentTaskId ?? null,
-      },
-      include: { subTasks: true },
+    };
+
+    if (!dto.isRecurring) {
+      const task = await this.prisma.task.create({ data, include: { subTasks: true } });
+      await this.syncReminder(task);
+      return task;
+    }
+
+    const { today, target } = this.horizon(timezone!);
+    const result = await this.prisma.$transaction(async (tx) => {
+      const template = await tx.task.create({
+        data: { ...data, recurrenceGeneratedThrough: null },
+        include: { subTasks: true },
+      });
+      const newOccurrenceIds = await this.insertProjection(
+        tx, template, timezone!, anchorKey! > today ? anchorKey! : today, target,
+      );
+      const committedTemplate = await tx.task.update({
+        where: { id: template.id },
+        data: {
+          recurrenceTimezone: timezone,
+          recurrenceDateKey: anchorKey,
+          recurrenceGeneratedThrough: target,
+        },
+        include: { subTasks: true },
+      });
+      return { template: committedTemplate, newOccurrenceIds };
     });
 
-    if (task.isRecurring) await this.extendSeries(userId, task.id);
-    else await this.syncReminder(task);
-    return task;
+    const occurrences = await this.prisma.task.findMany({
+      where: { id: { in: result.newOccurrenceIds } },
+    });
+    await Promise.all(occurrences.map((occurrence) => this.syncReminder(occurrence)));
+    return { ...result.template, newOccurrenceIds: result.newOccurrenceIds };
   }
 
   async findAll(userId: string, query: GetTasksQueryDto): Promise<Task[]> {

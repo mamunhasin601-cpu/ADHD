@@ -6,6 +6,8 @@ Completed for exactly `FREQ=DAILY` and
 `FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR`. A repeat is a timed root task without subtasks.
 The user-authored row remains the stable, non-actionable series template. Every
 occurrence has its own UUID, `seriesId`, and profile-local `recurrenceDateKey`.
+Occurrence UUIDs are randomly preassigned before insertion and remain stable;
+they are not derived deterministically from the calendar date.
 The database unique constraint on `(seriesId, recurrenceDateKey)` remains the
 cross-request and cross-replica idempotency boundary. Start and completion belong
 only to occurrences; occurrence rows never count as free-tier authored tasks.
