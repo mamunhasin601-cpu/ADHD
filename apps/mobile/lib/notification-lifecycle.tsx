@@ -84,7 +84,7 @@ export function NotificationLifecycleProvider({ userId, children }: { userId?: s
         },
       });
       if (!isCurrent(owned)) return false;
-      await reconcileLocalReminders(data, localOnly);
+      await reconcileLocalReminders(data, localOnly, () => isCurrent(owned));
     } catch {
       // Registration and task behavior remain usable when reconciliation fails.
     }
@@ -119,7 +119,7 @@ export function NotificationLifecycleProvider({ userId, children }: { userId?: s
         if (!isCurrent(owned)) return;
         setLocalOnlyMode(false);
         if (!isCurrent(owned)) return;
-        await reconcileLocalReminders([], false).catch(() => undefined);
+        await reconcileLocalReminders([], false, () => isCurrent(owned)).catch(() => undefined);
       }
     } catch {
       if (isCurrent(owned)) setError('Не удалось настроить напоминания. Попробуйте ещё раз.');

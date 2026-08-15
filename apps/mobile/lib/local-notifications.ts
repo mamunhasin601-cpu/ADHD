@@ -31,6 +31,11 @@ const MIN_LEAD_MS = 5_000;
 /** Identifier prefix for ALL Focus task-reminder local notifications. */
 const FOCUS_REMINDER_PREFIX = 'focus-task-reminder-';
 
+/** Optional lifecycle ownership check. Omitted by task CRUD and legacy callers. */
+export type ReminderContinuationGuard = () => boolean;
+
+const alwaysContinue: ReminderContinuationGuard = () => true;
+
 /**
  * Returns the deterministic local notification identifier for a task.
  * Uses the `focus-task-reminder-` prefix so reconciliation can identify
@@ -54,12 +59,15 @@ export function localNotificationId(taskId: string): string {
 export async function scheduleLocalReminder(
   task: Task,
   localOnly = true,
+  shouldContinue: ReminderContinuationGuard = alwaysContinue,
 ): Promise<void> {
+  if (!shouldContinue()) return;
   // Always cancel the prior Focus-owned reminder for this task.
   // This handles the switch-to-remote-primary case (0011B blocker 3):
   // a device that was in local-fallback mode may have an existing local
   // notification that must be removed when remote push takes over.
   await cancelLocalReminder(task.id);
+  if (!shouldContinue()) return;
 
   // Remote-primary channel policy: after cleanup, skip scheduling new local notification.
   if (!localOnly) return;
@@ -73,8 +81,10 @@ export async function scheduleLocalReminder(
   if (delayMs < MIN_LEAD_MS) return;
 
   try {
-    await Notifications.scheduleNotificationAsync({
-      identifier: localNotificationId(task.id),
+    if (!shouldContinue()) return;
+    const requestedIdentifier = localNotificationId(task.id);
+    const scheduledIdentifier = await Notifications.scheduleNotificationAsync({
+      identifier: requestedIdentifier,
       content: {
         // Generic, non-sensitive (ADR-009): no task title visible on locked screen.
         title: 'Focus',
@@ -86,6 +96,13 @@ export async function scheduleLocalReminder(
         date: startTime,
       } as Notifications.DateTriggerInput,
     });
+    if (!shouldContinue()) {
+      // The OS call cannot be cancelled while pending. If it settles after its
+      // lifecycle owner was invalidated, remove precisely what that call made.
+      await Notifications.cancelScheduledNotificationAsync(
+        scheduledIdentifier || requestedIdentifier,
+      ).catch(() => {});
+    }
   } catch {
     // Local scheduling failure is non-fatal: task CRUD is unaffected.
   }
@@ -116,17 +133,18 @@ export async function cancelLocalReminder(taskId: string): Promise<void> {
 export async function reconcileLocalReminders(
   tasks: Task[],
   localOnly = true,
+  shouldContinue: ReminderContinuationGuard = alwaysContinue,
 ): Promise<void> {
   // Cancel only Focus-owned task-reminder notifications, not ALL OS notifications.
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  if (!shouldContinue()) return;
   const focusNotifications = scheduled.filter((n) =>
     n.identifier.startsWith(FOCUS_REMINDER_PREFIX),
   );
-  await Promise.all(
-    focusNotifications.map((n) =>
-      Notifications.cancelScheduledNotificationAsync(n.identifier).catch(() => {}),
-    ),
-  );
+  for (const notification of focusNotifications) {
+    if (!shouldContinue()) return;
+    await Notifications.cancelScheduledNotificationAsync(notification.identifier).catch(() => {});
+  }
 
   // If push is the primary channel, skip local scheduling entirely.
   if (!localOnly) return;
@@ -141,7 +159,9 @@ export async function reconcileLocalReminders(
   });
 
   for (const task of future) {
-    await scheduleLocalReminder(task, true);
+    if (!shouldContinue()) return;
+    await scheduleLocalReminder(task, true, shouldContinue);
+    if (!shouldContinue()) return;
   }
 }
 

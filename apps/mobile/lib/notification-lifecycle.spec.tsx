@@ -99,7 +99,7 @@ it('keeps fresh askable bootstrap not-asked without a native request or registra
 it('bootstraps an existing grant with exactly one bounded remote-primary reconciliation', async () => {
   inspect.mockResolvedValue('granted');
   const { rerender } = render(<Harness userId="A" />);
-  await waitFor(() => expect(reconcile).toHaveBeenCalledWith([], false));
+  await waitFor(() => expect(reconcile).toHaveBeenCalledWith([], false, expect.any(Function)));
   expect(token).toHaveBeenCalledTimes(1);
   expect(post).toHaveBeenCalledTimes(1);
   expect(getTasks).toHaveBeenCalledWith('/tasks', { params: expect.objectContaining({ includeSubTasks: false, scheduledFrom: expect.any(String), scheduledTo: expect.any(String) }) });
@@ -145,7 +145,7 @@ it('uses local fallback when push registration fails while permission is granted
   inspect.mockResolvedValue('granted');
   token.mockRejectedValue(new Error('unavailable'));
   render(<Harness userId="A" />);
-  await waitFor(() => expect(reconcile).toHaveBeenCalledWith([], true));
+  await waitFor(() => expect(reconcile).toHaveBeenCalledWith([], true, expect.any(Function)));
   expect(setMode).toHaveBeenCalledWith(true);
 });
 
@@ -153,13 +153,13 @@ it('granted to revoked cancels owned reminders without false local fallback', as
   inspect.mockResolvedValue('granted');
   refresh.mockResolvedValue('denied');
   render(<Harness userId="A" />);
-  await waitFor(() => expect(reconcile).toHaveBeenCalledWith([], false));
+  await waitFor(() => expect(reconcile).toHaveBeenCalledWith([], false, expect.any(Function)));
   jest.clearAllMocks();
   await act(async () => appStateHandler?.('active'));
   await settlePermission('denied');
   expect(setMode).toHaveBeenCalledWith(false);
   expect(setMode).not.toHaveBeenCalledWith(true);
-  expect(reconcile).toHaveBeenCalledWith([], false);
+  expect(reconcile).toHaveBeenCalledWith([], false, expect.any(Function));
   expect(getTasks).not.toHaveBeenCalled();
 });
 
@@ -239,6 +239,27 @@ it('stale device POST settlement cannot set channel policy or reconcile', async 
   expect(setMode).toHaveBeenCalledTimes(1);
   expect(getTasks).toHaveBeenCalledTimes(1);
   expect(reconcile).toHaveBeenCalledTimes(1);
+});
+
+it('invalidates the reconciliation continuation guard across logout and User B login', async () => {
+  inspect.mockResolvedValue('granted');
+  const oldReconciliation = deferred<void>();
+  const currentReconciliation = deferred<void>();
+  reconcile.mockReturnValueOnce(oldReconciliation.promise).mockReturnValueOnce(currentReconciliation.promise);
+  const { rerender } = render(<Harness userId="A" />);
+  await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(1));
+  const aGuard = reconcile.mock.calls[0][2] as () => boolean;
+  expect(aGuard()).toBe(true);
+  rerender(<Harness />);
+  expect(aGuard()).toBe(false);
+  rerender(<Harness userId="B" />);
+  await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(2));
+  const bGuard = reconcile.mock.calls[1][2] as () => boolean;
+  expect(aGuard()).toBe(false);
+  expect(bGuard()).toBe(true);
+  await act(async () => oldReconciliation.resolve());
+  await act(async () => currentReconciliation.resolve());
+  expect(post).toHaveBeenCalledTimes(2);
 });
 
 it('clears a prior inspection error after a successful current retry', async () => {

@@ -22,6 +22,8 @@ Existing grants bootstrap without prompting, register remote-primary exactly onc
 
 Registration ownership is keyed to the authenticated user. A transition from User A through logout to User B invalidates A's generation and registers/reconciles exactly once for B, without adding a user ID to the authenticated device-registration payload or clearing device-level permission/invitation storage. Every awaited token, device POST, task-query, and reconciliation boundary revalidates both generation and owner; stale work cannot begin later channel or reminder side effects, and an older `finally` cannot release a newer guard.
 
+Reminder reconciliation carries that same optional ownership guard through the OS notification layer while remaining backward-compatible for task CRUD callers. It revalidates after reading scheduled notifications, before every cancellation and schedule, and after each awaited schedule. If a schedule settles after invalidation, Focus cancels that exact stale identifier; stale User A reconciliation therefore cannot schedule A work, cancel current User B work, or overwrite B's final channel outcome.
+
 Invitation hydration has its own mount-safe generation. A current **Не сейчас** action invalidates an older pending hydration, so a delayed `available` result or StrictMode cleanup/replay cannot overwrite `deferred`. Successful current bootstrap, resume, or explicit operations clear prior lifecycle errors.
 
 ## Accessibility
@@ -51,8 +53,8 @@ Invitation and Settings actions expose button roles. Pending actions expose disa
 
 Validation commands and final Jest totals:
 
-- `npm test --workspace @focus/mobile -- --runInBand` — 30 suites, 385 tests passed. This exceeds the exact Task 0019 base inventory of 27 suites / 366 tests and restores the meaningful Task 0011 lifecycle evidence removed by the first Task 0020 commit.
-- `npm test --workspace @focus/mobile -- --runInBand apps/mobile/lib/notification-lifecycle.spec.tsx apps/mobile/tests/_layout.spec.tsx --detectOpenHandles` — 2 suites, 22 tests passed.
+- `npm test --workspace @focus/mobile -- --runInBand` — 30 suites, 390 tests passed; the pre-correction baseline was 30 suites / 385 tests.
+- `npm test --workspace @focus/mobile -- --runInBand apps/mobile/lib/notification-lifecycle.spec.tsx apps/mobile/lib/local-notifications.spec.ts --detectOpenHandles` — 2 suites, 41 tests passed.
 - `npm test --workspace @focus/mobile -- --runInBand apps/mobile/lib/notification-permission.spec.ts apps/mobile/components/NotificationInvitation.spec.tsx apps/mobile/tests/today-notification-invitation.spec.tsx apps/mobile/tests/today-start-task.spec.tsx apps/mobile/tests/settings-time-format.spec.tsx apps/mobile/tests/onboarding.spec.tsx apps/mobile/tests/auth-routing.spec.ts apps/mobile/components/NowCard.spec.tsx apps/mobile/lib/local-notifications.spec.ts apps/mobile/components/NotificationPermissionBanner.spec.tsx` — 10 suites, 125 tests passed.
 - `npx tsc --noEmit -p apps/mobile/tsconfig.json`.
 - `git diff --check` plus final diff-stat and complete-diff review.
