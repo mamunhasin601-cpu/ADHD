@@ -107,7 +107,7 @@ Phase 1 реализует минимальное ядро из [PDR-001](../12-
     Monday–Friday repeats now produce bounded, stable, independently actionable
     occurrences in the profile calendar timezone. Series-wide edit/delete scope
     is explicit; DST wall time, free-tier counting, reminders, recovery isolation,
-    history-preserving edits, autonomous bounded renewal, and idempotent generation are defined in
+    complete start/stop transitions, atomic history-preserving edits, bounded batched renewal, and idempotent generation are defined in
     [the Task 0022 record](../../docs/tasks/0022-honest-basic-recurring-tasks.md).
 
 Остальные capability Phase 1 остаются на горизонте, но их точный порядок пока

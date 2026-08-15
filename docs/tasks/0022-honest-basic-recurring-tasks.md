@@ -1,67 +1,80 @@
 # Task 0022 — Honest basic recurring tasks
 
-## Status and supported scope
+## Supported scope and identities
 
 Completed for exactly `FREQ=DAILY` and
-`FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR`. A repeat is a timed root task. The API rejects
-all other new rules, inconsistent flags, and recurring subtasks. The mobile form
-hides the subtask controls after recurrence is selected and explains calmly that
-steps are not yet available for repeating tasks.
-
-The user-authored `Task.id` is the stable, non-actionable series identity. Every
+`FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR`. A repeat is a timed root task without subtasks.
+The user-authored row remains the stable, non-actionable series template. Every
 occurrence has its own UUID, `seriesId`, and profile-local `recurrenceDateKey`.
-The unique `(seriesId, recurrenceDateKey)` database constraint plus
-`createMany(skipDuplicates)` protects concurrent generation. Start and completion
-belong only to occurrences; generated rows do not count as free-tier authored
-tasks.
+The database unique constraint on `(seriesId, recurrenceDateKey)` remains the
+cross-request and cross-replica idempotency boundary. Start and completion belong
+only to occurrences; occurrence rows never count as free-tier authored tasks.
+
+## Explicit state machine
+
+A non-recurring task may become a series only while it is a timed, root,
+unstarted, incomplete task with no subtasks. The conversion, timezone/anchor
+snapshot, generated-through boundary, and bounded occurrence insert commit in one
+transaction. The template's old reminder is cancelled after commit and only
+concrete occurrence reminders are scheduled.
+
+Selecting **«Остановить повтор с сегодняшнего дня»** sets
+`recurrenceEndedAt`. The profile-local current-day occurrence stays actionable.
+Only untouched occurrences strictly after today are removed; every past, started,
+or completed occurrence and UUID remains unchanged. Ended templates remain hidden
+as templates, are excluded from renewal, and do not consume an active free-tier
+slot. They are not converted into ordinary dated tasks.
+
+Content-only edits update eligible current/future untouched occurrences in place
+without moving the anchor or changing UUIDs. Anchor or pattern replacement updates
+the series, removes eligible rows, inserts the replacement projection, and updates
+`recurrenceGeneratedThrough` inside one transaction. A failure at any point rolls
+back metadata, deletion, insertion, and boundary together. Reminder cancellation
+and scheduling use returned removed/new concrete IDs only after commit.
 
 ## Calendar, timezone, and bounded renewal
 
-The series stores its anchor instant, calendar key, wall clock, and timezone
-snapshot. A valid profile IANA timezone is preferred. If it is missing or invalid,
-the API accepts the mobile request's explicitly supplied, validated device IANA
-timezone. UTC is never substituted silently, and creation is rejected only when
-neither candidate is valid. Occurrences recombine local calendar keys with the
-stored wall clock, preserving Moscow/New York wall time through DST and preserving
-month/year identity.
+A valid stored series timezone is used first, followed by a valid profile IANA
+timezone and then an explicitly supplied, validated device IANA timezone. Invalid
+stored/profile values are never passed to calendar conversion and UTC is never
+silently substituted. Occurrences recombine their calendar key with the stored
+wall clock, preserving local time across Moscow/New York DST and month/year edges.
 
-`recurrenceGeneratedThrough` is authoritative. Generation starts only after that
-boundary and targets profile-local today plus 60 calendar days. An equal boundary
-is a zero-write, zero-reminder no-op. A client-selected future date is not a
-materialization authority. The authenticated lifecycle endpoint may request a
-check, but the server computes its own boundary. A server-owned UTC 01:00 daily
-scheduler renews every active series independently of app navigation. History is
-retained indefinitely; only future materialization is bounded.
+`recurrenceGeneratedThrough` is authoritative. Generation starts after it and
+targets profile-local today plus 60 calendar days; an equal boundary performs zero
+writes and zero reminder scheduling. Client-selected dates never extend the
+horizon. A server-owned 01:00 UTC job renews active series in deterministic pages
+of 100 with sequential bounded work. One malformed series is logged without user
+content and cannot abort other series. Database uniqueness handles overlapping
+replicas.
 
-## Series edits, reminders, and cache integrity
+## Mobile integrity
 
-Series changes are effective from profile-local today. Completed, started, and
-past occurrences survive byte-for-byte. Content-only changes update eligible
-future untouched occurrences in place, retaining UUIDs and the original series
-anchor. The occurrence edit payload carries the immutable series anchor/timezone;
-only explicit wall-clock or pattern controls set the dedicated recurrence-edit
-flags. Schedule changes replace only eligible future untouched rows.
+The form cannot retain recurrence without a time. Choosing a recurrence while
+«Без времени» is selected calmly requests a time; removing time explicitly clears
+the recurrence. Recurring subtasks remain unavailable in both API and UI.
+Occurrence editing carries immutable series anchor/timezone metadata and explicit
+anchor/pattern edit flags.
 
-The series update and eligible occurrence writes run in one database transaction.
-Reminder cancellation/scheduling happens only after commit and only for affected
-or newly inserted occurrence IDs. Delete returns every affected occurrence ID.
-Mobile cancels those exact Focus-owned local notification IDs with the Task 0020
-user/lifecycle guard and invalidates the entire `tasks` React Query prefix so
-previously visited dates cannot retain stale occurrences. BullMQ cleanup follows
-the same concrete IDs. Recovery continues to mutate only a selected occurrence.
+Create, edit, stop, and delete run guarded local-reminder reconciliation and
+invalidate the full `tasks` cache prefix when multiple days can change. The guard
+combines mounted state, per-mutation identity, user identity, and a monotonic auth
+session generation. It is rechecked around every awaited cancellation, lookup,
+cache write, and reconciliation; late local scheduling retains exact-ID cleanup.
+Remote-primary mode continues to cancel/avoid local duplicates, while local-only
+mode immediately schedules concrete occurrences after series creation.
 
 ## Legacy policy
 
-The additive migration turns supported legacy rows into series in place and
-snapshots their owner's timezone. A previously accepted unsupported or missing
-rule is converted in place to one visible non-recurring task: identity, ownership,
-title, instant, duration, color, first step, start/completion state, and timestamps
-remain unchanged; only recurrence fields are cleared. Nothing is hidden, copied,
-or deleted.
+The additive migration keeps only timed root rows with supported rules as active
+series. Unsupported/missing rules, supported rows without a start time, and
+recurring subtasks are converted in place to one visible non-recurring task.
+Identity, ownership, title, instant, duration, color, first step, start/completion
+state, `createdAt`, and `updatedAt` remain unchanged; only recurrence fields clear.
 
 ## Deferred
 
-Arbitrary weekday selection, custom intervals, monthly/yearly recurrence, end
-dates, edit-only-this-occurrence, recurring subtasks, streaks, missed counters,
-AI suggestions, an advanced editor, and a calendar screen remain deferred.
-Android runtime validation is not claimed by Jest or TypeScript checks.
+Arbitrary weekday selection, custom intervals, monthly/yearly recurrence, end-date
+UI, edit-only-this-occurrence, recurring subtasks, streaks, missed counters, AI
+suggestions, an advanced editor, and a calendar screen remain deferred. Android
+runtime validation is not claimed by Jest or TypeScript checks.

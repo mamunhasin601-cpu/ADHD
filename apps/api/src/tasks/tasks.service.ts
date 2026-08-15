@@ -5,7 +5,8 @@ import { PlanService } from '../plan/plan.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { GetTasksQueryDto } from './dto/get-tasks-query.dto';
-import type { Task } from '@prisma/client';
+import type { Prisma, Task } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import { formatInTimeZone, fromZonedTime, toDate } from 'date-fns-tz';
 
 const SUPPORTED_RULES = ['FREQ=DAILY', 'FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR'] as const;
@@ -145,61 +146,81 @@ export class TasksService {
     return task;
   }
 
-  async update(userId: string, taskId: string, dto: UpdateTaskDto): Promise<Task & { affectedOccurrenceIds?: string[] }> {
+  async update(userId: string, taskId: string, dto: UpdateTaskDto): Promise<Task & { affectedOccurrenceIds?: string[]; newOccurrenceIds?: string[] }> {
     const selected = await this.findOne(userId, taskId);
     const series = selected.seriesId ? await this.findOne(userId, selected.seriesId) : selected;
-    if (!series.isRecurring) {
-      const task = await this.prisma.task.update({
-        where: { id: selected.id },
-        data: {
-          ...(dto.title !== undefined && { title: dto.title }),
-          ...(dto.firstStep !== undefined && { firstStep: dto.firstStep }),
-          ...(dto.startTime !== undefined && { startTime: dto.startTime ? new Date(dto.startTime) : null }),
-          ...(dto.durationMinutes !== undefined && { durationMinutes: dto.durationMinutes }),
-          ...(dto.color !== undefined && { color: dto.color }),
-          ...(dto.isRecurring !== undefined && { isRecurring: dto.isRecurring }),
-          ...(dto.recurrenceRule !== undefined && { recurrenceRule: dto.recurrenceRule }),
-          ...(dto.completedAt !== undefined && { completedAt: dto.completedAt ? new Date(dto.completedAt) : null }),
-        }, include: { subTasks: true },
+
+    // Explicit non-recurring -> active-series transition.
+    if (!series.isRecurring && dto.isRecurring === true) {
+      const subTaskCount = await this.prisma.task.count({ where: { parentTaskId: series.id } });
+      const transitionStart = dto.startTime !== undefined ? (dto.startTime ? new Date(dto.startTime) : null) : series.startTime;
+      if (!transitionStart || series.parentTaskId || series.startedAt || series.completedAt || subTaskCount > 0) {
+        throw new BadRequestException('Повтор можно включить только для незавершённой задачи со временем и без шагов');
+      }
+      this.assertRecurrence(true, dto.recurrenceRule, transitionStart.toISOString(), series.parentTaskId);
+      const timezone = await this.profileTimezone(userId, dto.deviceTimezone);
+      const anchor = formatInTimeZone(transitionStart, timezone, 'yyyy-MM-dd');
+      const { today, target } = this.horizon(timezone);
+      const result = await this.prisma.$transaction(async (tx) => {
+        const updated = await tx.task.update({ where: { id: series.id }, data: {
+          ...(dto.title !== undefined && { title: dto.title }), ...(dto.firstStep !== undefined && { firstStep: dto.firstStep }),
+          ...(dto.durationMinutes !== undefined && { durationMinutes: dto.durationMinutes }), ...(dto.color !== undefined && { color: dto.color }),
+          startTime: transitionStart, isRecurring: true, recurrenceRule: dto.recurrenceRule, recurrenceTimezone: timezone,
+          recurrenceDateKey: anchor, recurrenceGeneratedThrough: target, recurrenceEndedAt: null,
+        }, include: { subTasks: true } });
+        const newIds = await this.insertProjection(tx, updated, timezone, anchor > today ? anchor : today, target);
+        return { updated, newIds };
       });
-      await this.syncReminder(task);
-      return task;
+      await this.safeCancelReminder(series.id); // template must never own a reminder
+      const created = await this.prisma.task.findMany({ where: { id: { in: result.newIds } } });
+      await Promise.all(created.map((task) => this.syncReminder(task)));
+      return { ...result.updated, affectedOccurrenceIds: [series.id], newOccurrenceIds: result.newIds };
     }
 
-    const timezone = series.recurrenceTimezone || await this.profileTimezone(userId, dto.deviceTimezone);
-    const boundary = formatInTimeZone(new Date(), timezone, 'yyyy-MM-dd');
-    const scheduleChanged = dto.editRecurrenceAnchor === true || dto.editRecurrencePattern === true;
-    const nextStart = dto.editRecurrenceAnchor && dto.startTime ? new Date(dto.startTime) : series.startTime;
+    if (!series.isRecurring) {
+      const task = await this.prisma.task.update({ where: { id: selected.id }, data: {
+        ...(dto.title !== undefined && { title: dto.title }), ...(dto.firstStep !== undefined && { firstStep: dto.firstStep }),
+        ...(dto.startTime !== undefined && { startTime: dto.startTime ? new Date(dto.startTime) : null }),
+        ...(dto.durationMinutes !== undefined && { durationMinutes: dto.durationMinutes }), ...(dto.color !== undefined && { color: dto.color }),
+        ...(dto.completedAt !== undefined && { completedAt: dto.completedAt ? new Date(dto.completedAt) : null }),
+      }, include: { subTasks: true } });
+      await this.syncReminder(task); return task;
+    }
+    if (series.recurrenceEndedAt) throw new BadRequestException('Этот повтор уже остановлен');
+
+    const timezone = await this.resolveSeriesTimezone(series, userId, dto.deviceTimezone);
+    const { today, target } = this.horizon(timezone);
+    const stop = dto.editRecurrencePattern === true && (dto.isRecurring === false || dto.recurrenceRule == null);
+    const scheduleChanged = !stop && (dto.editRecurrenceAnchor === true || dto.editRecurrencePattern === true);
+    const nextStart = dto.editRecurrenceAnchor && dto.startTime ? new Date(dto.startTime) : series.startTime!;
     const nextRule = dto.editRecurrencePattern ? dto.recurrenceRule : series.recurrenceRule;
-    this.assertRecurrence(true, nextRule, nextStart?.toISOString(), series.parentTaskId);
-    const content = {
-      ...(dto.title !== undefined && { title: dto.title }),
-      ...(dto.firstStep !== undefined && { firstStep: dto.firstStep }),
-      ...(dto.durationMinutes !== undefined && { durationMinutes: dto.durationMinutes }),
-      ...(dto.color !== undefined && { color: dto.color }),
-    };
+    if (!stop) this.assertRecurrence(true, nextRule, nextStart.toISOString(), series.parentTaskId);
+    const content = { ...(dto.title !== undefined && { title: dto.title }), ...(dto.firstStep !== undefined && { firstStep: dto.firstStep }),
+      ...(dto.durationMinutes !== undefined && { durationMinutes: dto.durationMinutes }), ...(dto.color !== undefined && { color: dto.color }) };
 
     const result = await this.prisma.$transaction(async (tx) => {
-      const eligibleWhere = { seriesId: series.id, recurrenceDateKey: { gte: boundary }, startedAt: null, completedAt: null };
-      const affected = await tx.task.findMany({ where: eligibleWhere, select: { id: true } });
-      const updatedSeries = await tx.task.update({ where: { id: series.id }, data: {
-        ...content,
-        ...(dto.editRecurrenceAnchor && { startTime: nextStart, recurrenceDateKey: formatInTimeZone(nextStart!, timezone, 'yyyy-MM-dd') }),
-        ...(dto.editRecurrencePattern && { recurrenceRule: nextRule }),
-        ...(scheduleChanged && { recurrenceGeneratedThrough: null }),
+      const futureWhere = { seriesId: series.id, recurrenceDateKey: { gt: stop ? today : this.addDateKey(today, -1) }, startedAt: null, completedAt: null };
+      const removed = (stop || scheduleChanged) ? await tx.task.findMany({ where: futureWhere, select: { id: true } }) : [];
+      const nextAnchor = dto.editRecurrenceAnchor ? formatInTimeZone(nextStart, timezone, 'yyyy-MM-dd')
+        : (series.recurrenceDateKey || formatInTimeZone(series.startTime!, timezone, 'yyyy-MM-dd'));
+      const updated = await tx.task.update({ where: { id: series.id }, data: {
+        ...content, ...(dto.editRecurrenceAnchor && { startTime: nextStart, recurrenceDateKey: nextAnchor }),
+        ...(dto.editRecurrencePattern && !stop && { recurrenceRule: nextRule }),
+        ...(stop && { recurrenceEndedAt: new Date(), recurrenceGeneratedThrough: today }),
+        ...(scheduleChanged && { recurrenceGeneratedThrough: target }),
       }, include: { subTasks: true } });
-      if (scheduleChanged) await tx.task.deleteMany({ where: eligibleWhere });
-      else if (Object.keys(content).length) await tx.task.updateMany({ where: eligibleWhere, data: content });
-      return { updatedSeries, affectedIds: affected.map(({ id }) => id) };
+      if (stop || scheduleChanged) await tx.task.deleteMany({ where: futureWhere });
+      else if (Object.keys(content).length) await tx.task.updateMany({ where: { seriesId: series.id, recurrenceDateKey: { gte: today }, startedAt: null, completedAt: null }, data: content });
+      const newIds = scheduleChanged
+        ? await this.insertProjection(tx, { ...updated, startTime: nextStart, recurrenceRule: nextRule } as Task, timezone, nextAnchor > today ? nextAnchor : today, target)
+        : [];
+      return { updated, removedIds: removed.map(({ id }) => id), newIds };
     });
-
-    await Promise.all(result.affectedIds.map((id) => this.safeCancelReminder(id)));
-    if (scheduleChanged) await this.extendSeries(userId, series.id);
-    else {
-      const changed = await this.prisma.task.findMany({ where: { id: { in: result.affectedIds } } });
-      await Promise.all(changed.map((task) => this.syncReminder(task)));
-    }
-    return { ...result.updatedSeries, affectedOccurrenceIds: result.affectedIds };
+    await Promise.all(result.removedIds.map((id) => this.safeCancelReminder(id)));
+    const changedIds = scheduleChanged ? result.newIds : (await this.prisma.task.findMany({ where: { seriesId: series.id, recurrenceDateKey: { gte: today }, startedAt: null, completedAt: null }, select: { id: true } })).map(({ id }) => id);
+    const changed = await this.prisma.task.findMany({ where: { id: { in: changedIds } } });
+    await Promise.all(changed.map((task) => this.syncReminder(task)));
+    return { ...result.updated, affectedOccurrenceIds: result.removedIds, newOccurrenceIds: result.newIds };
   }
 
   async remove(userId: string, taskId: string): Promise<{ affectedOccurrenceIds: string[] }> {
@@ -279,59 +300,73 @@ export class TasksService {
   }
 
   /** Maintains an authoritative rolling horizon based on profile-local today. */
-  async extendSeries(userId: string, seriesId: string): Promise<number> {
+  async extendSeries(userId: string, seriesId: string, deviceTimezone?: string): Promise<number> {
     const series = await this.findOne(userId, seriesId);
-    if (!series.isRecurring || !series.startTime || !series.recurrenceRule) return 0;
+    if (!series.isRecurring || series.recurrenceEndedAt || !series.startTime || !series.recurrenceRule) return 0;
     if (!SUPPORTED_RULES.includes(series.recurrenceRule as typeof SUPPORTED_RULES[number])) throw new BadRequestException('Неподдерживаемое правило повторения');
-    const timezone = series.recurrenceTimezone || await this.profileTimezone(userId);
-    const anchor = series.recurrenceDateKey || formatInTimeZone(series.startTime, timezone, 'yyyy-MM-dd');
-    const today = formatInTimeZone(new Date(), timezone, 'yyyy-MM-dd');
-    const targetCursor = new Date(`${today}T12:00:00Z`);
-    targetCursor.setUTCDate(targetCursor.getUTCDate() + RECURRENCE_HORIZON_DAYS);
-    const target = targetCursor.toISOString().slice(0, 10);
+    const timezone = await this.resolveSeriesTimezone(series, userId, deviceTimezone);
+    const { today, target } = this.horizon(timezone);
     if (series.recurrenceGeneratedThrough && series.recurrenceGeneratedThrough >= target) return 0;
-    const first = series.recurrenceGeneratedThrough
-      ? this.addDateKey(series.recurrenceGeneratedThrough, 1)
-      : (anchor > today ? anchor : today);
+    const anchor = series.recurrenceDateKey || formatInTimeZone(series.startTime, timezone, 'yyyy-MM-dd');
+    const first = series.recurrenceGeneratedThrough ? this.addDateKey(series.recurrenceGeneratedThrough, 1) : (anchor > today ? anchor : today);
     if (first > target) return 0;
-    const wall = formatInTimeZone(series.startTime, timezone, 'HH:mm:ss');
-    const keys: string[] = [];
-    const cursor = new Date(`${first}T12:00:00Z`);
-    while (cursor.toISOString().slice(0, 10) <= target) {
-      const key = cursor.toISOString().slice(0, 10); const weekday = cursor.getUTCDay();
-      if (series.recurrenceRule === 'FREQ=DAILY' || (weekday >= 1 && weekday <= 5)) keys.push(key);
-      cursor.setUTCDate(cursor.getUTCDate() + 1);
-    }
-    const result = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.task.createMany({ data: keys.map((key) => ({
-        userId, title: series.title, firstStep: series.firstStep, durationMinutes: series.durationMinutes,
-        color: series.color, startTime: fromZonedTime(`${key}T${wall}`, timezone), seriesId: series.id,
-        recurrenceDateKey: key, isRecurring: false, recurrenceRule: series.recurrenceRule,
-      })), skipDuplicates: true });
+    const newIds = await this.prisma.$transaction(async (tx) => {
+      const ids = await this.insertProjection(tx, series, timezone, first, target);
       await tx.task.update({ where: { id: series.id }, data: { recurrenceTimezone: timezone, recurrenceDateKey: anchor, recurrenceGeneratedThrough: target } });
-      return created.count;
+      return ids;
     });
-    if (!result) return 0;
-    const occurrences = await this.prisma.task.findMany({ where: { seriesId: series.id, recurrenceDateKey: { in: keys } } });
-    await Promise.all(occurrences.map((occurrence) => this.syncReminder(occurrence)));
-    return result;
+    const created = await this.prisma.task.findMany({ where: { id: { in: newIds } } });
+    await Promise.all(created.map((task) => this.syncReminder(task))); return newIds.length;
   }
 
-  async extendAllSeries(userId: string): Promise<number> {
-    const rows = await this.prisma.task.findMany({ where: { userId, isRecurring: true, seriesId: null }, select: { id: true } });
-    const counts = await Promise.all(rows.map(({ id }) => this.extendSeries(userId, id)));
-    return counts.reduce((sum, count) => sum + count, 0);
+  async extendAllSeries(userId: string, deviceTimezone?: string): Promise<number> {
+    const rows = await this.prisma.task.findMany({ where: { userId, isRecurring: true, recurrenceEndedAt: null, seriesId: null }, select: { id: true } });
+    let count = 0; for (const { id } of rows) count += await this.extendSeries(userId, id, deviceTimezone); return count;
   }
 
-  /** Server-owned daily lifecycle; bounded per series and safe across replicas. */
-  async renewRecurrenceHorizons(): Promise<number> {
-    const rows = await this.prisma.task.findMany({ where: { isRecurring: true, seriesId: null }, select: { id: true, userId: true } });
-    const counts = await Promise.all(rows.map(({ id, userId }) => this.extendSeries(userId, id)));
-    return counts.reduce((sum, count) => sum + count, 0);
+  /** Deterministic batches; one malformed series cannot abort the rest. */
+  async renewRecurrenceHorizons(batchSize = 100): Promise<number> {
+    let cursor: string | undefined; let total = 0;
+    do {
+      const rows = await this.prisma.task.findMany({ where: { isRecurring: true, recurrenceEndedAt: null, seriesId: null },
+        select: { id: true, userId: true }, orderBy: { id: 'asc' }, take: batchSize,
+        ...(cursor && { cursor: { id: cursor }, skip: 1 }) });
+      for (const row of rows) {
+        try { total += await this.extendSeries(row.userId, row.id); }
+        catch { this.logger.error('Recurrence horizon extension failed'); }
+      }
+      cursor = rows.length === batchSize ? rows[rows.length - 1].id : undefined;
+      if (rows.length < batchSize) break;
+    } while (cursor);
+    return total;
   }
 
-  private addDateKey(key: string, days: number): string {
-    const date = new Date(`${key}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10);
+  private horizon(timezone: string): { today: string; target: string } {
+    const today = formatInTimeZone(new Date(), timezone, 'yyyy-MM-dd'); return { today, target: this.addDateKey(today, RECURRENCE_HORIZON_DAYS) };
+  }
+
+  private async insertProjection(tx: Prisma.TransactionClient, series: Task, timezone: string, first: string, target: string): Promise<string[]> {
+    const wall = formatInTimeZone(series.startTime!, timezone, 'HH:mm:ss'); const candidates: Prisma.TaskCreateManyInput[] = [];
+    for (let key = first; key <= target; key = this.addDateKey(key, 1)) {
+      const weekday = new Date(`${key}T12:00:00Z`).getUTCDay();
+      if (series.recurrenceRule === 'FREQ=DAILY' || (weekday >= 1 && weekday <= 5)) candidates.push({ id: randomUUID(), userId: series.userId,
+        title: series.title, firstStep: series.firstStep, durationMinutes: series.durationMinutes, color: series.color,
+        startTime: fromZonedTime(`${key}T${wall}`, timezone), seriesId: series.id, recurrenceDateKey: key, isRecurring: false, recurrenceRule: series.recurrenceRule });
+    }
+    if (!candidates.length) return [];
+    await tx.task.createMany({ data: candidates, skipDuplicates: true });
+    const inserted = await tx.task.findMany({ where: { id: { in: candidates.map(({ id }) => id!) } }, select: { id: true } });
+    return inserted.map(({ id }) => id);
+  }
+
+  private addDateKey(key: string, days: number): string { const date = new Date(`${key}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10); }
+
+  private async resolveSeriesTimezone(series: Task, userId: string, deviceTimezone?: string): Promise<string> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } });
+    for (const timezone of [series.recurrenceTimezone, user?.timezone, deviceTimezone]) {
+      if (!timezone) continue; try { new Intl.DateTimeFormat('en', { timeZone: timezone }).format(); return timezone; } catch { /* next explicit candidate */ }
+    }
+    throw new BadRequestException('Нужен допустимый timezone профиля или устройства');
   }
 
   private assertRecurrence(isRecurring?: boolean, rule?: string | null, startTime?: string | null, parentTaskId?: string | null, occurrenceSeriesId?: string | null): void {

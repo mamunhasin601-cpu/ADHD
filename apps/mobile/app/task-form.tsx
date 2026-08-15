@@ -331,8 +331,17 @@ export default function TaskFormScreen() {
       <Text style={styles.sectionLabel}>Время</Text>
       <View style={styles.row}>
         <Pressable
+          accessibilityRole="radio"
+          accessibilityLabel="Без времени"
+          accessibilityState={{ selected: !hasTime }}
           style={[styles.toggleChip, !hasTime && styles.toggleChipActive]}
-          onPress={() => setHasTime(false)}
+          onPress={() => {
+            if (recurrencePreset !== "none") {
+              setRecurrencePreset("none");
+              Alert.alert("Повтор выключен", "Для повторяющейся задачи нужно указать время.");
+            }
+            setHasTime(false);
+          }}
         >
           <Text
             style={[
@@ -344,6 +353,9 @@ export default function TaskFormScreen() {
           </Text>
         </Pressable>
         <Pressable
+          accessibilityRole="radio"
+          accessibilityLabel="Указать время"
+          accessibilityState={{ selected: hasTime }}
           style={[styles.toggleChip, hasTime && styles.toggleChipActive]}
           onPress={() => setHasTime(true)}
         >
@@ -419,10 +431,14 @@ export default function TaskFormScreen() {
           <Pressable
             key={preset}
             accessibilityRole="radio"
-            accessibilityLabel={RECURRENCE_LABELS[preset]}
+            accessibilityLabel={preset === "none" && existingTask?.seriesId ? "Остановить повтор с сегодняшнего дня" : RECURRENCE_LABELS[preset]}
             accessibilityState={{ selected: recurrencePreset === preset }}
             style={[styles.chip, recurrencePreset === preset && styles.chipActive]}
             onPress={() => {
+              if (preset !== "none" && !hasTime) {
+                Alert.alert("Укажите время", "Повтору нужно конкретное время начала.");
+                return;
+              }
               if (preset !== "none" && (existingSubtasks.length || newSubtasks.length)) {
                 Alert.alert("Сначала уберите шаги", "Шаги пока недоступны для повторяющихся задач.");
                 return;
@@ -433,7 +449,7 @@ export default function TaskFormScreen() {
             <Text
               style={[styles.chipText, recurrencePreset === preset && styles.chipTextActive]}
             >
-              {RECURRENCE_LABELS[preset]}
+              {preset === "none" && existingTask?.seriesId ? "Остановить повтор с сегодняшнего дня" : RECURRENCE_LABELS[preset]}
             </Text>
           </Pressable>
         ))}

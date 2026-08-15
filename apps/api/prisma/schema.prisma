@@ -75,6 +75,7 @@ model Task {
   recurrenceTimezone String?
   recurrenceDateKey String?
   recurrenceGeneratedThrough String?
+  recurrenceEndedAt DateTime?
   seriesId        String?
   series          Task?     @relation("TaskOccurrences", fields: [seriesId], references: [id], onDelete: Cascade)
   occurrences     Task[]    @relation("TaskOccurrences")

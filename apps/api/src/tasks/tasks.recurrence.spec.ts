@@ -21,7 +21,7 @@ function setup(value: any = series()) {
       let count = 0;
       for (const row of data) {
         const key = `${row.seriesId}:${row.recurrenceDateKey}`;
-        if (!rows.has(key)) { rows.set(key, { ...row, id: key, completedAt: null, startedAt: null }); count++; }
+        if (!rows.has(key)) { rows.set(key, { ...row, completedAt: null, startedAt: null }); count++; }
       }
       return Promise.resolve({ count });
     }),
@@ -93,7 +93,7 @@ describe('TasksService recurrence integrity', () => {
     expect(value.startTime).toBe(anchor); expect(value.recurrenceTimezone).toBe(zone);
     expect(h.rows.get(completed.id)).toEqual(completed); expect(h.rows.get(future.id)?.id).toBe('future-stable');
     expect(h.prisma.task.deleteMany).not.toHaveBeenCalled();
-    expect(result.affectedOccurrenceIds).toContain('future-stable');
+    expect(result.affectedOccurrenceIds).toEqual([]);
   });
 
   it('renews autonomously through the server lifecycle', async () => {

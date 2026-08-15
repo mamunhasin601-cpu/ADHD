@@ -44,6 +44,7 @@ export interface Task {
   seriesId?: string | null;
   /** Profile-local YYYY-MM-DD occurrence identity. */
   recurrenceDateKey?: string | null;
+  recurrenceEndedAt?: Date | null;
   /** Immutable series anchor metadata supplied for occurrence editing. */
   seriesStartTime?: Date | null;
   seriesTimezone?: string | null;
@@ -58,6 +59,7 @@ export interface Task {
   updatedAt: Date;
   subTasks?: Task[];
   affectedOccurrenceIds?: string[];
+  newOccurrenceIds?: string[];
 }
 
 export interface CreateTaskDto {
