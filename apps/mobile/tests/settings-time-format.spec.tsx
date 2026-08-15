@@ -21,15 +21,21 @@ jest.mock("../lib/api/plan", () => ({
     isLoading: false,
   }),
 }));
+const mockRequestPermission = jest.fn();
+const mockOpenSettings = jest.fn();
+let mockNotificationPermission: "not-asked" | "granted" | "denied" = "not-asked";
+jest.mock("../lib/notification-lifecycle", () => ({ useNotificationLifecycle: () => ({ permission: mockNotificationPermission, invitation: "deferred", busy: false, error: null, requestPermission: mockRequestPermission, deferInvitation: jest.fn(), openSettings: mockOpenSettings }) }));
 jest.mock("expo-router", () => ({ useRouter: () => ({ push: jest.fn() }) }));
 jest.mock("react-native-safe-area-context", () => {
   const { View } = require("react-native");
   return { SafeAreaView: View };
+
 });
 
 describe("settings time format", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockNotificationPermission = "not-asked";
     mockUser = { id: "u", timezone: "Europe/Moscow", timeFormat: "SYSTEM" };
   });
   it("shows a real SYSTEM clock example", () => {
@@ -77,4 +83,16 @@ describe("settings time format", () => {
     );
     expect(mockSetUser).not.toHaveBeenCalled();
   });
+  it.each([
+    ["not-asked", "Не настроены", "Включить напоминания"],
+    ["granted", "Включены", "Открыть настройки"],
+    ["denied", "Выключены", "Открыть настройки"],
+  ] as const)("shows notification state %s", (state, status, action) => {
+    mockNotificationPermission = state;
+    render(<SettingsScreen />);
+    expect(screen.getByText(status)).toBeTruthy();
+    fireEvent.press(screen.getByText(action));
+    expect(state === "not-asked" ? mockRequestPermission : mockOpenSettings).toHaveBeenCalledTimes(1);
+  });
+
 });

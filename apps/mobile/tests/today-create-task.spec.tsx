@@ -4,6 +4,7 @@ const mockRefetchQueries = jest.fn();
 let mockCreatePending = false;
 let mockTimeFormat: "H24" | "H12" = "H24";
 
+jest.mock("../lib/notification-lifecycle", () => ({ useNotificationLifecycle: () => ({ permission: "not-asked", invitation: "deferred", busy: false, error: null, requestPermission: jest.fn(), deferInvitation: jest.fn(), openSettings: jest.fn() }) }));
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush }),
 }));

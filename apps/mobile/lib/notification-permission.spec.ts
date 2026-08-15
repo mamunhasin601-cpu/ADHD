@@ -33,6 +33,9 @@ import {
   setStoredPermissionState,
   requestNotificationPermissionOnce,
   refreshPermissionState,
+  inspectNotificationPermission,
+  getInvitationDisposition,
+  deferNotificationInvitation,
 } from './notification-permission';
 
 const mockGetItem = SecureStore.getItemAsync as jest.Mock;
@@ -43,6 +46,30 @@ const mockRequestPerms = Notifications.requestPermissionsAsync as jest.Mock;
 beforeEach(() => {
   jest.clearAllMocks();
   mockSetItem.mockResolvedValue(undefined);
+});
+
+describe('passive bootstrap and invitation disposition', () => {
+  it('keeps a fresh askable installation not-asked without prompting', async () => {
+    mockGetItem.mockResolvedValue(null);
+    mockGetPerms.mockResolvedValue({ status: 'undetermined', canAskAgain: true });
+    await expect(inspectNotificationPermission()).resolves.toBe('not-asked');
+    expect(mockRequestPerms).not.toHaveBeenCalled();
+    expect(mockSetItem).not.toHaveBeenCalled();
+  });
+
+  it('passively restores an existing grant without prompting', async () => {
+    mockGetItem.mockResolvedValue('granted');
+    mockGetPerms.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    await expect(inspectNotificationPermission()).resolves.toBe('granted');
+    expect(mockRequestPerms).not.toHaveBeenCalled();
+  });
+
+  it('persists deferral separately from OS denial', async () => {
+    mockGetItem.mockResolvedValueOnce('deferred');
+    await expect(getInvitationDisposition()).resolves.toBe('deferred');
+    await deferNotificationInvitation();
+    expect(mockSetItem).toHaveBeenCalledWith(expect.stringContaining('invitation'), 'deferred');
+  });
 });
 
 // ── getStoredPermissionState ───────────────────────────────────────────────

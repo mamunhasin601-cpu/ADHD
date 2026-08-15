@@ -12,6 +12,8 @@ const mockUseTasksForDate = jest.fn((_date: Date, _timezone?: string | null) => 
 let mockStartImplementation: (id: string) => Promise<any>;
 let mockUpdateImplementation: (input: { id: string; dto: { firstStep: string } }) => Promise<any>;
 
+let mockInvitationDisposition: 'available' | 'deferred' = 'deferred';
+jest.mock("../lib/notification-lifecycle", () => ({ useNotificationLifecycle: () => ({ permission: "not-asked", invitation: mockInvitationDisposition, busy: false, error: null, requestPermission: jest.fn(), deferInvitation: jest.fn(), openSettings: jest.fn() }) }));
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 jest.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ refetchQueries: jest.fn() }) }));
 jest.mock('../lib/api/tasks', () => {
@@ -46,7 +48,7 @@ jest.mock('../lib/api/tasks', () => {
   };
 });
 jest.mock('../stores/auth.store', () => ({
-  useAuthStore: (selector: any) => selector({ user: { timezone: mockProfileTimezone, timeFormat: 'H24' } }),
+  useAuthStore: (selector: any) => selector({ user: { timezone: mockProfileTimezone, timeFormat: 'H24', hasCompletedOnboarding: true } }),
 }));
 jest.mock('../components/RecoverySection', () => ({ RecoverySection: () => null }));
 jest.mock('../components/ProgressRing', () => ({ ProgressRing: () => null }));
@@ -72,7 +74,7 @@ describe('Today explicit task start', () => {
   beforeAll(() => { jest.useFakeTimers(); jest.setSystemTime(new Date('2026-08-14T10:15:00Z')); });
   afterAll(() => jest.useRealTimers());
   beforeEach(() => {
-    jest.clearAllMocks(); mockProfileTimezone = 'UTC'; mockTasks = [scheduled('current', '2026-08-14T10:00:00Z')];
+    jest.clearAllMocks(); mockInvitationDisposition = 'deferred'; mockProfileTimezone = 'UTC'; mockTasks = [scheduled('current', '2026-08-14T10:00:00Z')];
     mockStartImplementation = async (id) => {
       const server = { ...mockTasks.find((task) => task.id === id), startedAt: new Date('2026-08-14T10:16:27.456Z') };
       mockTasks = mockTasks.map((task) => task.id === id ? server : task); return server;
@@ -106,6 +108,9 @@ describe('Today explicit task start', () => {
     expect(screen.getByText('Мне трудно начать')).toBeTruthy();
     expect(screen.queryByText('Начато')).toBeNull();
     expect(mockStart).not.toHaveBeenCalled();
+    mockInvitationDisposition = 'available';
+    const invitationView = render(<TodayScreen />);
+    expect(invitationView.getByText('Хотите получать напоминания?')).toBeTruthy();
 
     jest.setSystemTime(new Date('2026-08-14T10:15:00Z'));
   });

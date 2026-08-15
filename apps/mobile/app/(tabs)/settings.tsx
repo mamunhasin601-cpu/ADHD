@@ -19,6 +19,7 @@ import {
 import { apiClient } from "../../lib/api-client";
 import { useRef, useState } from "react";
 import { formatWallClock } from "../../lib/time-format";
+import { useNotificationLifecycle } from "../../lib/notification-lifecycle";
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -29,6 +30,7 @@ export default function SettingsScreen() {
   const savingFormatRef = useRef(false);
   const [formatError, setFormatError] = useState<string | null>(null);
   const { data: planInfo, isLoading: planLoading } = usePlanInfo();
+  const notifications = useNotificationLifecycle();
 
   const isPro = planInfo?.isPro ?? false;
   const activeTasks = planInfo?.usage.activeTasks ?? 0;
@@ -86,6 +88,23 @@ export default function SettingsScreen() {
             <Text style={styles.rowLabel}>Часовой пояс</Text>
             <Text style={styles.rowValue}>{user?.timezone ?? "—"}</Text>
           </View>
+        </View>
+
+        <View style={styles.section} accessibilityLabel="Напоминания">
+          <Text style={styles.sectionTitle}>Напоминания</Text>
+          <Text accessibilityLabel={`Статус напоминаний: ${notifications.permission === 'granted' ? 'Включены' : notifications.permission === 'denied' ? 'Выключены' : 'Не настроены'}`} style={styles.reminderStatus}>
+            {notifications.permission === 'granted' ? 'Включены' : notifications.permission === 'denied' ? 'Выключены' : 'Не настроены'}
+          </Text>
+          {notifications.error && <Text accessibilityRole="alert" style={styles.formatError}>{notifications.error}</Text>}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ disabled: notifications.busy, busy: notifications.busy }}
+            disabled={notifications.busy}
+            onPress={notifications.permission === 'granted' || notifications.permission === 'denied' ? notifications.openSettings : notifications.requestPermission}
+            style={[styles.reminderAction, notifications.busy && styles.formatChoiceDisabled]}
+          >
+            {notifications.busy ? <ActivityIndicator color="#6B5BFC" /> : <Text style={styles.reminderActionText}>{notifications.permission === 'granted' || notifications.permission === 'denied' ? 'Открыть настройки' : 'Включить напоминания'}</Text>}
+          </Pressable>
         </View>
 
         <View style={styles.section}>
@@ -251,6 +270,9 @@ sectionTitle: {
   formatLabel: { fontSize: 15, fontWeight: '600', color: '#211D2E' },
   formatExample: { fontSize: 13, color: '#6B7280', marginTop: 2 },
   formatError: { color: '#9B3A3A', marginTop: 8, lineHeight: 19 },
+  reminderStatus: { fontSize: 15, color: '#374151', marginBottom: 10 },
+  reminderAction: { minHeight: 44, justifyContent: 'center', alignItems: 'flex-start' },
+  reminderActionText: { color: '#6B5BFC', fontSize: 15, fontWeight: '600' },
 
   planBadgeRow: {
     flexDirection: 'row',
