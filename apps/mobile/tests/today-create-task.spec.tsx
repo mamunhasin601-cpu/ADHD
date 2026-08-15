@@ -26,13 +26,15 @@ jest.mock("../lib/api/tasks", () => ({
   useStartTask: jest.fn(() => ({ mutateAsync: jest.fn(), isPending: false })),
   useUpdateTask: jest.fn(() => ({ mutateAsync: jest.fn(), isPending: false })),
 }));
-jest.mock("../stores/auth.store", () => ({
-  useAuthStore: jest.fn((selector: any) =>
-    selector({
-      user: { timezone: "Europe/Moscow", timeFormat: mockTimeFormat },
-    }),
-  ),
-}));
+jest.mock("../stores/auth.store", () => {
+  const state = () => ({
+    user: { id: "user-a", timezone: "Europe/Moscow", timeFormat: mockTimeFormat },
+    sessionGeneration: 1,
+  });
+  const useAuthStore: any = jest.fn((selector: any) => selector(state()));
+  useAuthStore.getState = state;
+  return { useAuthStore };
+});
 jest.mock("../components/RecoverySection", () => ({
   RecoverySection: () => null,
 }));
@@ -293,9 +295,10 @@ describe('Today quick capture destinations', () => {
   });
 
   it('disables every creation destination and planning while creation is pending', () => {
-    mockCreatePending = true;
+    mockMutateAsync.mockReturnValueOnce(new Promise(() => undefined));
     renderWithTimeline();
     fireEvent.changeText(screen.getByLabelText('Название задачи'), 'Задача');
+    fireEvent.press(screen.getByLabelText('Добавить задачу на 14:30'));
 
     const timed = screen.getByLabelText('Добавить задачу на 14:30');
     const thoughts = screen.getByLabelText('Сохранить задачу в Мысли без времени');
@@ -307,7 +310,7 @@ describe('Today quick capture destinations', () => {
     fireEvent.press(timed);
     fireEvent.press(thoughts);
     fireEvent.press(fullForm);
-    expect(mockMutateAsync).not.toHaveBeenCalled();
+    expect(mockMutateAsync).toHaveBeenCalledTimes(1);
     expect(mockPush).not.toHaveBeenCalled();
     fireEvent.press(screen.getByLabelText("Отменить быстрое добавление"));
   });

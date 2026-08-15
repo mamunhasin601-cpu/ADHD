@@ -11,6 +11,14 @@ import { useAuthStore } from '../stores/auth.store';
 
 type CaptureSelection = { instant: Date | null; selectedDate: Date; selectedDateKey: string };
 type GlobalCaptureContextValue = { openTimelineCapture: (selection: CaptureSelection) => void };
+type CaptureOperation = {
+  id: number;
+  ownerMounted: boolean;
+  ownerId: string | null;
+  sessionGeneration: number;
+  selection: CaptureSelection;
+  startTime: Date | null;
+};
 
 const GlobalCaptureContext = createContext<GlobalCaptureContextValue | null>(null);
 
@@ -37,14 +45,16 @@ export function GlobalCaptureProvider({ children }: { children: React.ReactNode 
   const queryClient = useQueryClient();
   const profileTimezone = useAuthStore((state) => state.user?.timezone);
   const timeFormat = useAuthStore((state) => state.user?.timeFormat ?? 'SYSTEM');
+  const ownerId = useAuthStore((state) => state.user?.id ?? null);
   const sessionGeneration = useAuthStore((state) => state.sessionGeneration);
   const [selection, setSelection] = useState<CaptureSelection>(() => currentDaySelection(profileTimezone));
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [duration, setDuration] = useState<TaskDurationPreset>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const submissionPending = useRef(false);
-  const mounted = useRef(true);
-  const activeSession = useRef(sessionGeneration);
+  const mounted = useRef(false);
+  const operationIdentity = useRef(0);
   const createTask = useCreateTask(selection.selectedDate, profileTimezone);
 
   const resetAndClose = useCallback(() => {
@@ -54,17 +64,26 @@ export function GlobalCaptureProvider({ children }: { children: React.ReactNode 
     setSelection(currentDaySelection(profileTimezone));
   }, [profileTimezone]);
 
-  useEffect(() => () => { mounted.current = false; }, []);
   useEffect(() => {
-    activeSession.current = sessionGeneration;
+    // React 18 development effect replay runs setup again after cleanup. Always
+    // restore mounted ownership in setup instead of initializing the ref true.
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      operationIdentity.current += 1;
+      submissionPending.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    // Session, owner, and path transitions invalidate an already-issued
+    // request before resetting the sheet. The request may settle, but its
+    // continuation can no longer touch caches or UI.
+    operationIdentity.current += 1;
     submissionPending.current = false;
+    setIsSubmitting(false);
     resetAndClose();
-  }, [sessionGeneration, resetAndClose]);
-  useEffect(() => {
-    // A sheet belongs to the tab where it was opened. Never carry authored
-    // modal state behind a tab change.
-    resetAndClose();
-  }, [pathname, resetAndClose]);
+  }, [ownerId, pathname, resetAndClose, sessionGeneration]);
 
   const openTimelineCapture = useCallback((next: CaptureSelection) => {
     setSelection(next);
@@ -82,31 +101,57 @@ export function GlobalCaptureProvider({ children }: { children: React.ReactNode 
 
   async function submit(startTime: Date | null = selection.instant) {
     const trimmedTitle = title.trim();
-    if (!trimmedTitle || createTask.isPending || submissionPending.current) return;
+    if (!trimmedTitle || submissionPending.current) return;
     submissionPending.current = true;
-    const submittedSession = sessionGeneration;
+    setIsSubmitting(true);
+    const operation: CaptureOperation = {
+      id: ++operationIdentity.current,
+      ownerMounted: mounted.current,
+      ownerId,
+      sessionGeneration,
+      selection: { ...selection },
+      startTime,
+    };
+    const ownsContinuation = () => {
+      const currentAuth = useAuthStore.getState();
+      return operation.ownerMounted && mounted.current &&
+        operationIdentity.current === operation.id &&
+        (currentAuth.user?.id ?? null) === operation.ownerId &&
+        currentAuth.sessionGeneration === operation.sessionGeneration;
+    };
     try {
       await createTask.mutateAsync({ title: trimmedTitle, startTime: startTime?.toISOString() ?? null, durationMinutes: duration });
-      if (!mounted.current || activeSession.current !== submittedSession) return;
+      if (!ownsContinuation()) return;
       await queryClient.refetchQueries({ queryKey: ['tasks', 'inbox'] });
-      if (startTime) await queryClient.refetchQueries({ queryKey: ['tasks', selection.selectedDateKey] });
-      if (!mounted.current || activeSession.current !== submittedSession) return;
+      if (!ownsContinuation()) return;
+      if (operation.startTime) {
+        if (!ownsContinuation()) return;
+        await queryClient.refetchQueries({ queryKey: ['tasks', operation.selection.selectedDateKey] });
+        if (!ownsContinuation()) return;
+      }
+      if (!ownsContinuation()) return;
       resetAndClose();
     } catch (error) {
-      if (!mounted.current || activeSession.current !== submittedSession) return;
+      if (!ownsContinuation()) return;
       if (isFreeTierLimitError(error)) {
+        if (!ownsContinuation()) return;
         resetAndClose();
+        if (!ownsContinuation()) return;
         router.push('/paywall');
       } else {
+        if (!ownsContinuation()) return;
         Alert.alert('Не удалось создать задачу', 'Проверьте соединение и попробуйте снова');
       }
     } finally {
-      if (activeSession.current === submittedSession) submissionPending.current = false;
+      if (ownsContinuation()) {
+        submissionPending.current = false;
+        setIsSubmitting(false);
+      }
     }
   }
 
   function openFullForm() {
-    if (createTask.isPending || submissionPending.current) return;
+    if (submissionPending.current) return;
     const trimmedTitle = title.trim();
     setOpen(false);
     router.push({
@@ -121,8 +166,8 @@ export function GlobalCaptureProvider({ children }: { children: React.ReactNode 
     });
   }
 
-  const disabled = !title.trim() || createTask.isPending || submissionPending.current;
-  const busy = createTask.isPending || submissionPending.current;
+  const disabled = !title.trim() || isSubmitting;
+  const busy = isSubmitting;
   return (
     <GlobalCaptureContext.Provider value={{ openTimelineCapture }}>
       <View style={styles.owner}>{children}</View>

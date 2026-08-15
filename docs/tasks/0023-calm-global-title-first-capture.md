@@ -25,10 +25,14 @@ timeline slot gestures pass their canonical selection into the global owner.
   primary action, `В Мысли` escape, and full-form prefills.
 - Non-Today details use the current profile-local canonical day. Missing or
   invalid profile timezones fall back to the device calendar day, never UTC.
-- A synchronous submission latch ignores repeated gestures. The authenticated
-  session generation and mounted-owner checks prevent a completed operation
-  from changing replacement-session UI or caches. Tab changes close and reset
-  the sheet.
+- A synchronous submission latch ignores repeated gestures. Each submission
+  captures a monotonic operation identity, authenticated owner, session
+  generation, and immutable capture selection. Its continuation reads the
+  current Zustand auth state directly after creation and around every awaited
+  inbox or dated refresh before it may touch caches, UI, navigation, or errors.
+  Owner/session changes, tab changes, superseding submissions, and provider
+  unmount invalidate the operation. React 18 effect setup restores mounted
+  ownership safely after development effect replay.
 - Existing task DTOs, API, Prisma model, reminder channel policy, paywall route,
   and notification behavior are unchanged. In particular, unscheduled capture
   has no reminder because it has no start time.
@@ -52,8 +56,8 @@ only the actual save destination is styled as the sheet's primary action.
 
 ## Verification evidence
 
-- Focused global and Today capture tests: **2 suites, 25 tests passed**.
-- Complete mobile Jest suite: **35 suites, 444 tests passed**.
+- Focused global and Today capture tests: **2 suites, 33 tests passed**.
+- Complete mobile Jest suite: **35 suites, 452 tests passed**.
 - Mobile TypeScript `tsc --noEmit`: passed.
 - `git diff --check`: passed.
 
