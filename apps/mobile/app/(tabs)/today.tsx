@@ -1,12 +1,9 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import {
   View,
   Text,
   StyleSheet,
   Pressable,
-  Modal,
-  TextInput,
   ActivityIndicator,
   Alert,
 } from 'react-native';
@@ -32,18 +29,12 @@ import {
   localMidnightToInstant,
   toCanonicalDateParam,
 } from '../../lib/timezone';
-import { isFreeTierLimitError } from '../../lib/api-error';
 import type { Task } from '@focus/shared-types';
-import { formatClockTime } from '../../lib/time-format';
 import { findCurrentTask } from '../../lib/current-task';
 import { NotificationInvitation } from '../../components/NotificationInvitation';
 import { WeekStrip } from '../../components/WeekStrip';
 import { useNotificationLifecycle } from '../../lib/notification-lifecycle';
-import {
-  TASK_DURATION_PRESETS,
-  type TaskDurationPreset,
-  taskDurationLabel,
-} from '../../lib/task-duration';
+import { useGlobalCapture } from '../../components/GlobalCapture';
 
 /**
  * Экран "Сегодня" — главный экран таймлайна дня.
@@ -51,7 +42,7 @@ import {
  */
 export default function TodayScreen() {
   const router = useRouter();
-  const queryClient = useQueryClient();
+  const { openTimelineCapture } = useGlobalCapture();
   const [selectedDate, setSelectedDate] = useState(new Date());
 
   // Raw profile IANA timezone. May be undefined before the profile loads or
@@ -174,20 +165,6 @@ export default function TodayScreen() {
     }
   }
 
-  const [quickAddOpen, setQuickAddOpen] = useState(false);
-  const [quickAddTime, setQuickAddTime] = useState<Date | null>(null);
-  const [title, setTitle] = useState('');
-  const [quickAddDuration, setQuickAddDuration] = useState<TaskDurationPreset>(null);
-  const quickSubmissionPending = useRef(false);
-
-  function openQuickAdd(startTime: Date | null) {
-    // Если startTime передан, используем его как есть
-    // Если null, то задача создается без времени
-    setQuickAddTime(startTime);
-    setTitle('');
-    setQuickAddDuration(null);
-    setQuickAddOpen(true);
-  }
 
   function openTask(task: Task) {
     router.push({
@@ -200,59 +177,6 @@ export default function TodayScreen() {
     });
   }
 
-  async function handleSubmitQuickAdd(startTime: Date | null = quickAddTime) {
-    const trimmedTitle = title.trim();
-    if (!trimmedTitle || createTask.isPending || quickSubmissionPending.current) return;
-    quickSubmissionPending.current = true;
-
-    try {
-      await createTask.mutateAsync({
-        title: trimmedTitle,
-        startTime: startTime ? startTime.toISOString() : null,
-        durationMinutes: quickAddDuration,
-      });
-
-      // Force a fresh read after successful creation. This is intentionally
-      // broader than the date-specific mutation invalidation so the Today
-      // screen cannot remain on a stale cache after POST /tasks succeeds.
-      await queryClient.refetchQueries({ queryKey: ['tasks'] });
-
-      setQuickAddOpen(false);
-      setTitle('');
-      setQuickAddTime(null);
-      setQuickAddDuration(null);
-    } catch (err) {
-      if (isFreeTierLimitError(err)) {
-        setQuickAddOpen(false);
-        router.push('/paywall');
-      } else {
-        Alert.alert(
-          'Не удалось создать задачу',
-          'Проверьте соединение и попробуйте снова',
-        );
-      }
-    } finally {
-      quickSubmissionPending.current = false;
-    }
-  }
-
-  function openFullForm() {
-    if (createTask.isPending) return;
-    const trimmedTitle = title.trim();
-    setQuickAddOpen(false);
-    router.push({
-      pathname: '/task-form',
-      params: {
-        ...(trimmedTitle ? { prefillTitle: trimmedTitle } : {}),
-        ...(quickAddTime ? { prefillStartTime: quickAddTime.toISOString() } : {}),
-        ...(quickAddDuration !== null
-          ? { prefillDurationMinutes: String(quickAddDuration) }
-          : {}),
-        selectedDate: selectedDate.toISOString(),
-        selectedDateKey,
-      },
-    });
-  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -427,7 +351,7 @@ export default function TodayScreen() {
               tasks={tasks}
               onToggle={(id) => toggleTask.mutate(id)}
               onOpenTask={openTask}
-              onCreateAt={(startTime) => openQuickAdd(startTime)}
+              onCreateAt={(instant) => openTimelineCapture({ instant, selectedDate, selectedDateKey })}
               shouldAutoScroll={isToday}
               currentDate={selectedDate}
               currentDateKey={selectedDateKey}
@@ -438,118 +362,6 @@ export default function TodayScreen() {
         </>
       )}
 
-      <Pressable
-        style={styles.fab}
-        onPress={() => openQuickAdd(null)}
-        accessibilityRole="button"
-        accessibilityLabel="Быстро добавить задачу"
-      >
-        <Text style={styles.fabText}>＋</Text>
-      </Pressable>
-
-      <Modal
-        visible={quickAddOpen}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setQuickAddOpen(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Новая задача</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Название"
-              placeholderTextColor="#9CA3AF"
-              value={title}
-              onChangeText={setTitle}
-              autoFocus
-              onSubmitEditing={() => handleSubmitQuickAdd()}
-              returnKeyType="done"
-              accessibilityLabel="Название задачи"
-            />
-            <Text style={styles.timeHint}>
-              {quickAddTime
-                ? `Выбранное время: ${formatClockTime(quickAddTime, timeFormat)}`
-                : 'Без времени — запись сохранится в «Мысли»'}
-            </Text>
-            <Text style={styles.durationLabel}>Примерная длительность</Text>
-            <View style={styles.durationPresets}>
-              {TASK_DURATION_PRESETS.map((duration) => (
-                <Pressable
-                  key={duration ?? 'unknown'}
-                  onPress={() => setQuickAddDuration(duration)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Длительность ${taskDurationLabel(duration)}`}
-                  accessibilityState={{ selected: quickAddDuration === duration }}
-                  style={[
-                    styles.durationChip,
-                    quickAddDuration === duration && styles.durationChipActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.durationChipText,
-                      quickAddDuration === duration && styles.durationChipTextActive,
-                    ]}
-                  >
-                    {taskDurationLabel(duration)}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-            <View style={styles.modalActions}>
-              <Pressable
-                onPress={() => setQuickAddOpen(false)}
-                style={styles.modalCancel}
-                accessibilityRole="button"
-                accessibilityLabel="Отменить быстрое добавление"
-              >
-                <Text style={styles.modalCancelText}>Отмена</Text>
-              </Pressable>
-              <Pressable
-                onPress={openFullForm}
-                style={styles.modalMore}
-                accessibilityRole="button"
-                accessibilityLabel="Открыть полную форму задачи"
-                accessibilityState={{ disabled: createTask.isPending }}
-                disabled={createTask.isPending}
-              >
-                <Text style={styles.modalMoreText}>Подробнее →</Text>
-              </Pressable>
-              {quickAddTime && (
-                <Pressable
-                  onPress={() => handleSubmitQuickAdd(null)}
-                  style={[styles.modalThoughts, createTask.isPending && styles.modalActionDisabled]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Сохранить задачу в Мысли без времени"
-                  accessibilityState={{ disabled: !title.trim() || createTask.isPending }}
-                  disabled={!title.trim() || createTask.isPending}
-                >
-                  <Text style={styles.modalThoughtsText}>В Мысли</Text>
-                </Pressable>
-              )}
-              <Pressable
-                onPress={() => handleSubmitQuickAdd()}
-                style={[styles.modalSubmit, (!title.trim() || createTask.isPending) && styles.modalActionDisabled]}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  quickAddTime
-                    ? `Добавить задачу на ${formatClockTime(quickAddTime, timeFormat)}`
-                    : 'Сохранить задачу в Мысли'
-                }
-                accessibilityState={{ disabled: !title.trim() || createTask.isPending }}
-                disabled={!title.trim() || createTask.isPending}
-              >
-                <Text style={styles.modalSubmitText}>
-                  {quickAddTime
-                    ? `Добавить на ${formatClockTime(quickAddTime, timeFormat)}`
-                    : 'Сохранить в Мысли'}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -614,61 +426,4 @@ const styles = StyleSheet.create({
   unscheduledDot: { width: 8, height: 8, borderRadius: 4, marginRight: 10 },
   unscheduledText: { fontSize: 14, color: '#111827', flex: 1 },
   unscheduledTextDone: { textDecorationLine: 'line-through', color: '#9CA3AF' },
-  fab: {
-    position: 'absolute',
-    bottom: 32,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#6B5BFC',
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 4,
-    shadowColor: '#6B5BFC',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
-  fabText: { fontSize: 28, color: '#FFFFFF', lineHeight: 32 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  modalCard: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 24,
-  },
-  modalTitle: { fontSize: 18, fontWeight: '600', color: '#111827', marginBottom: 12 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#111827',
-  },
-  timeHint: { fontSize: 13, color: '#6B7280', marginTop: 8 },
-  durationLabel: { fontSize: 13, color: '#6B7280', marginTop: 16, marginBottom: 8 },
-  durationPresets: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  durationChip: {
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  durationChipActive: { backgroundColor: '#6B5BFC', borderColor: '#6B5BFC' },
-  durationChipText: { color: '#4B5563', fontSize: 13 },
-  durationChipTextActive: { color: '#FFFFFF', fontWeight: '600' },
-  modalActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20 },
-  modalCancel: { paddingVertical: 10, paddingHorizontal: 12 },
-  modalCancelText: { color: '#6B7280', fontSize: 15 },
-  modalMore: { paddingVertical: 10, paddingHorizontal: 12 },
-  modalMoreText: { color: '#6B5BFC', fontSize: 15, fontWeight: '600' },
-  modalThoughts: { paddingVertical: 10, paddingHorizontal: 12 },
-  modalThoughtsText: { color: '#6B5BFC', fontSize: 15, fontWeight: '600' },
-  modalSubmit: { backgroundColor: '#6B5BFC', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
-  modalSubmitText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
-  modalActionDisabled: { opacity: 0.45 },
 });

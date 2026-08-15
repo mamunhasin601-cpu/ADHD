@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
 import { Text } from 'react-native';
+import { GlobalCaptureProvider } from '../../components/GlobalCapture';
 
 function TabIcon({ label, color, size }: { label: string; color: string; size: number }) {
   return <Text style={{ color, fontSize: size }}>{label}</Text>;
@@ -7,13 +8,14 @@ function TabIcon({ label, color, size }: { label: string; color: string; size: n
 
 export default function TabsLayout() {
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: '#6B5BFC',
-        tabBarInactiveTintColor: '#9CA3AF',
-        headerShown: false,
-      }}
-    >
+    <GlobalCaptureProvider>
+      <Tabs
+        screenOptions={{
+          tabBarActiveTintColor: '#6B5BFC',
+          tabBarInactiveTintColor: '#9CA3AF',
+          headerShown: false,
+        }}
+      >
       <Tabs.Screen
         name="today"
         options={{
@@ -50,6 +52,7 @@ export default function TabsLayout() {
           ),
         }}
       />
-    </Tabs>
+      </Tabs>
+    </GlobalCaptureProvider>
   );
 }
