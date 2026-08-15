@@ -24,7 +24,9 @@ jest.mock("../lib/api/plan", () => ({
 const mockRequestPermission = jest.fn();
 const mockOpenSettings = jest.fn();
 let mockNotificationPermission: "not-asked" | "granted" | "denied" = "not-asked";
-jest.mock("../lib/notification-lifecycle", () => ({ useNotificationLifecycle: () => ({ permission: mockNotificationPermission, invitation: "deferred", busy: false, error: null, requestPermission: mockRequestPermission, deferInvitation: jest.fn(), openSettings: mockOpenSettings }) }));
+let mockNotificationBusy = false;
+let mockNotificationError: string | null = null;
+jest.mock("../lib/notification-lifecycle", () => ({ useNotificationLifecycle: () => ({ permission: mockNotificationPermission, invitation: "deferred", busy: mockNotificationBusy, error: mockNotificationError, requestPermission: mockRequestPermission, deferInvitation: jest.fn(), openSettings: mockOpenSettings }) }));
 jest.mock("expo-router", () => ({ useRouter: () => ({ push: jest.fn() }) }));
 jest.mock("react-native-safe-area-context", () => {
   const { View } = require("react-native");
@@ -36,6 +38,8 @@ describe("settings time format", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockNotificationPermission = "not-asked";
+    mockNotificationBusy = false;
+    mockNotificationError = null;
     mockUser = { id: "u", timezone: "Europe/Moscow", timeFormat: "SYSTEM" };
   });
   it("shows a real SYSTEM clock example", () => {
@@ -93,6 +97,23 @@ describe("settings time format", () => {
     expect(screen.getByText(status)).toBeTruthy();
     fireEvent.press(screen.getByText(action));
     expect(state === "not-asked" ? mockRequestPermission : mockOpenSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps deferred permission not configured and uses the shared explicit path", () => {
+    render(<SettingsScreen />);
+    expect(screen.getByText("Не настроены")).toBeTruthy();
+    fireEvent.press(screen.getByText("Включить напоминания"));
+    expect(mockRequestPermission).toHaveBeenCalledTimes(1);
+  });
+
+  it("exposes busy and alert accessibility without breaking time format controls", () => {
+    mockNotificationBusy = true;
+    mockNotificationError = "Не удалось настроить напоминания. Попробуйте ещё раз.";
+    render(<SettingsScreen />);
+    const enable = screen.getByRole("button", { name: "Включить напоминания" });
+    expect(enable.props.accessibilityState).toEqual({ disabled: true, busy: true });
+    expect(screen.getByRole("alert").props.children).toContain("Не удалось");
+    expect(screen.getByTestId("time-format-H24").props.accessibilityState.disabled).toBe(false);
   });
 
 });

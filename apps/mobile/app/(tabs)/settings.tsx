@@ -98,6 +98,7 @@ export default function SettingsScreen() {
           {notifications.error && <Text accessibilityRole="alert" style={styles.formatError}>{notifications.error}</Text>}
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel={notifications.permission === 'granted' || notifications.permission === 'denied' ? 'Открыть настройки' : 'Включить напоминания'}
             accessibilityState={{ disabled: notifications.busy, busy: notifications.busy }}
             disabled={notifications.busy}
             onPress={notifications.permission === 'granted' || notifications.permission === 'denied' ? notifications.openSettings : notifications.requestPermission}

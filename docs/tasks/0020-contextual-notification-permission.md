@@ -20,6 +20,10 @@ The compact **Напоминания** Settings section shows **Не настр�
 
 Existing grants bootstrap without prompting, register remote-primary exactly once, and reconcile the bounded horizon once. A registration failure selects the established local fallback only while permission is granted. Revocation selects no false local channel and cancels Focus-owned reminders; enabling through OS settings restores registration on resume. Inspection/request failures remain calm, inline, retryable, and independent of task/profile behavior.
 
+Registration ownership is keyed to the authenticated user. A transition from User A through logout to User B invalidates A's generation and registers/reconciles exactly once for B, without adding a user ID to the authenticated device-registration payload or clearing device-level permission/invitation storage. Every awaited token, device POST, task-query, and reconciliation boundary revalidates both generation and owner; stale work cannot begin later channel or reminder side effects, and an older `finally` cannot release a newer guard.
+
+Invitation hydration has its own mount-safe generation. A current **Не сейчас** action invalidates an older pending hydration, so a delayed `available` result or StrictMode cleanup/replay cannot overwrite `deferred`. Successful current bootstrap, resume, or explicit operations clear prior lifecycle errors.
+
 ## Accessibility
 
 Invitation and Settings actions expose button roles. Pending actions expose disabled and busy state; status is available as text and an accessibility label; failure copy has alert semantics. The invitation uses wrapping text, minimum-height actions, neutral styling, and remains inline with existing safe-area behavior.
@@ -34,8 +38,10 @@ Invitation and Settings actions expose button roles. Pending actions expose disa
 - `apps/mobile/lib/notification-lifecycle.tsx`
 - `apps/mobile/lib/notification-permission.ts`
 - `apps/mobile/lib/notification-permission.spec.ts`
+- `apps/mobile/lib/notification-lifecycle.spec.tsx`
 - `apps/mobile/tests/_layout.spec.tsx`
 - `apps/mobile/tests/settings-time-format.spec.tsx`
+- `apps/mobile/tests/today-notification-invitation.spec.tsx`
 - `apps/mobile/tests/today-create-task.spec.tsx`
 - `apps/mobile/tests/today-start-task.spec.tsx`
 - `Product-Bible/09-Roadmap/Feature-Roadmap.md`
@@ -45,8 +51,9 @@ Invitation and Settings actions expose button roles. Pending actions expose disa
 
 Validation commands and final Jest totals:
 
-- `npm test --workspace @focus/mobile -- --runInBand` — 28 suites, 357 tests passed.
-- `npm test --workspace @focus/mobile -- --runInBand apps/mobile/tests/today-start-task.spec.tsx apps/mobile/components/NotificationInvitation.spec.tsx apps/mobile/tests/settings-time-format.spec.tsx apps/mobile/lib/notification-permission.spec.ts apps/mobile/tests/_layout.spec.tsx --detectOpenHandles` — focused lifecycle/request, Today, Settings, and permission coverage passed.
+- `npm test --workspace @focus/mobile -- --runInBand` — 30 suites, 385 tests passed. This exceeds the exact Task 0019 base inventory of 27 suites / 366 tests and restores the meaningful Task 0011 lifecycle evidence removed by the first Task 0020 commit.
+- `npm test --workspace @focus/mobile -- --runInBand apps/mobile/lib/notification-lifecycle.spec.tsx apps/mobile/tests/_layout.spec.tsx --detectOpenHandles` — 2 suites, 22 tests passed.
+- `npm test --workspace @focus/mobile -- --runInBand apps/mobile/lib/notification-permission.spec.ts apps/mobile/components/NotificationInvitation.spec.tsx apps/mobile/tests/today-notification-invitation.spec.tsx apps/mobile/tests/today-start-task.spec.tsx apps/mobile/tests/settings-time-format.spec.tsx apps/mobile/tests/onboarding.spec.tsx apps/mobile/tests/auth-routing.spec.ts apps/mobile/components/NowCard.spec.tsx apps/mobile/lib/local-notifications.spec.ts apps/mobile/components/NotificationPermissionBanner.spec.tsx` — 10 suites, 125 tests passed.
 - `npx tsc --noEmit -p apps/mobile/tsconfig.json`.
 - `git diff --check` plus final diff-stat and complete-diff review.
 
