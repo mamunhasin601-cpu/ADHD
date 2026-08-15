@@ -3,6 +3,12 @@ const mockStart = jest.fn();
 const mockToggle = jest.fn();
 const mockUpdate = jest.fn();
 let mockTasks: any[] = [];
+let mockProfileTimezone = 'UTC';
+const mockUseTasksForDate = jest.fn((_date: Date, _timezone?: string | null) => ({
+  data: mockTasks,
+  isLoading: false,
+  isError: false,
+}));
 let mockStartImplementation: (id: string) => Promise<any>;
 let mockUpdateImplementation: (input: { id: string; dto: { firstStep: string } }) => Promise<any>;
 
@@ -11,7 +17,8 @@ jest.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ refetchQuer
 jest.mock('../lib/api/tasks', () => {
   const React = require('react');
   return {
-    useTasksForDate: () => ({ data: mockTasks, isLoading: false, isError: false }),
+    useTasksForDate: (date: Date, timezone?: string | null) =>
+      mockUseTasksForDate(date, timezone),
     useCreateTask: () => ({ mutateAsync: jest.fn(), isPending: false }),
     useUpdateTask: () => {
       const [isPending, setPending] = React.useState(false);
@@ -39,7 +46,7 @@ jest.mock('../lib/api/tasks', () => {
   };
 });
 jest.mock('../stores/auth.store', () => ({
-  useAuthStore: (selector: any) => selector({ user: { timezone: 'UTC', timeFormat: 'H24' } }),
+  useAuthStore: (selector: any) => selector({ user: { timezone: mockProfileTimezone, timeFormat: 'H24' } }),
 }));
 jest.mock('../components/RecoverySection', () => ({ RecoverySection: () => null }));
 jest.mock('../components/ProgressRing', () => ({ ProgressRing: () => null }));
@@ -53,6 +60,7 @@ jest.mock('react-native-safe-area-context', () => {
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import TodayScreen from '../app/(tabs)/today';
+import { toCanonicalDateParam } from '../lib/timezone';
 
 const scheduled = (id: string, startTime: string) => ({
   id, userId: 'user', title: `Задача ${id}`, startTime: new Date(startTime), durationMinutes: 30,
@@ -64,7 +72,7 @@ describe('Today explicit task start', () => {
   beforeAll(() => { jest.useFakeTimers(); jest.setSystemTime(new Date('2026-08-14T10:15:00Z')); });
   afterAll(() => jest.useRealTimers());
   beforeEach(() => {
-    jest.clearAllMocks(); mockTasks = [scheduled('current', '2026-08-14T10:00:00Z')];
+    jest.clearAllMocks(); mockProfileTimezone = 'UTC'; mockTasks = [scheduled('current', '2026-08-14T10:00:00Z')];
     mockStartImplementation = async (id) => {
       const server = { ...mockTasks.find((task) => task.id === id), startedAt: new Date('2026-08-14T10:16:27.456Z') };
       mockTasks = mockTasks.map((task) => task.id === id ? server : task); return server;
@@ -73,6 +81,33 @@ describe('Today explicit task start', () => {
       const server = { ...mockTasks.find((task) => task.id === id), firstStep: dto.firstStep };
       mockTasks = mockTasks.map((task) => task.id === id ? server : task); return server;
     };
+  });
+
+  it('selects the Auckland canonical day and renders the onboarding task as the unstarted Now Card', () => {
+    const instant = new Date('2026-08-15T12:30:00.000Z');
+    jest.setSystemTime(instant);
+    mockProfileTimezone = 'Pacific/Auckland';
+    mockTasks = [{
+      ...scheduled('onboarding', instant.toISOString()),
+      title: 'Новый день',
+      durationMinutes: null,
+      startedAt: null,
+    }];
+
+    render(<TodayScreen />);
+
+    const [selectedDate, timezone] = mockUseTasksForDate.mock.calls[0];
+    expect(timezone).toBe('Pacific/Auckland');
+    expect(toCanonicalDateParam(selectedDate, timezone)).toBe('2026-08-16');
+    expect(toCanonicalDateParam(instant, timezone)).toBe('2026-08-16');
+    expect(screen.getByText('Новый день')).toBeTruthy();
+    expect(screen.getByText('Запланировано сейчас')).toBeTruthy();
+    expect(screen.getByText('Начать')).toBeTruthy();
+    expect(screen.getByText('Мне трудно начать')).toBeTruthy();
+    expect(screen.queryByText('Начато')).toBeNull();
+    expect(mockStart).not.toHaveBeenCalled();
+
+    jest.setSystemTime(new Date('2026-08-14T10:15:00Z'));
   });
 
   it('does not auto-start when scheduled time arrives and starts once with canonical response', async () => {
