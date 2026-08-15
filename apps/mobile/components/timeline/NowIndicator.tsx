@@ -1,13 +1,9 @@
 import { useEffect, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { TIMELINE_CONFIG } from '../../lib/timeline-config';
-
-function minutesFromDayStart(date: Date): number {
-  return (date.getHours() - TIMELINE_CONFIG.dayStartHour) * 60 + date.getMinutes();
-}
+import { getVisibleTimelineTop } from '../../lib/timeline-geometry';
 
 /** Красная линия "сейчас". Обновляется раз в минуту, скрывается вне видимого диапазона. */
-export function NowIndicator() {
+export function NowIndicator({ profileTimezone }: { profileTimezone?: string | null }) {
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -15,11 +11,8 @@ export function NowIndicator() {
     return () => clearInterval(interval);
   }, []);
 
-  const minutes = minutesFromDayStart(now);
-  const totalMinutes = (TIMELINE_CONFIG.dayEndHour - TIMELINE_CONFIG.dayStartHour) * 60;
-  if (minutes < 0 || minutes > totalMinutes) return null;
-
-  const top = (minutes / 60) * TIMELINE_CONFIG.hourHeight;
+  const top = getVisibleTimelineTop(now, profileTimezone);
+  if (top === null) return null;
 
   return (
     <View style={[styles.line, { top }]} pointerEvents="none">

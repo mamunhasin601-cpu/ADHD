@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import type { Task } from "@focus/shared-types";
 import { useAuthStore } from "../../stores/auth.store";
 import { formatWallClock } from "../../lib/time-format";
 import { calendarDayWallTimeToInstant, toCanonicalDateParam } from "../../lib/timezone";
+import { getVisibleTimelineTop } from "../../lib/timeline-geometry";
 
 interface Props {
   tasks: Task[];
@@ -50,28 +51,46 @@ export function Timeline({
   const timeFormat = useAuthStore(
     (state) => state.user?.timeFormat ?? "SYSTEM",
   );
-  const [hasScrolledToNow, setHasScrolledToNow] = useState(false);
-  const layout = useMemo(() => computeTimelineLayout(tasks), [tasks]);
+  const autoScrollGenerationRef = useRef(0);
+  const scrolledTimezoneRef = useRef<string | null>(null);
+  const layout = useMemo(
+    () => computeTimelineLayout(tasks, profileTimezone),
+    [tasks, profileTimezone],
+  );
 
   // Открытие экрана — сразу центрируем на "сейчас", а не показываем список/меню сверху
   // Но только если смотрим на сегодня (shouldAutoScroll)
   useEffect(() => {
-    if (!shouldAutoScroll || hasScrolledToNow) return;
-    const now = new Date();
-    const minutes = (now.getHours() - dayStartHour) * 60 + now.getMinutes();
-    const totalMinutes = (dayEndHour - dayStartHour) * 60;
-    if (minutes < 0 || minutes > totalMinutes) return; // сейчас ночь вне диапазона — остаёмся сверху
+    const generation = ++autoScrollGenerationRef.current;
+    if (!shouldAutoScroll) {
+      scrolledTimezoneRef.current = null;
+      return;
+    }
 
-    const y = (minutes / 60) * hourHeight;
+    const timezoneIdentity = profileTimezone ?? "__device_local__";
+    if (scrolledTimezoneRef.current === timezoneIdentity) return;
+
+    const y = getVisibleTimelineTop(new Date(), profileTimezone);
+    if (y === null) return; // profile-local current time is outside the fixed range
     const viewportHeight = Dimensions.get("window").height;
-    requestAnimationFrame(() => {
+    let ownsAutoScroll = true;
+    const frame = requestAnimationFrame(() => {
+      if (!ownsAutoScroll || autoScrollGenerationRef.current !== generation) return;
       scrollRef.current?.scrollTo({
         y: Math.max(0, y - viewportHeight / 2.5),
         animated: false,
       });
-      setHasScrolledToNow(true);
+      scrolledTimezoneRef.current = timezoneIdentity;
     });
-  }, [hasScrolledToNow]);
+
+    return () => {
+      ownsAutoScroll = false;
+      cancelAnimationFrame(frame);
+      if (autoScrollGenerationRef.current === generation) {
+        autoScrollGenerationRef.current += 1;
+      }
+    };
+  }, [profileTimezone, shouldAutoScroll]);
 
   function handleBackgroundPress(event: GestureResponderEvent) {
     const y = event.nativeEvent.locationY;
@@ -111,7 +130,7 @@ export function Timeline({
           </View>
         ))}
 
-        <NowIndicator />
+        {shouldAutoScroll && <NowIndicator profileTimezone={profileTimezone} />}
 
         {tasks.map((task) => {
           const taskLayout = layout.get(task.id);
@@ -124,6 +143,7 @@ export function Timeline({
               columnIndex={taskLayout?.columnIndex}
               columnCount={taskLayout?.columnCount}
               isCurrent={task.id === currentTaskId}
+              profileTimezone={profileTimezone}
             />
           );
         })}
