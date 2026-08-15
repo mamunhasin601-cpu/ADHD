@@ -129,6 +129,36 @@ describe('Today quick capture destinations', () => {
     });
   });
 
+  it.each([
+    { state: { data: [], isLoading: true, isError: false }, label: /четверг, 13 августа 2026/ },
+    { state: { data: [], isLoading: false, isError: true }, label: /четверг, 13 августа 2026/ },
+    { state: { data: [], isLoading: false, isError: false }, label: /четверг, 13 августа 2026/ },
+  ])('keeps canonical date navigation available in loading, error, and empty states', ({ state, label }) => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-12T12:00:00.000Z'));
+    (useTasksForDate as jest.Mock).mockReturnValue(state);
+    render(<TodayScreen />);
+    fireEvent.press(screen.getByLabelText(label));
+    const queriedDate = (useTasksForDate as jest.Mock).mock.calls.at(-1)[0] as Date;
+    expect(queriedDate.toISOString()).toBe('2026-08-12T21:00:00.000Z');
+    expect(screen.getByText('Сегодня')).toBeTruthy();
+    fireEvent.press(screen.getByText('Сегодня'));
+    expect((useTasksForDate as jest.Mock).mock.calls.at(-1)[0].toISOString()).toBe('2026-08-11T21:00:00.000Z');
+    jest.useRealTimers();
+  });
+
+  it('passes a selected profile-local day to task-form navigation without drift', () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-12T12:00:00.000Z'));
+    render(<TodayScreen />);
+    fireEvent.press(screen.getByLabelText(/четверг, 13 августа 2026/));
+    fireEvent.press(screen.getByText('Создать задачу'));
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/task-form',
+      params: { selectedDate: '2026-08-12T21:00:00.000Z' },
+    });
+    expect((useTasksForDate as jest.Mock).mock.calls.at(-1)[0].toISOString()).toBe('2026-08-12T21:00:00.000Z');
+    jest.useRealTimers();
+  });
+
   it('labels global capture with Thoughts language and creates without a start time', async () => {
     render(<TodayScreen />);
     openGlobalCapture();
