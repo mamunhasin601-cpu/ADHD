@@ -29,6 +29,14 @@ that view renders NowIndicator or enables initial current-time auto-scroll; past
 and future planning views do neither. Tasks on every selected day still use the
 same profile-local vertical scale.
 
+The current-time scroll has explicit Today/timezone lifecycle ownership. Effect
+cleanup cancels its pending animation frame, and a generation guard prevents a
+racing stale callback from scrolling or updating ownership after navigation,
+timezone replacement, or unmount. Leaving Today invalidates the completed-scroll
+identity, so returning permits one new scroll; changing timezone while Today is
+active likewise recomputes once for the replacement zone. Ordinary rerenders do
+not repeat a completed scroll.
+
 ## Regression coverage
 
 Deterministic fixtures cover Moscow and New York 14:30 instants, intentional
@@ -41,8 +49,9 @@ label-format invariance, and exact selected-slot instants.
 ## Validation
 
 - Focused Timeline, TaskBlock, NowIndicator, layout, timezone, and Today
-  integration suites passed.
-- The complete mobile Jest suite and mobile TypeScript validation passed.
+  integration suites: 9 suites and 135 tests passed.
+- Complete mobile Jest suite: 38 suites and 474 tests passed. Mobile TypeScript
+  validation also passed.
 - Whitespace validation, changed-file inventory, full diff review, and final
   working-tree verification passed before publication.
 

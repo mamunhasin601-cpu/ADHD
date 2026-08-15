@@ -1,4 +1,18 @@
 const mockUser: { timeFormat: string; timezone?: string } = { timeFormat: "H24" };
+const mockScrollTo = jest.fn();
+jest.mock("react-native", () => {
+  const React = require("react");
+  const ReactNative = jest.requireActual("react-native");
+  const ScrollView = React.forwardRef((props: any, ref: any) => {
+    React.useImperativeHandle(ref, () => ({ scrollTo: mockScrollTo }));
+    return <ReactNative.ScrollView {...props} />;
+  });
+  return new Proxy(ReactNative, {
+    get(target, property) {
+      return property === "ScrollView" ? ScrollView : Reflect.get(target, property);
+    },
+  });
+});
 jest.mock("../../stores/auth.store", () => ({
   useAuthStore: (selector: any) => selector({ user: mockUser }),
 }));
@@ -7,7 +21,7 @@ jest.mock("./NowIndicator", () => {
   return { NowIndicator: (props: any) => <View testID="now-indicator" {...props} /> };
 });
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react-native";
+import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { Timeline } from "./Timeline";
 
 const props = {
@@ -94,5 +108,67 @@ describe("Timeline clock labels", () => {
     rerender(<Timeline {...props} shouldAutoScroll={false} profileTimezone="Europe/Moscow" />);
     expect(screen.queryByTestId("now-indicator")).toBeNull();
     jest.useRealTimers();
+  });
+});
+
+describe("Timeline auto-scroll ownership", () => {
+  let frames: FrameRequestCallback[];
+
+  beforeEach(() => {
+    jest.useFakeTimers().setSystemTime(new Date("2026-08-13T11:30:00.000Z"));
+    frames = [];
+    mockScrollTo.mockClear();
+    global.requestAnimationFrame = jest.fn((callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    global.cancelAnimationFrame = jest.fn();
+  });
+
+  afterEach(() => jest.useRealTimers());
+
+  function deliver(index: number) {
+    act(() => frames[index](0));
+  }
+
+  it("does not deliver a Today scroll after switching to non-Today", () => {
+    const { rerender } = render(<Timeline {...props} shouldAutoScroll profileTimezone="Europe/Moscow" />);
+    rerender(<Timeline {...props} shouldAutoScroll={false} profileTimezone="Europe/Moscow" />);
+    deliver(0);
+    expect(cancelAnimationFrame).toHaveBeenCalledWith(1);
+    expect(mockScrollTo).not.toHaveBeenCalled();
+  });
+
+  it("does not deliver a Today scroll after unmount", () => {
+    const { unmount } = render(<Timeline {...props} shouldAutoScroll profileTimezone="Europe/Moscow" />);
+    unmount();
+    deliver(0);
+    expect(mockScrollTo).not.toHaveBeenCalled();
+  });
+
+  it("permits one new scroll after returning to Today", () => {
+    const { rerender } = render(<Timeline {...props} shouldAutoScroll profileTimezone="Europe/Moscow" />);
+    deliver(0);
+    rerender(<Timeline {...props} shouldAutoScroll={false} profileTimezone="Europe/Moscow" />);
+    rerender(<Timeline {...props} shouldAutoScroll profileTimezone="Europe/Moscow" />);
+    deliver(1);
+    expect(mockScrollTo).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses only the replacement timezone when identity changes before delivery", () => {
+    const { rerender } = render(<Timeline {...props} shouldAutoScroll profileTimezone="Europe/Moscow" />);
+    rerender(<Timeline {...props} shouldAutoScroll profileTimezone="America/New_York" />);
+    deliver(0);
+    deliver(1);
+    expect(mockScrollTo).toHaveBeenCalledTimes(1);
+    expect(mockScrollTo).toHaveBeenCalledWith({ y: 0, animated: false });
+  });
+
+  it("does not duplicate a completed scroll on ordinary rerenders", () => {
+    const { rerender } = render(<Timeline {...props} shouldAutoScroll profileTimezone="Europe/Moscow" />);
+    deliver(0);
+    rerender(<Timeline {...props} shouldAutoScroll profileTimezone="Europe/Moscow" tasks={[]} />);
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(1);
+    expect(mockScrollTo).toHaveBeenCalledTimes(1);
   });
 });
