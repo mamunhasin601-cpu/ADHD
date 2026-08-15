@@ -31,10 +31,14 @@ export default function OnboardingScreen() {
   const busyRef = useRef(false);
   const operationRef = useRef(0);
 
-  useEffect(() => () => {
-    mountedRef.current = false;
-    operationRef.current += 1;
-    busyRef.current = false;
+  useEffect(() => {
+    // React 18 StrictMode replays effect setup after cleanup in development.
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      operationRef.current += 1;
+      busyRef.current = false;
+    };
   }, []);
 
   async function finishProfile(operation: number, failure: 'complete' | 'skip') {

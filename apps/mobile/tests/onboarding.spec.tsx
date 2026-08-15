@@ -89,6 +89,36 @@ describe('OnboardingScreen', () => {
     jest.useRealTimers();
   });
 
+  it('completes create-now once and stores the canonical user under StrictMode', async () => {
+    render(
+      <React.StrictMode>
+        <OnboardingScreen />
+      </React.StrictMode>,
+    );
+    fireEvent.press(screen.getByText('Продолжить'));
+    fireEvent.changeText(screen.getByLabelText('Название первой задачи'), 'StrictMode задача');
+    fireEvent.press(screen.getByText('Добавить на сейчас'));
+
+    await waitFor(() => expect(setUser).toHaveBeenCalledWith(canonicalUser));
+    expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+    expect(apiClient.patch).toHaveBeenCalledTimes(1);
+    expect(setUser).toHaveBeenCalledTimes(1);
+  });
+
+  it('completes skip once and stores the canonical user under StrictMode', async () => {
+    render(
+      <React.StrictMode>
+        <OnboardingScreen />
+      </React.StrictMode>,
+    );
+    fireEvent.press(screen.getByText('Пока пропустить'));
+
+    await waitFor(() => expect(setUser).toHaveBeenCalledWith(canonicalUser));
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+    expect(apiClient.patch).toHaveBeenCalledTimes(1);
+    expect(setUser).toHaveBeenCalledTimes(1);
+  });
+
   it('synchronously guards rapid button and keyboard submissions', async () => {
     const create = deferred<typeof canonicalTask>();
     mockMutateAsync.mockReturnValue(create.promise);
@@ -180,7 +210,7 @@ describe('OnboardingScreen', () => {
     errorSpy.mockRestore();
   });
 
-  it('uses the same current instant at a profile-timezone day boundary', async () => {
+  it('captures the exact current instant at a profile-timezone day boundary', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-08-15T12:30:00.000Z'));
     openIntention();
     fireEvent.changeText(screen.getByLabelText('Название первой задачи'), 'Новый день');

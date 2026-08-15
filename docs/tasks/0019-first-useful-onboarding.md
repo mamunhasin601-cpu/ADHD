@@ -53,6 +53,10 @@ task.
   response and remains retryable after failure.
 - Operation identity and mounted-state guards prevent late settlement or
   cleanup from updating stale UI or releasing a newer operation guard.
+- Every mount-effect setup restores the mounted marker. This makes lifecycle
+  ownership safe when React 18 development StrictMode replays setup after its
+  diagnostic cleanup, while cleanup still invalidates the operation generation
+  before an older async flow can release a newer guard.
 
 ## Accessibility behavior
 
@@ -67,20 +71,24 @@ entered intention.
 
 - `apps/mobile/app/onboarding.tsx`
 - `apps/mobile/tests/onboarding.spec.tsx`
+- `apps/mobile/tests/today-start-task.spec.tsx`
 - `docs/tasks/0019-first-useful-onboarding.md`
 - `Product-Bible/09-Roadmap/Feature-Roadmap.md`
 
 ## Validation evidence
 
-- Focused onboarding: 1 suite, 11 tests passed.
+- Focused onboarding: 1 suite, 13 tests passed, including create-now and skip
+  rendered under `React.StrictMode`; each task/profile operation and canonical
+  `setUser` handoff occurs exactly once.
 - Auth routing, root routing, Today capture, task form, and inbox regression:
   5 suites, 65 tests passed.
-- Today explicit start/difficult-start with open-handle detection: 1 suite,
-  8 tests passed.
-- Full mobile suite: 27 suites, 363 tests passed.
+- Follow-up affected auth-routing validation: 2 suites, 29 tests passed.
+- Today explicit start/difficult-start and onboarding handoff boundary with
+  open-handle detection: 1 suite, 9 tests passed.
+- Full mobile suite: 27 suites, 366 tests passed.
 - Mobile TypeScript (`npx tsc --noEmit -p apps/mobile/tsconfig.json`) passed.
-- `git diff --check`, diff-stat review, and complete-diff review are required
-  before the implementation commit.
+- `git diff --check`, diff-stat review, and complete-diff review passed before
+  each Task 0019 commit.
 
 ## Warnings and residual limitations
 
@@ -88,6 +96,17 @@ entered intention.
   cleanup warnings about updates not wrapped in `act`; the suite passes and the
   warnings are not hidden or relabelled.
 - npm reports its existing unknown `http-proxy` environment-config warning.
+- React Native Testing Library's renderer accepts a `React.StrictMode` wrapper
+  and proves the live create and skip invariants, but it does not directly
+  expose React DOM's development-only effect-replay sequence. Production setup
+  is nevertheless replay-safe because every setup explicitly restores the
+  mounted marker.
+- The timezone boundary uses `2026-08-15T12:30:00.000Z`, which is UTC date
+  `2026-08-15` but profile date `2026-08-16` in `Pacific/Auckland`. The Today
+  integration invokes its real canonical-date and current-task helpers, proves
+  the query selects `2026-08-16`, includes the created unknown-duration task,
+  and renders it unstarted in the real Now Card with `Начать` and
+  `Мне трудно начать`.
 - Task 0011 notification permission, registration, revocation, banner, and
   reminder behavior is intentionally unchanged. The existing permission prompt
   may still appear before the user sees the Now Card; its timing remains a
