@@ -42,6 +42,14 @@ original ISO value, including seconds and milliseconds. Thus, for example,
 `2026-08-13T11:30:00.000Z` and still formats to canonical profile day
 `2026-08-13`.
 
+Untouched existing/prefilled minutes are displayed exactly and always remain in
+the `0–59` range; opening the form never rounds them. The form separately tracks
+whether hour, minute, or AM/PM controls were explicitly used. Only after such an
+edit does it rebuild the instant from `selectedDateKey` and normalize seconds and
+milliseconds to zero. Five-minute rounding applies only to a blank new-task
+default. Removing time and restoring it without editing the controls continues
+to preserve the original instant.
+
 ## Current-day boundary
 
 Now Card, notification invitation, Recovery, progress and timeline auto-scroll
@@ -59,8 +67,8 @@ regardless of task-query state.
 ## Validation
 
 - Focused WeekStrip, Today, Timeline, timezone, and task-form coverage: 5 suites,
-  122 tests passed.
-- Full mobile Jest suite: 31 suites, 414 tests passed (the original published
+  130 tests passed.
+- Full mobile Jest suite: 31 suites, 422 tests passed (the original published
   baseline was 30 suites / 390 tests).
 - Mobile TypeScript compilation and whitespace validation passed.
 - Deterministic cases cover seven Monday–Sunday entries, selection/today states,

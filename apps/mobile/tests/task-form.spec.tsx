@@ -191,16 +191,71 @@ describe('TaskFormScreen canonical selected day', () => {
     })));
   });
 
-  it.each(['prefill', 'edit'])('preserves the exact %s instant', async (mode) => {
-    const exact = '2026-08-13T11:30:27.456Z';
+  it.each(['prefill', 'edit'])('preserves the exact untouched %s instant when only the title changes', async (mode) => {
+    const exact = '2026-08-13T11:32:27.456Z';
     mockParams = mode === 'edit'
       ? { selectedDateKey: '2026-08-13', task: JSON.stringify({ id: 'edited', title: 'Exact', startTime: exact, durationMinutes: null, color: '#6B5BFC', recurrenceRule: null, subTasks: [] }) }
       : { selectedDateKey: '2026-08-13', prefillStartTime: exact, prefillTitle: 'Exact' };
     mockUpdateTask.mockResolvedValue({ id: 'edited' });
     renderTaskForm();
+    expect(screen.getByTestId('task-minute-value').props.children).toBe('32');
+    fireEvent.changeText(screen.getByPlaceholderText('Название задачи'), 'Only title changed');
     fireEvent.press(screen.getByText('Сохранить'));
     await waitFor(() => expect(mode === 'edit' ? mockUpdateTask : mockCreateTask).toHaveBeenCalled());
     const dto = mode === 'edit' ? mockUpdateTask.mock.calls[0][0].dto : mockCreateTask.mock.calls[0][0];
     expect(dto.startTime).toBe(exact);
+  });
+
+  it.each(['prefill', 'edit'])('keeps untouched minute 58 valid for %s', async (mode) => {
+    const exact = '2026-08-13T11:58:27.456Z';
+    mockParams = mode === 'edit'
+      ? { selectedDateKey: '2026-08-13', task: JSON.stringify({ id: 'edited', title: 'Exact', startTime: exact, durationMinutes: null, color: '#6B5BFC', recurrenceRule: null, subTasks: [] }) }
+      : { selectedDateKey: '2026-08-13', prefillStartTime: exact, prefillTitle: 'Exact' };
+    mockUpdateTask.mockResolvedValue({ id: 'edited' });
+    renderTaskForm();
+    expect(screen.getByTestId('task-minute-value').props.children).toBe('58');
+    expect(screen.queryByText('60')).toBeNull();
+    fireEvent.press(screen.getByText('Сохранить'));
+    await waitFor(() => expect(mode === 'edit' ? mockUpdateTask : mockCreateTask).toHaveBeenCalled());
+    const dto = mode === 'edit' ? mockUpdateTask.mock.calls[0][0].dto : mockCreateTask.mock.calls[0][0];
+    expect(dto.startTime).toBe(exact);
+  });
+
+  it.each([
+    ['minute', 'H24', 'Europe/Moscow', '2026-08-13T11:37:00.000Z'],
+    ['hour', 'H24', 'America/New_York', '2026-08-13T19:32:00.000Z'],
+    ['meridiem', 'H12', 'Europe/Moscow', '2026-08-12T23:32:00.000Z'],
+  ])('rebuilds an explicitly edited %s in profile time', async (control, format, timezone, expected) => {
+    mockTimeFormat = format as 'H24' | 'H12';
+    mockTimezone = timezone;
+    mockParams = { selectedDateKey: '2026-08-13', prefillStartTime: timezone === 'America/New_York' ? '2026-08-13T18:32:27.456Z' : '2026-08-13T11:32:27.456Z', prefillTitle: 'Edited' };
+    renderTaskForm();
+    if (control === 'minute') fireEvent.press(screen.getByLabelText('Увеличить минуты'));
+    if (control === 'hour') fireEvent.press(screen.getByLabelText('Увеличить час'));
+    if (control === 'meridiem') fireEvent.press(screen.getByRole('radio', { name: 'Выбрать AM' }));
+    fireEvent.press(screen.getByText('Сохранить'));
+    await waitFor(() => expect(mockCreateTask).toHaveBeenCalled());
+    expect(mockCreateTask.mock.calls[0][0].startTime).toBe(expected);
+  });
+
+  it.each(['H12', 'H24'])('does not let %s presentation alter an untouched instant', async (format) => {
+    const exact = '2026-08-13T11:32:27.456Z';
+    mockTimeFormat = format as 'H12' | 'H24';
+    mockParams = { selectedDateKey: '2026-08-13', prefillStartTime: exact, prefillTitle: 'Exact' };
+    renderTaskForm();
+    fireEvent.press(screen.getByText('Сохранить'));
+    await waitFor(() => expect(mockCreateTask).toHaveBeenCalled());
+    expect(mockCreateTask.mock.calls[0][0].startTime).toBe(exact);
+  });
+
+  it('preserves the exact instant when time is removed and restored without editing', async () => {
+    const exact = '2026-08-13T11:32:27.456Z';
+    mockParams = { selectedDateKey: '2026-08-13', prefillStartTime: exact, prefillTitle: 'Exact' };
+    renderTaskForm();
+    fireEvent.press(screen.getByText('Без времени'));
+    fireEvent.press(screen.getByText('Указать время'));
+    fireEvent.press(screen.getByText('Сохранить'));
+    await waitFor(() => expect(mockCreateTask).toHaveBeenCalled());
+    expect(mockCreateTask.mock.calls[0][0].startTime).toBe(exact);
   });
 });

@@ -132,13 +132,20 @@ export default function TaskFormScreen() {
     : initialStartTime
       ? { hours: initialStartTime.getHours(), minutes: initialStartTime.getMinutes() }
       : null;
+  const blankNow = new Date();
+  const roundedBlankMinute = roundToStep(blankNow.getMinutes(), 5);
+  const blankDefault = {
+    hours: (blankNow.getHours() + (roundedBlankMinute === 60 ? 1 : 0)) % 24,
+    minutes: roundedBlankMinute % 60,
+  };
 
   const [hasTime, setHasTime] = useState(!!initialStartTime);
+  const [wallClockEdited, setWallClockEdited] = useState(false);
   const [hour, setHour] = useState(
-    initialWallClock?.hours ?? new Date().getHours(),
+    initialWallClock?.hours ?? blankDefault.hours,
   );
   const [minute, setMinute] = useState(
-    roundToStep(initialWallClock?.minutes ?? new Date().getMinutes(), 5),
+    initialWallClock?.minutes ?? blankDefault.minutes,
   );
   const uses12Hour = uses12HourClock(timeFormat);
   const displayHour = uses12Hour ? hour % 12 || 12 : hour;
@@ -164,14 +171,17 @@ export default function TaskFormScreen() {
   const [saving, setSaving] = useState(false);
 
   function adjustHour(delta: number) {
+    setWallClockEdited(true);
     setHour((h) => (h + delta + 24) % 24);
   }
 
   function toggleMeridiem() {
+    setWallClockEdited(true);
     setHour((h) => (h + 12) % 24);
   }
 
   function adjustMinute(delta: number) {
+    setWallClockEdited(true);
     setMinute((m) => (m + delta + 60) % 60);
   }
 
@@ -205,8 +215,7 @@ export default function TaskFormScreen() {
     setSaving(true);
 
     const startTimeIso = hasTime
-      ? initialStartTime && initialWallClock &&
-          hour === initialWallClock.hours && minute === initialWallClock.minutes
+      ? initialStartTime && !wallClockEdited
         ? initialStartTime.toISOString()
         : calendarDayWallTimeToInstant(
             selectedDateKey, hour, minute, profileTimezone,
