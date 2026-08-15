@@ -195,6 +195,7 @@ export default function TodayScreen() {
       params: {
         task: JSON.stringify(task),
         selectedDate: selectedDate.toISOString(),
+        selectedDateKey,
       },
     });
   }
@@ -248,6 +249,7 @@ export default function TodayScreen() {
           ? { prefillDurationMinutes: String(quickAddDuration) }
           : {}),
         selectedDate: selectedDate.toISOString(),
+        selectedDateKey,
       },
     });
   }
@@ -323,7 +325,7 @@ export default function TodayScreen() {
           onAction={() =>
             router.push({
               pathname: '/task-form',
-              params: { selectedDate: selectedDate.toISOString() },
+              params: { selectedDate: selectedDate.toISOString(), selectedDateKey },
             })
           }
         />
@@ -376,6 +378,7 @@ export default function TodayScreen() {
                       params: {
                         task: JSON.stringify(task),
                         selectedDate: selectedDate.toISOString(),
+                        selectedDateKey,
                       },
                     })
                   }
@@ -413,6 +416,7 @@ export default function TodayScreen() {
                         params: {
                           task: JSON.stringify(unscheduledTasks[0]),
                           selectedDate: selectedDate.toISOString(),
+                          selectedDateKey,
                         },
                       })
                   : undefined
@@ -426,6 +430,8 @@ export default function TodayScreen() {
               onCreateAt={(startTime) => openQuickAdd(startTime)}
               shouldAutoScroll={isToday}
               currentDate={selectedDate}
+              currentDateKey={selectedDateKey}
+              profileTimezone={profileTimezone}
               currentTaskId={currentTask?.id}
             />
           )}

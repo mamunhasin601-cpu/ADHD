@@ -1,4 +1,4 @@
-const mockUser = { timeFormat: "H24" };
+const mockUser: { timeFormat: string; timezone?: string } = { timeFormat: "H24" };
 jest.mock("../../stores/auth.store", () => ({
   useAuthStore: (selector: any) => selector({ user: mockUser }),
 }));
@@ -19,6 +19,7 @@ describe("Timeline clock labels", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockUser.timeFormat = "H24";
+    mockUser.timezone = undefined;
   });
   it("renders H24 labels", () => {
     render(<Timeline {...props} />);
@@ -68,5 +69,17 @@ describe("Timeline clock labels", () => {
     expect(selected.getDate()).toBe(12);
     expect(selected.getHours()).toBe(14);
     expect(selected.getMinutes()).toBe(30);
+  });
+  it.each([
+    ["Europe/Moscow", "2026-08-13", "2026-08-13T11:30:00.000Z"],
+    ["America/New_York", "2026-08-13", "2026-08-13T18:30:00.000Z"],
+  ])("keeps a tapped slot on %s profile day %s", (timezone, dateKey, expected) => {
+    mockUser.timezone = timezone;
+    render(<Timeline {...props} currentDateKey={dateKey} profileTimezone={timezone} />);
+    const canvas = screen.getByText("06:00").parent?.parent;
+    fireEvent(canvas!, "responderRelease", {
+      nativeEvent: { locationY: 8 * 64 + 32 },
+    });
+    expect(props.onCreateAt).toHaveBeenLastCalledWith(new Date(expected));
   });
 });

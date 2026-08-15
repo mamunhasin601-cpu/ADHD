@@ -22,6 +22,12 @@ import { isFreeTierLimitError } from "../lib/api-error";
 import { useAuthStore } from "../stores/auth.store";
 import { formatWallClock, uses12HourClock } from "../lib/time-format";
 import { TASK_DURATION_PRESETS, taskDurationLabel } from "../lib/task-duration";
+import {
+  calendarDayWallTimeToInstant,
+  getLocalHoursMinutes,
+  isValidIANATimezone,
+  toCanonicalDateParam,
+} from "../lib/timezone";
 
 const COLOR_PRESETS = [
   "#6B5BFC",
@@ -73,13 +79,23 @@ export default function TaskFormScreen() {
     prefillDurationMinutes?: string;
     /** ISO-строка даты выбранного дня — передаётся из today.tsx для корректной инвалидации кэша */
     selectedDate?: string;
+    /** Authoritative calendar identity for new Today navigation routes. */
+    selectedDateKey?: string;
   }>();
 
-  // Используем дату, переданную с экрана (выбранный день навигации).
-  // Если параметр не пришёл — fallback на сегодня (обратная совместимость).
-  const today = useMemo(
+  const profileTimezone = useAuthStore((s) => s.user?.timezone);
+  const timeFormat = useAuthStore((s) => s.user?.timeFormat ?? "SYSTEM");
+
+  const legacySelectedDate = useMemo(
     () => (params.selectedDate ? new Date(params.selectedDate) : new Date()),
     [params.selectedDate],
+  );
+  const selectedDateKey = params.selectedDateKey ??
+    toCanonicalDateParam(legacySelectedDate, profileTimezone);
+
+  const today = useMemo(
+    () => calendarDayWallTimeToInstant(selectedDateKey, 0, 0, profileTimezone),
+    [selectedDateKey, profileTimezone],
   );
 
   const existingTask: Task | null = useMemo(() => {
@@ -97,10 +113,6 @@ export default function TaskFormScreen() {
 
   const isEditMode = !!existingTask;
 
-  // Profile timezone → same canonical cache key as Today and Recovery (0007A).
-  const profileTimezone = useAuthStore((s) => s.user?.timezone);
-  const timeFormat = useAuthStore((s) => s.user?.timeFormat ?? "SYSTEM");
-
   const createTask = useCreateTask(today, profileTimezone);
   const updateTask = useUpdateTask(today, profileTimezone);
   const deleteTask = useDeleteTask(today, profileTimezone);
@@ -114,17 +126,23 @@ export default function TaskFormScreen() {
     existingTask?.startTime ??
     (params.prefillStartTime ? new Date(params.prefillStartTime) : null);
 
+  const initialWallClock = initialStartTime && profileTimezone &&
+    isValidIANATimezone(profileTimezone) && params.selectedDateKey
+    ? getLocalHoursMinutes(initialStartTime, profileTimezone)
+    : initialStartTime
+      ? { hours: initialStartTime.getHours(), minutes: initialStartTime.getMinutes() }
+      : null;
+
   const [hasTime, setHasTime] = useState(!!initialStartTime);
   const [hour, setHour] = useState(
-    initialStartTime?.getHours() ?? new Date().getHours(),
+    initialWallClock?.hours ?? new Date().getHours(),
   );
   const [minute, setMinute] = useState(
-    roundToStep(initialStartTime?.getMinutes() ?? new Date().getMinutes(), 5),
+    roundToStep(initialWallClock?.minutes ?? new Date().getMinutes(), 5),
   );
   const uses12Hour = uses12HourClock(timeFormat);
   const displayHour = uses12Hour ? hour % 12 || 12 : hour;
   const meridiem = hour < 12 ? "AM" : "PM";
-  const baseDate = initialStartTime ?? today;
 
   const prefillDuration = params.prefillDurationMinutes
     ? Number(params.prefillDurationMinutes)
@@ -187,11 +205,12 @@ export default function TaskFormScreen() {
     setSaving(true);
 
     const startTimeIso = hasTime
-      ? (() => {
-          const d = new Date(baseDate);
-          d.setHours(hour, minute, 0, 0);
-          return d.toISOString();
-        })()
+      ? initialStartTime && initialWallClock &&
+          hour === initialWallClock.hours && minute === initialWallClock.minutes
+        ? initialStartTime.toISOString()
+        : calendarDayWallTimeToInstant(
+            selectedDateKey, hour, minute, profileTimezone,
+          ).toISOString()
       : null;
 
     const dto = {

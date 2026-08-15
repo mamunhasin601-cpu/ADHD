@@ -26,6 +26,22 @@ and fall-back transitions, and when profile and device zones disagree. The same
 selected instant continues into authoritative task hooks, quick create, Timeline,
 and task-form navigation without changing the intended profile calendar day.
 
+### Timed-task correction
+
+The canonical `selectedDateKey` is now passed explicitly from Today to Timeline
+and every Today-owned task-form route. A tapped slot combines that key with the
+tapped wall-clock fields in the valid profile IANA timezone; task-form creation
+uses the same operation. Missing or invalid profile timezones use an explicit
+device-local calendar construction rather than UTC. Legacy routes containing
+only `selectedDate` remain supported.
+
+Existing tasks and explicit `prefillStartTime` values remain exact instants. If
+their displayed wall-clock fields are not changed, saving preserves the complete
+original ISO value, including seconds and milliseconds. Thus, for example,
+`2026-08-13` at 14:30 in `Europe/Moscow` becomes
+`2026-08-13T11:30:00.000Z` and still formats to canonical profile day
+`2026-08-13`.
+
 ## Current-day boundary
 
 Now Card, notification invitation, Recovery, progress and timeline auto-scroll
@@ -42,9 +58,10 @@ regardless of task-query state.
 
 ## Validation
 
-- Focused WeekStrip and Today coverage: 2 suites, 22 tests passed.
-- Full mobile Jest suite: 31 suites, 400 tests passed (baseline inventory grew
-  from 30 suites / 390 tests to 31 suites / 400 tests).
+- Focused WeekStrip, Today, Timeline, timezone, and task-form coverage: 5 suites,
+  122 tests passed.
+- Full mobile Jest suite: 31 suites, 414 tests passed (the original published
+  baseline was 30 suites / 390 tests).
 - Mobile TypeScript compilation and whitespace validation passed.
 - Deterministic cases cover seven Monday–Sunday entries, selection/today states,
   canonical taps and return-to-today, month/year edges, real DST transitions,

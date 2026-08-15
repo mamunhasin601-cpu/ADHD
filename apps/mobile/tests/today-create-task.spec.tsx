@@ -125,7 +125,10 @@ describe('Today quick capture destinations', () => {
     fireEvent.press(screen.getByText('Создать задачу'));
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/task-form',
-      params: { selectedDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) },
+      params: {
+        selectedDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+        selectedDateKey: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      },
     });
   });
 
@@ -153,7 +156,7 @@ describe('Today quick capture destinations', () => {
     fireEvent.press(screen.getByText('Создать задачу'));
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/task-form',
-      params: { selectedDate: '2026-08-12T21:00:00.000Z' },
+      params: { selectedDate: '2026-08-12T21:00:00.000Z', selectedDateKey: '2026-08-13' },
     });
     expect((useTasksForDate as jest.Mock).mock.calls.at(-1)[0].toISOString()).toBe('2026-08-12T21:00:00.000Z');
     jest.useRealTimers();
@@ -254,6 +257,7 @@ describe('Today quick capture destinations', () => {
       params: {
         prefillTitle: 'Разобрать почту',
         selectedDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+        selectedDateKey: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       },
     });
   });
@@ -269,6 +273,7 @@ describe('Today quick capture destinations', () => {
         prefillTitle: 'Позвонить',
         prefillStartTime: new Date(2026, 7, 12, 14, 30).toISOString(),
         selectedDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+        selectedDateKey: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       },
     });
   });

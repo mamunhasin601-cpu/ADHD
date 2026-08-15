@@ -4,6 +4,7 @@ const mockCreateTask = jest.fn();
 const mockUpdateTask = jest.fn();
 const mockInvalidateQueries = jest.fn();
 let mockTimeFormat: 'SYSTEM' | 'H24' | 'H12' = 'H24';
+let mockTimezone: string | undefined = 'Europe/Moscow';
 let mockParams: Record<string, string> = { selectedDate: '2026-08-11T12:00:00.000Z' };
 
 jest.mock('expo-router', () => ({
@@ -21,7 +22,7 @@ jest.mock('../lib/api/tasks', () => ({
   deleteTaskById: jest.fn(),
 }));
 jest.mock('../stores/auth.store', () => ({
-  useAuthStore: jest.fn((selector: any) => selector({ user: { timezone: 'Europe/Moscow', timeFormat: mockTimeFormat } })),
+  useAuthStore: jest.fn((selector: any) => selector({ user: { timezone: mockTimezone, timeFormat: mockTimeFormat } })),
 }));
 
 import React from 'react';
@@ -38,6 +39,7 @@ describe('TaskFormScreen create flow', () => {
     jest.clearAllMocks();
     mockParams = { selectedDate: '2026-08-11T12:00:00.000Z' };
     mockTimeFormat = 'H24';
+    mockTimezone = 'Europe/Moscow';
   });
 
   it('defaults new tasks to unknown and sends null', async () => {
@@ -148,9 +150,57 @@ describe('TaskFormScreen create flow', () => {
 
 
 describe('TaskFormScreen time convention', () => {
-  beforeEach(() => { jest.clearAllMocks(); mockTimeFormat='H12'; mockCreateTask.mockResolvedValue({id:'saved'}); });
+  beforeEach(() => { jest.clearAllMocks(); mockTimeFormat='H12'; mockTimezone='Europe/Moscow'; mockCreateTask.mockResolvedValue({id:'saved'}); });
   function renderAt(iso: string) { mockParams={selectedDate:iso,prefillStartTime:iso,prefillTitle:'Встреча'}; renderTaskForm(); }
   it.each([['2026-08-11T00:30:00.000Z','12:30 AM'],['2026-08-11T12:30:00.000Z','12:30 PM'],['2026-08-11T14:30:00.000Z','2:30 PM']])('renders %s as %s without exposing 24-hour editor values', (iso,label) => { renderAt(iso); expect(screen.getByTestId('task-time-display').props.children).toBe(label); expect(screen.getByTestId('task-hour-value').props.children).not.toBe('14'); });
   it('switches AM/PM while retaining minutes', () => { renderAt('2026-08-11T14:30:00.000Z'); fireEvent.press(screen.getByRole('radio',{name:'Выбрать AM'})); expect(screen.getByTestId('task-time-display').props.children).toBe('2:30 AM'); expect(screen.getByTestId('task-minute-value').props.children).toBe('30'); fireEvent.press(screen.getByRole('radio',{name:'Выбрать PM'})); expect(screen.getByTestId('task-time-display').props.children).toBe('2:30 PM'); });
   it('saves identical ISO instants for equivalent H12 and H24 choices', async () => { const iso='2026-08-11T14:30:00.000Z'; renderAt(iso); fireEvent.press(screen.getByText('Сохранить')); await waitFor(()=>expect(mockCreateTask).toHaveBeenCalled()); const saved=mockCreateTask.mock.calls[0][0].startTime; screen.unmount(); jest.clearAllMocks(); mockCreateTask.mockResolvedValue({id:'saved'}); mockTimeFormat='H24'; renderAt(iso); fireEvent.press(screen.getByText('Сохранить')); await waitFor(()=>expect(mockCreateTask).toHaveBeenCalled()); expect(mockCreateTask.mock.calls[0][0].startTime).toBe(saved); expect(saved).toBe(iso); });
+});
+
+describe('TaskFormScreen canonical selected day', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockTimeFormat = 'H24';
+    mockTimezone = 'Europe/Moscow';
+    mockCreateTask.mockResolvedValue({ id: 'saved' });
+  });
+
+  it.each([
+    ['Europe/Moscow', '2026-08-13', '2026-08-13T11:30:00.000Z'],
+    ['America/New_York', '2026-08-13', '2026-08-13T18:30:00.000Z'],
+    ['Europe/Moscow', '2027-01-01', '2027-01-01T11:30:00.000Z'],
+  ])('creates 14:30 on canonical day in %s', async (timezone, dateKey, expected) => {
+    mockTimezone = timezone;
+    mockParams = { selectedDateKey: dateKey, selectedDate: `${dateKey}T00:00:00.000Z`, prefillTitle: 'Встреча' };
+    renderTaskForm();
+    fireEvent.press(screen.getByText('Указать время'));
+    while (screen.getByTestId('task-hour-value').props.children !== '14') fireEvent.press(screen.getByLabelText('Увеличить час'));
+    while (screen.getByTestId('task-minute-value').props.children !== '30') fireEvent.press(screen.getByLabelText('Увеличить минуты'));
+    fireEvent.press(screen.getByText('Сохранить'));
+    await waitFor(() => expect(mockCreateTask).toHaveBeenCalled());
+    expect(mockCreateTask.mock.calls[0][0].startTime).toBe(expected);
+  });
+
+  it.each([undefined, 'Invalid/Timezone'])('uses device-local fallback for %p timezone', async (timezone) => {
+    mockTimezone = timezone;
+    mockParams = { selectedDateKey: '2026-08-13', prefillStartTime: '2026-08-13T14:30:00.000Z', prefillTitle: 'Fallback' };
+    renderTaskForm();
+    fireEvent.press(screen.getByText('Сохранить'));
+    await waitFor(() => expect(mockCreateTask).toHaveBeenCalledWith(expect.objectContaining({
+      startTime: '2026-08-13T14:30:00.000Z',
+    })));
+  });
+
+  it.each(['prefill', 'edit'])('preserves the exact %s instant', async (mode) => {
+    const exact = '2026-08-13T11:30:27.456Z';
+    mockParams = mode === 'edit'
+      ? { selectedDateKey: '2026-08-13', task: JSON.stringify({ id: 'edited', title: 'Exact', startTime: exact, durationMinutes: null, color: '#6B5BFC', recurrenceRule: null, subTasks: [] }) }
+      : { selectedDateKey: '2026-08-13', prefillStartTime: exact, prefillTitle: 'Exact' };
+    mockUpdateTask.mockResolvedValue({ id: 'edited' });
+    renderTaskForm();
+    fireEvent.press(screen.getByText('Сохранить'));
+    await waitFor(() => expect(mode === 'edit' ? mockUpdateTask : mockCreateTask).toHaveBeenCalled());
+    const dto = mode === 'edit' ? mockUpdateTask.mock.calls[0][0].dto : mockCreateTask.mock.calls[0][0];
+    expect(dto.startTime).toBe(exact);
+  });
 });
