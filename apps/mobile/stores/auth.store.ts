@@ -11,6 +11,8 @@ interface AuthState {
   isAuthenticated: boolean;
   /** true до завершения bootstrap() при старте приложения — пока неизвестно, есть ли сессия */
   isLoading: boolean;
+  /** Monotonic identity for the authenticated session, including same-user re-login. */
+  sessionGeneration: number;
 
   setTokens: (tokens: AuthTokens) => Promise<void>;
   authenticate: (tokens: AuthTokens) => Promise<User>;
@@ -26,13 +28,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   refreshToken: null,
   isAuthenticated: false,
   isLoading: true,
+  sessionGeneration: 0,
 
   setTokens: async (tokens) => {
     await saveTokens(tokens);
     setAuthTokens(tokens);
     set((state) =>
       state.isAuthenticated
-        ? { accessToken: tokens.accessToken, refreshToken: tokens.refreshToken }
+        ? { accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, sessionGeneration: state.sessionGeneration + 1 }
         : {},
     );
   },
@@ -44,16 +47,17 @@ export const useAuthStore = create<AuthState>((set) => ({
       const user = await getMe();
       const verifiedTokens = getAuthTokens();
       if (!verifiedTokens) throw new Error('Authentication tokens were cleared during verification');
-      set({
+      set((state) => ({
         user,
         accessToken: verifiedTokens.accessToken,
         refreshToken: verifiedTokens.refreshToken,
         isAuthenticated: true,
-      });
+        sessionGeneration: state.sessionGeneration + 1,
+      }));
       return user;
     } catch (error) {
       setAuthTokens(null);
-      set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false });
+      set((state) => ({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false, sessionGeneration: state.sessionGeneration + 1 }));
       await clearTokens().catch(() => {});
       throw error;
     }
@@ -63,12 +67,13 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: async () => {
     setAuthTokens(null);
-    set({
+    set((state) => ({
       user: null,
       accessToken: null,
       refreshToken: null,
       isAuthenticated: false,
-    });
+      sessionGeneration: state.sessionGeneration + 1,
+    }));
     // In-memory/API auth state must remain cleared even if SecureStore is
     // temporarily unavailable (for example during an OS-level storage error).
     await clearTokens().catch(() => {});
@@ -85,13 +90,14 @@ export const useAuthStore = create<AuthState>((set) => ({
       const tokens = await loadTokens();
       if (!tokens) {
         setAuthTokens(null);
-        set({
+        set((state) => ({
           user: null,
           accessToken: null,
           refreshToken: null,
           isAuthenticated: false,
           isLoading: false,
-        });
+          sessionGeneration: state.sessionGeneration + 1,
+        }));
         return;
       }
 
@@ -101,22 +107,24 @@ export const useAuthStore = create<AuthState>((set) => ({
       const verifiedTokens = getAuthTokens();
       if (!verifiedTokens) throw new Error('Authentication tokens were cleared during bootstrap');
 
-      set({
+      set((state) => ({
         isAuthenticated: true,
         user,
         accessToken: verifiedTokens.accessToken,
         refreshToken: verifiedTokens.refreshToken,
         isLoading: false,
-      });
+        sessionGeneration: state.sessionGeneration + 1,
+      }));
     } catch {
       setAuthTokens(null);
-      set({
+      set((state) => ({
         user: null,
         accessToken: null,
         refreshToken: null,
         isAuthenticated: false,
         isLoading: false,
-      });
+        sessionGeneration: state.sessionGeneration + 1,
+      }));
       await clearTokens().catch(() => {});
     }
   },

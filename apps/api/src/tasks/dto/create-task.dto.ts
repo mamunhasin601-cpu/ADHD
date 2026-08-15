@@ -8,13 +8,32 @@ import {
   IsBoolean,
   IsHexColor,
   IsUUID,
-  Matches,
+  IsTimeZone,
+  IsIn,
   MaxLength,
+  Validate,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
+  ValidationArguments,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 
+@ValidatorConstraint({ name: 'validRecurrenceCombination', async: false })
+class ValidRecurrenceCombination implements ValidatorConstraintInterface {
+  validate(_title: string, args: ValidationArguments): boolean {
+    const dto = args.object as CreateTaskDto;
+    if (dto.isRecurring) return !!dto.startTime && !!dto.recurrenceRule && !dto.parentTaskId;
+    return !dto.recurrenceRule;
+  }
+
+  defaultMessage(): string {
+    return 'Повтор требует isRecurring=true, поддерживаемое правило, время и корневую задачу';
+  }
+}
+
 export class CreateTaskDto {
   @IsString()
+  @Validate(ValidRecurrenceCombination)
   title: string;
 
   @IsOptional()
@@ -43,8 +62,23 @@ export class CreateTaskDto {
 
   @IsOptional()
   @IsString()
-  @Matches(/^FREQ=/, { message: 'recurrenceRule должен быть в формате iCal RRULE (начинаться с FREQ=)' })
+  @IsIn(['FREQ=DAILY', 'FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR'], {
+    message: 'Поддерживаются только ежедневное повторение и будни (Пн–Пт)',
+  })
   recurrenceRule?: string | null;
+
+  /** Explicit device fallback; used only when the profile timezone is invalid. */
+  @IsOptional()
+  @IsTimeZone({ message: 'deviceTimezone должен быть допустимым IANA timezone' })
+  deviceTimezone?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  editRecurrenceAnchor?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  editRecurrencePattern?: boolean;
 
   @IsOptional()
   @IsUUID('4', { message: 'parentTaskId должен быть UUID' })

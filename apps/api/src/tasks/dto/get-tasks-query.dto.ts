@@ -1,4 +1,4 @@
-import { IsOptional, IsISO8601, IsBoolean } from 'class-validator';
+import { IsOptional, IsISO8601, IsBoolean, IsTimeZone } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 /**
@@ -15,6 +15,9 @@ function toBooleanStrict({ value }: { value: unknown }): unknown {
 }
 
 export class GetTasksQueryDto {
+  @IsOptional()
+  @IsTimeZone({ message: 'deviceTimezone должен быть допустимым IANA timezone' })
+  deviceTimezone?: string;
   /** Фильтр по дате: получить задачи за конкретный день (ISO 8601 date, напр. "2026-07-23") */
   @IsOptional()
   @IsISO8601({}, { message: 'date должен быть в формате ISO 8601' })

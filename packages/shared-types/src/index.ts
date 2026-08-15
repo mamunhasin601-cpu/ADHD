@@ -40,6 +40,15 @@ export interface Task {
   color: string;
   isRecurring: boolean;
   recurrenceRule: string | null; // iCal RRULE, напр. "FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR"
+  /** Present only on a concrete occurrence; the stable id of its series. */
+  seriesId?: string | null;
+  /** Profile-local YYYY-MM-DD occurrence identity. */
+  recurrenceDateKey?: string | null;
+  recurrenceEndedAt?: Date | null;
+  /** Immutable series anchor metadata supplied for occurrence editing. */
+  seriesStartTime?: Date | null;
+  seriesTimezone?: string | null;
+  seriesRecurrenceRule?: string | null;
   parentTaskId: string | null;   // для подзадач
   completedAt: Date | null;
   /** First explicit user start; a historical event rather than a timer. */
@@ -49,6 +58,8 @@ export interface Task {
   createdAt: Date;
   updatedAt: Date;
   subTasks?: Task[];
+  affectedOccurrenceIds?: string[];
+  newOccurrenceIds?: string[];
 }
 
 export interface CreateTaskDto {
@@ -59,6 +70,9 @@ export interface CreateTaskDto {
   color?: string;
   isRecurring?: boolean;
   recurrenceRule?: string | null;
+  deviceTimezone?: string;
+  editRecurrenceAnchor?: boolean;
+  editRecurrencePattern?: boolean;
   parentTaskId?: string | null;
 }
 

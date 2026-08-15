@@ -72,6 +72,13 @@ model Task {
   color           String    @default("#6B5BFC")
   isRecurring     Boolean   @default(false)
   recurrenceRule  String?   // iCal RRULE, напр. "FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR"
+  recurrenceTimezone String?
+  recurrenceDateKey String?
+  recurrenceGeneratedThrough String?
+  recurrenceEndedAt DateTime?
+  seriesId        String?
+  series          Task?     @relation("TaskOccurrences", fields: [seriesId], references: [id], onDelete: Cascade)
+  occurrences     Task[]    @relation("TaskOccurrences")
   parentTaskId    String?
   parentTask      Task?     @relation("SubTasks", fields: [parentTaskId], references: [id])
   subTasks        Task[]    @relation("SubTasks")
@@ -85,6 +92,8 @@ model Task {
 
   @@index([userId])
   @@index([userId, startTime])
+  @@index([seriesId])
+  @@unique([seriesId, recurrenceDateKey])
   @@map("tasks")
 }
 

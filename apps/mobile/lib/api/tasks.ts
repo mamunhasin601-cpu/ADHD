@@ -1,10 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
 import { apiClient } from '../api-client';
 import { toCanonicalDateParam } from '../timezone';
 import {
   scheduleLocalReminder,
   cancelLocalReminder,
   getLocalOnlyMode,
+  reconcileLocalReminders,
+  LOCAL_REMINDER_HORIZON_DAYS,
 } from '../local-notifications';
 import type {
   Task,
@@ -14,6 +17,40 @@ import type {
   RescheduleRecoveryRequest,
   RescheduleRecoveryResponse,
 } from '@focus/shared-types';
+import { useAuthStore } from '../../stores/auth.store';
+
+type ContinuationGuard = () => boolean;
+
+function useMutationContinuation() {
+  const owner = useAuthStore((state) => state.user?.id);
+  const session = useAuthStore((state) => state.sessionGeneration);
+  const mounted = useRef(true); const current = useRef(0);
+  useEffect(() => () => { mounted.current = false; current.current += 1; }, []);
+  const begin = () => ({ operation: ++current.current, owner, session });
+  const guard = (context?: ReturnType<typeof begin>) => () => !!context && mounted.current &&
+    current.current === context.operation && useAuthStore.getState().user?.id === context.owner &&
+    useAuthStore.getState().sessionGeneration === context.session;
+  return { begin, guard };
+}
+
+async function cleanAffectedLocalReminders(ids: string[], guard: ContinuationGuard): Promise<void> {
+  for (const id of ids) {
+    if (!guard()) return;
+    await cancelLocalReminder(id);
+    if (!guard()) return;
+  }
+}
+
+async function reconcileAfterSeriesMutation(guard: ContinuationGuard): Promise<void> {
+  if (!guard()) return;
+  const now = new Date();
+  const horizon = new Date(now.getTime() + LOCAL_REMINDER_HORIZON_DAYS * 86400000);
+  const { data } = await apiClient.get<Task[]>('/tasks', { params: {
+    scheduledFrom: now.toISOString(), scheduledTo: horizon.toISOString(), includeSubTasks: false,
+  }});
+  if (!guard()) return;
+  await reconcileLocalReminders(data, getLocalOnlyMode(), guard);
+}
 
 /**
  * ONE canonical date key for every hook that refers to the same server day
@@ -68,8 +105,11 @@ export function useTasksForDate(date: Date, userTimezone?: string | null) {
   return useQuery({
     queryKey: tasksKey(dateParam),
     queryFn: async () => {
+      // Explicit lifecycle check; the server alone derives its rolling boundary
+      // from profile-local today. The subsequent GET remains strictly read-only.
+      await apiClient.post('/tasks/recurrence/extend', { deviceTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone });
       const { data } = await apiClient.get<Task[]>('/tasks', {
-        params: { date: dateParam, includeSubTasks: true },
+        params: { date: dateParam, includeSubTasks: true, deviceTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
       });
       return data;
     },
@@ -79,18 +119,24 @@ export function useTasksForDate(date: Date, userTimezone?: string | null) {
 export function useCreateTask(date: Date, userTimezone?: string | null) {
   const queryClient = useQueryClient();
   const dateParam = toDateParam(date, userTimezone);
+  const continuation = useMutationContinuation();
 
   return useMutation({
+    onMutate: () => continuation.begin(),
     mutationFn: async (dto: CreateTaskDto) => {
       const { data } = await apiClient.post<Task>('/tasks', dto);
       return data;
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: tasksKey(dateParam) });
+    onSuccess: async (data, _variables, context) => {
+      const guard = continuation.guard(context);
+      if (!guard()) return;
+      queryClient.invalidateQueries({ queryKey: data.isRecurring ? ['tasks'] : tasksKey(dateParam) });
+      if (data.isRecurring) await reconcileAfterSeriesMutation(guard).catch(() => undefined);
+      if (!guard()) return;
       // Secondary effect: schedule local reminder for tasks with a future start time.
       // Respects channel policy (localOnly=false when push is active → no-op).
       // .catch() ensures CRUD result is never affected by reminder failures.
-      if (data.startTime && !data.completedAt && !data.startedAt) {
+      if (data.startTime && !data.completedAt && !data.startedAt && !data.isRecurring) {
         scheduleLocalReminder(data, getLocalOnlyMode()).catch(() => {});
       }
     },
@@ -99,17 +145,24 @@ export function useCreateTask(date: Date, userTimezone?: string | null) {
 
 export function useUpdateTask(date: Date, userTimezone?: string | null) {
   const queryClient = useQueryClient();
+  const continuation = useMutationContinuation();
   const dateParam = toDateParam(date, userTimezone);
 
   return useMutation({
+    onMutate: () => continuation.begin(),
     mutationFn: async ({ id, dto }: { id: string; dto: UpdateTaskDto }) => {
       const { data } = await apiClient.patch<Task>(`/tasks/${id}`, dto);
       return data;
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: tasksKey(dateParam) });
+    onSuccess: async (data, _variables, context) => {
+      const guard = continuation.guard(context);
+      await cleanAffectedLocalReminders([...(data?.affectedOccurrenceIds ?? []), ...(data?.newOccurrenceIds ?? [])], guard);
+      if (!guard()) return;
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      if (data.affectedOccurrenceIds?.length || data.newOccurrenceIds?.length) await reconcileAfterSeriesMutation(guard).catch(() => undefined);
+      if (!guard()) return;
       // Reschedule or cancel based on updated task state.
-      if (data.startTime && !data.completedAt && !data.startedAt) {
+      if (data.startTime && !data.completedAt && !data.startedAt && !data.isRecurring) {
         scheduleLocalReminder(data, getLocalOnlyMode()).catch(() => {});
       } else {
         cancelLocalReminder(data.id).catch(() => {});
@@ -164,17 +217,25 @@ export function useToggleTask(date: Date, userTimezone?: string | null) {
 
 export function useDeleteTask(date: Date, userTimezone?: string | null) {
   const queryClient = useQueryClient();
+  const continuation = useMutationContinuation();
   const dateParam = toDateParam(date, userTimezone);
 
   return useMutation({
+    onMutate: () => continuation.begin(),
     mutationFn: async (id: string) => {
-      await apiClient.delete(`/tasks/${id}`);
+      const { data } = await apiClient.delete<{ affectedOccurrenceIds: string[] }>(`/tasks/${id}`);
+      return data;
     },
-    onSuccess: async (_data, id) => {
+    onSuccess: async (data, id, context) => {
+      const guard = continuation.guard(context);
+      await cleanAffectedLocalReminders(data?.affectedOccurrenceIds ?? [], guard);
+      if (!guard()) return;
       queryClient.setQueryData<Task[]>(tasksKey(dateParam), (old) =>
         old?.filter((task) => task.id !== id),
       );
-      await queryClient.invalidateQueries({ queryKey: tasksKey(dateParam) });
+      await queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      if (data?.affectedOccurrenceIds?.length) await reconcileAfterSeriesMutation(guard).catch(() => undefined);
+      if (!guard()) return;
       // Cancel local reminder for the deleted task.
       cancelLocalReminder(id).catch(() => {});
     },

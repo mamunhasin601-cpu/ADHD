@@ -33,6 +33,8 @@ export class PlanService {
         userId,
         completedAt: null,
         parentTaskId: null, // считаем только верхнеуровневые задачи
+        seriesId: null, // concrete occurrences are not user-authored tasks
+        recurrenceEndedAt: null, // stopped series templates are archived
       },
     });
 
@@ -70,6 +72,8 @@ current: activeTaskCount,
         userId,
         completedAt: null,
         parentTaskId: null,
+        seriesId: null,
+        recurrenceEndedAt: null,
       },
     });
 
