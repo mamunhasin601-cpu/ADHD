@@ -46,7 +46,7 @@ describe('TasksService — синхронизация напоминаний', (
   });
 
   it('create/update persist firstStep without changing unrelated state', async () => {
-    const existing = { id: 'step', userId, startTime: new Date(), durationMinutes: 45, isRecurring: true, recurrenceRule: 'FREQ=DAILY', startedAt: new Date(), completedAt: new Date(), firstStep: null };
+    const existing = { id: 'step', userId, startTime: new Date(), durationMinutes: 45, isRecurring: false, recurrenceRule: null, startedAt: new Date(), completedAt: new Date(), firstStep: null };
     prisma.task.create.mockResolvedValue({ ...existing, firstStep: 'Открыть документ' });
     await service.create(userId, { title: 'Task', firstStep: 'Открыть документ' });
     expect(prisma.task.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ firstStep: 'Открыть документ' }) }));
@@ -173,7 +173,7 @@ describe('TasksService — синхронизация напоминаний', (
   });
 
   it('start(): atomically preserves the first server timestamp and cancels its reminder', async () => {
-    const original = { id: 'started', userId, startTime: new Date('2026-08-14T10:00:00Z'), durationMinutes: 45, isRecurring: true, recurrenceRule: 'FREQ=DAILY', completedAt: null, startedAt: null, firstStep: 'Открыть документ' };
+    const original = { id: 'started', userId, startTime: new Date('2026-08-14T10:00:00Z'), durationMinutes: 45, isRecurring: false, seriesId: 'series', recurrenceRule: 'FREQ=DAILY', completedAt: null, startedAt: null, firstStep: 'Открыть документ' };
     let stored = original;
     prisma.task.findUnique.mockImplementation(() => Promise.resolve(stored));
     prisma.task.updateMany.mockImplementation(({ where, data }: any) => {

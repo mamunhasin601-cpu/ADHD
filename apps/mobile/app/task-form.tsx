@@ -269,7 +269,10 @@ export default function TaskFormScreen() {
 
   function handleDelete() {
     if (!existingTask) return;
-    Alert.alert("Удалить задачу?", existingTask.title, [
+    const wholeSeries = !!existingTask.seriesId || existingTask.isRecurring;
+    Alert.alert(wholeSeries ? "Удалить весь повтор?" : "Удалить задачу?", wholeSeries
+      ? "Будут удалены все задачи этого повтора."
+      : existingTask.title, [
       { text: "Отмена", style: "cancel" },
       {
         text: "Удалить",
@@ -402,6 +405,9 @@ export default function TaskFormScreen() {
         {(Object.keys(RECURRENCE_LABELS) as RecurrencePreset[]).map((preset) => (
           <Pressable
             key={preset}
+            accessibilityRole="radio"
+            accessibilityLabel={RECURRENCE_LABELS[preset]}
+            accessibilityState={{ selected: recurrencePreset === preset }}
             style={[styles.chip, recurrencePreset === preset && styles.chipActive]}
             onPress={() => setRecurrencePreset(preset)}
           >
@@ -413,6 +419,11 @@ export default function TaskFormScreen() {
           </Pressable>
         ))}
       </View>
+      {isEditMode && (existingTask?.seriesId || existingTask?.isRecurring) && (
+        <Text style={styles.supportingText}>
+          Изменения применятся ко всему повтору, включая будущие задачи.
+        </Text>
+      )}
 
       {/* Подзадачи */}
       <Text style={styles.sectionLabel}>Разбить на шаги</Text>
@@ -479,7 +490,9 @@ export default function TaskFormScreen() {
 
       {isEditMode && (
         <Pressable style={styles.deleteButton} onPress={handleDelete}>
-          <Text style={styles.deleteButtonText}>Удалить задачу</Text>
+          <Text style={styles.deleteButtonText}>
+            {existingTask?.seriesId || existingTask?.isRecurring ? "Удалить весь повтор" : "Удалить задачу"}
+          </Text>
         </Pressable>
       )}
     </ScrollView>

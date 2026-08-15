@@ -3,7 +3,7 @@ import { TasksService } from './tasks.service';
 const userId = 'owner';
 const baseTask = () => ({
   id: 'task-1', userId, title: 'Task', startTime: new Date('2026-08-14T10:00:00Z'),
-  durationMinutes: 45, isRecurring: true, recurrenceRule: 'FREQ=DAILY',
+  durationMinutes: 45, isRecurring: false, recurrenceRule: 'FREQ=DAILY', seriesId: 'series-1',
   completedAt: null as Date | null, startedAt: null as Date | null,
 });
 
@@ -49,7 +49,7 @@ describe('TasksService.start', () => {
     });
     const first = await service.start(userId, stored.id); const second = await service.start(userId, stored.id);
     expect(second.startedAt).toBe(first.startedAt);
-    expect(second).toMatchObject({ startTime: new Date('2026-08-14T10:00:00Z'), durationMinutes: 45, isRecurring: true, recurrenceRule: 'FREQ=DAILY', completedAt: null });
+    expect(second).toMatchObject({ startTime: new Date('2026-08-14T10:00:00Z'), durationMinutes: 45, isRecurring: false, recurrenceRule: 'FREQ=DAILY', completedAt: null });
     expect(other.startedAt).toBeNull();
     expect(prisma.task.updateMany).toHaveBeenCalledWith({ where: { id: 'task-1', userId, startedAt: null, completedAt: null }, data: { startedAt: expect.any(Date) } });
     expect(notifications.cancelTaskReminder).toHaveBeenCalledWith('task-1');

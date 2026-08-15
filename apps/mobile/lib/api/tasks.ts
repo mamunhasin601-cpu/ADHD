@@ -68,6 +68,9 @@ export function useTasksForDate(date: Date, userTimezone?: string | null) {
   return useQuery({
     queryKey: tasksKey(dateParam),
     queryFn: async () => {
+      // Explicit lifecycle write extends every owned series around this selected
+      // calendar day. The subsequent GET remains strictly read-only.
+      await apiClient.post('/tasks/recurrence/extend', { date: dateParam });
       const { data } = await apiClient.get<Task[]>('/tasks', {
         params: { date: dateParam, includeSubTasks: true },
       });
@@ -90,7 +93,7 @@ export function useCreateTask(date: Date, userTimezone?: string | null) {
       // Secondary effect: schedule local reminder for tasks with a future start time.
       // Respects channel policy (localOnly=false when push is active → no-op).
       // .catch() ensures CRUD result is never affected by reminder failures.
-      if (data.startTime && !data.completedAt && !data.startedAt) {
+      if (data.startTime && !data.completedAt && !data.startedAt && !data.isRecurring) {
         scheduleLocalReminder(data, getLocalOnlyMode()).catch(() => {});
       }
     },
@@ -109,7 +112,7 @@ export function useUpdateTask(date: Date, userTimezone?: string | null) {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: tasksKey(dateParam) });
       // Reschedule or cancel based on updated task state.
-      if (data.startTime && !data.completedAt && !data.startedAt) {
+      if (data.startTime && !data.completedAt && !data.startedAt && !data.isRecurring) {
         scheduleLocalReminder(data, getLocalOnlyMode()).catch(() => {});
       } else {
         cancelLocalReminder(data.id).catch(() => {});

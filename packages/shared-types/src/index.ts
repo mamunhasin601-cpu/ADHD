@@ -40,6 +40,10 @@ export interface Task {
   color: string;
   isRecurring: boolean;
   recurrenceRule: string | null; // iCal RRULE, напр. "FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR"
+  /** Present only on a concrete occurrence; the stable id of its series. */
+  seriesId?: string | null;
+  /** Profile-local YYYY-MM-DD occurrence identity. */
+  recurrenceDateKey?: string | null;
   parentTaskId: string | null;   // для подзадач
   completedAt: Date | null;
   /** First explicit user start; a historical event rather than a timer. */

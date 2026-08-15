@@ -103,6 +103,13 @@ Phase 1 реализует минимальное ядро из [PDR-001](../12-
     переносятся в planning view другой даты. Полоса не создаёт Week screen,
     дополнительных запросов, task-count индикаторов, жестов или нового кэша.
 
+11. **Task 0022 — honest basic recurring tasks — completed.** Every-day and
+    Monday–Friday repeats now produce bounded, stable, independently actionable
+    occurrences in the profile calendar timezone. Series-wide edit/delete scope
+    is explicit; DST wall time, free-tier counting, reminders, recovery isolation,
+    and idempotent generation are defined in
+    [the Task 0022 record](../../docs/tasks/0022-honest-basic-recurring-tasks.md).
+
 Остальные capability Phase 1 остаются на горизонте, но их точный порядок пока
 не принят. Контекстный помощник, overload mode и focus session относятся к
 следующему расширению опыта; AI-декомпозиция, energy-aware suggestions и
