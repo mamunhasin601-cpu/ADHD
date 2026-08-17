@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 import {
   IsString,
   IsOptional,
@@ -11,12 +12,18 @@ import {
   IsTimeZone,
   IsIn,
   MaxLength,
+  IsArray,
+  ArrayMaxSize,
+  ValidateNested,
   Validate,
   ValidatorConstraint,
   ValidatorConstraintInterface,
   ValidationArguments,
 } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
+import { TaskPartWriteDto } from './task-part-write.dto';
+
+export const MAX_MANUAL_TASK_PARTS = 50;
 
 @ValidatorConstraint({ name: 'validRecurrenceCombination', async: false })
 class ValidRecurrenceCombination implements ValidatorConstraintInterface {
@@ -83,4 +90,14 @@ export class CreateTaskDto {
   @IsOptional()
   @IsUUID('4', { message: 'parentTaskId должен быть UUID' })
   parentTaskId?: string | null;
+
+  /** When present, this is the complete authoritative draft for a root task. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_MANUAL_TASK_PARTS, {
+    message: `Можно добавить не больше ${MAX_MANUAL_TASK_PARTS} частей задачи`,
+  })
+  @ValidateNested({ each: true })
+  @Type(() => TaskPartWriteDto)
+  subTasks?: TaskPartWriteDto[];
 }

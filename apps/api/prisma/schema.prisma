@@ -80,7 +80,7 @@ model Task {
   series          Task?     @relation("TaskOccurrences", fields: [seriesId], references: [id], onDelete: Cascade)
   occurrences     Task[]    @relation("TaskOccurrences")
   parentTaskId    String?
-  parentTask      Task?     @relation("SubTasks", fields: [parentTaskId], references: [id])
+  parentTask      Task?     @relation("SubTasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
   subTasks        Task[]    @relation("SubTasks")
   completedAt     DateTime?
   startedAt       DateTime?

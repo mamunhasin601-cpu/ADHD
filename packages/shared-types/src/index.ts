@@ -74,10 +74,17 @@ export interface CreateTaskDto {
   editRecurrenceAnchor?: boolean;
   editRecurrencePattern?: boolean;
   parentTaskId?: string | null;
+  subTasks?: TaskPartWrite[];
 }
 
 export interface UpdateTaskDto extends Partial<CreateTaskDto> {
   completedAt?: string | null;
+}
+
+export interface TaskPartWrite {
+  id?: string;
+  title: string;
+  completed?: boolean;
 }
 
 // ────────────────────────────────────────────────────────────
