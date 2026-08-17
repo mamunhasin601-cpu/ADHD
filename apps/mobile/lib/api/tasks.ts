@@ -80,8 +80,8 @@ export function useStartTask(date: Date, userTimezone?: string | null) {
       return data;
     },
     onSuccess: (task) => {
-      queryClient.setQueryData<Task[]>(tasksKey(dateParam), (old) =>
-        old?.map((item) => item.id === task.id ? task : item),
+      queryClient.setQueryData<Task[]>(tasksKey(dateParam), (old: Task[] | undefined) =>
+        old?.map((item: Task) => item.id === task.id ? task : item),
       );
       cancelLocalReminder(task.id).catch(() => {});
     },
@@ -116,7 +116,11 @@ export function useTasksForDate(date: Date, userTimezone?: string | null) {
   });
 }
 
-export function useCreateTask(date: Date, userTimezone?: string | null) {
+export function useCreateTask(
+  date: Date,
+  userTimezone?: string | null,
+  callerGuard?: ContinuationGuard,
+) {
   const queryClient = useQueryClient();
   const dateParam = toDateParam(date, userTimezone);
   const continuation = useMutationContinuation();
@@ -128,9 +132,11 @@ export function useCreateTask(date: Date, userTimezone?: string | null) {
       return data;
     },
     onSuccess: async (data, _variables, context) => {
-      const guard = continuation.guard(context);
+      const lifecycleGuard = continuation.guard(context);
+      const guard = () => lifecycleGuard() && (callerGuard?.() ?? true);
       if (!guard()) return;
       queryClient.invalidateQueries({ queryKey: data.isRecurring ? ['tasks'] : tasksKey(dateParam) });
+      if (!data.isRecurring) queryClient.invalidateQueries({ queryKey: inboxKey() });
       if (data.isRecurring) await reconcileAfterSeriesMutation(guard).catch(() => undefined);
       if (!guard()) return;
       // Secondary effect: schedule local reminder for tasks with a future start time.
@@ -143,7 +149,11 @@ export function useCreateTask(date: Date, userTimezone?: string | null) {
   });
 }
 
-export function useUpdateTask(date: Date, userTimezone?: string | null) {
+export function useUpdateTask(
+  date: Date,
+  userTimezone?: string | null,
+  callerGuard?: ContinuationGuard,
+) {
   const queryClient = useQueryClient();
   const continuation = useMutationContinuation();
   const dateParam = toDateParam(date, userTimezone);
@@ -155,10 +165,12 @@ export function useUpdateTask(date: Date, userTimezone?: string | null) {
       return data;
     },
     onSuccess: async (data, _variables, context) => {
-      const guard = continuation.guard(context);
+      const lifecycleGuard = continuation.guard(context);
+      const guard = () => lifecycleGuard() && (callerGuard?.() ?? true);
       await cleanAffectedLocalReminders([...(data?.affectedOccurrenceIds ?? []), ...(data?.newOccurrenceIds ?? [])], guard);
       if (!guard()) return;
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: inboxKey() });
       if (data.affectedOccurrenceIds?.length || data.newOccurrenceIds?.length) await reconcileAfterSeriesMutation(guard).catch(() => undefined);
       if (!guard()) return;
       // Reschedule or cancel based on updated task state.
@@ -230,8 +242,8 @@ export function useDeleteTask(date: Date, userTimezone?: string | null) {
       const guard = continuation.guard(context);
       await cleanAffectedLocalReminders(data?.affectedOccurrenceIds ?? [], guard);
       if (!guard()) return;
-      queryClient.setQueryData<Task[]>(tasksKey(dateParam), (old) =>
-        old?.filter((task) => task.id !== id),
+      queryClient.setQueryData<Task[]>(tasksKey(dateParam), (old: Task[] | undefined) =>
+        old?.filter((task: Task) => task.id !== id),
       );
       await queryClient.invalidateQueries({ queryKey: ['tasks'] });
       if (data?.affectedOccurrenceIds?.length) await reconcileAfterSeriesMutation(guard).catch(() => undefined);
@@ -248,15 +260,6 @@ export function useDeleteTask(date: Date, userTimezone?: string | null) {
  * и дождаться каждой (await в цикле), а не просто дёрнуть мутацию из компонента.
  * Инвалидацию кэша вызывающий код делает сам после того, как все подзадачи созданы.
  */
-export async function createSubtask(parentTaskId: string, title: string): Promise<Task> {
-  const { data } = await apiClient.post<Task>('/tasks', { title, parentTaskId });
-  return data;
-}
-
-export async function deleteTaskById(id: string): Promise<void> {
-  await apiClient.delete(`/tasks/${id}`);
-}
-
 //─────────────────────────────────────────────────────────────────────────
 // Inbox hook — unscheduled root tasks (startTime IS NULL)
 // Cache key: ['tasks', 'inbox'] — invalidated by recovery reschedule success

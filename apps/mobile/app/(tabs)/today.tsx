@@ -279,7 +279,8 @@ export default function TodayScreen() {
               isStarting={startTask.isPending}
               isSavingFirstStep={updateTask.isPending}
               startError={
-                startError?.taskId === (currentTask ?? nextTask!).id &&
+                startError &&
+                startError.taskId === (currentTask ?? nextTask!).id &&
                 startError.dateKey === toCanonicalDateParam(selectedDate, profileTimezone)
                   ? startError.message
                   : null
