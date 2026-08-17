@@ -31,4 +31,12 @@ describe('manual task parts DTO boundary', () => {
   it('accepts an authoritative empty update draft', async () => {
     await expect(pipe.transform({ subTasks: [] }, metadata(UpdateTaskDto))).resolves.toMatchObject({ subTasks: [] });
   });
+
+  it('accepts a UUID create identity and rejects it on update', async () => {
+    const createRequestId = '00000000-0000-4000-8000-000000000025';
+    await expect(pipe.transform({ title: 'Parent', createRequestId }, metadata(CreateTaskDto)))
+      .resolves.toMatchObject({ createRequestId });
+    await expect(pipe.transform({ title: 'Parent', createRequestId }, metadata(UpdateTaskDto)))
+      .rejects.toMatchObject({ status: 400 });
+  });
 });

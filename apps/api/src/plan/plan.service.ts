@@ -1,6 +1,9 @@
 import { Injectable, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { FREE_TIER_LIMITS } from '@focus/shared-types';
+import type { Prisma } from '@prisma/client';
+
+type PlanReadClient = Pick<Prisma.TransactionClient, 'user' | 'task'>;
 
 @Injectable()
 export class PlanService {
@@ -9,8 +12,8 @@ export class PlanService {
   /**
    * Проверяет, является ли пользователь Pro (с учётом срока действия).
    */
-  async isProUser(userId: string): Promise<boolean> {
-    const user = await this.prisma.user.findUnique({
+  async isProUser(userId: string, client: PlanReadClient = this.prisma): Promise<boolean> {
+    const user = await client.user.findUnique({
       where: { id: userId },
       select: { plan: true, proExpiresAt: true },
     });
@@ -24,11 +27,11 @@ export class PlanService {
    * Проверяет, не превышен ли лимит задач для Free пользователя.
    * Бросает ForbiddenException если лимит превышен.
    */
-  async enforceTaskLimit(userId: string): Promise<void> {
-    const isPro = await this.isProUser(userId);
+  async enforceTaskLimit(userId: string, client: PlanReadClient = this.prisma): Promise<void> {
+    const isPro = await this.isProUser(userId, client);
     if (isPro) return; // Pro пользователи безограничений
 
-    const activeTaskCount = await this.prisma.task.count({
+    const activeTaskCount = await client.task.count({
       where: {
         userId,
         completedAt: null,

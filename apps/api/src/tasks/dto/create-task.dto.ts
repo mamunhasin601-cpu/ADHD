@@ -39,6 +39,11 @@ class ValidRecurrenceCombination implements ValidatorConstraintInterface {
 }
 
 export class CreateTaskDto {
+  /** Retry identity for one owner-scoped root creation attempt; never a task id. */
+  @IsOptional()
+  @IsUUID('4', { message: 'createRequestId должен быть UUID v4' })
+  createRequestId?: string;
+
   @IsString()
   @Validate(ValidRecurrenceCombination)
   title: string;

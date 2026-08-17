@@ -54,6 +54,7 @@ model User {
   sessionParticipations FocusSessionParticipant[]
   notificationLogs      NotificationLog[]
   deviceTokens          DeviceToken[]
+  taskCreateRequests    TaskCreateRequest[]
 
   @@map("users")
 }
@@ -89,12 +90,27 @@ model Task {
   updatedAt       DateTime  @updatedAt
 
   notificationLogs NotificationLog[]
+  createRequest    TaskCreateRequest?
 
   @@index([userId])
   @@index([userId, startTime])
   @@index([seriesId])
   @@unique([seriesId, recurrenceDateKey])
   @@map("tasks")
+}
+
+model TaskCreateRequest {
+  userId      String
+  requestId   String   @db.Uuid
+  payloadHash String
+  taskId      String?  @unique
+  createdAt   DateTime @default(now())
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task Task? @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@id([userId, requestId])
+  @@map("task_create_requests")
 }
 
 // ──────────────────────────────────────────────

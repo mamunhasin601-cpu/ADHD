@@ -37,6 +37,9 @@ const COLOR_PRESETS = [
   "#F59E0B",
 ];
 
+const MAX_MANUAL_TASK_PARTS = 50;
+const MAX_TASK_PART_TITLE_LENGTH = 240;
+
 type RecurrencePreset = "none" | "daily" | "weekdays";
 
 const RECURRENCE_RULES: Record<RecurrencePreset, string | null> = {
@@ -66,6 +69,18 @@ function recurrencePresetFromRule(rule: string | null): RecurrencePreset {
   if (rule === RECURRENCE_RULES.weekdays) return "weekdays";
   if (rule === RECURRENCE_RULES.daily) return "daily";
   return "none";
+}
+
+function newCreateRequestId(): string {
+  const cryptoApi = globalThis.crypto as (Crypto & { randomUUID?: () => string }) | undefined;
+  if (cryptoApi?.randomUUID) return cryptoApi.randomUUID();
+  const bytes = new Uint8Array(16);
+  if (cryptoApi?.getRandomValues) cryptoApi.getRandomValues(bytes);
+  else for (let index = 0; index < bytes.length; index += 1) bytes[index] = Math.floor(Math.random() * 256);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 export default function TaskFormScreen() {
@@ -130,9 +145,12 @@ export default function TaskFormScreen() {
     savingRef.current = false;
     setSaving(false);
   }, [continuationIdentity]);
-  useEffect(() => () => {
-    mountedRef.current = false;
-    saveOperationRef.current += 1;
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      saveOperationRef.current += 1;
+    };
   }, []);
 
   const isEditMode = !!existingTask;
@@ -203,8 +221,30 @@ export default function TaskFormScreen() {
     })),
   );
   const [subtaskInput, setSubtaskInput] = useState("");
+  const [partsFeedback, setPartsFeedback] = useState<string | null>(null);
+  const createRequestRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
 
   const [saving, setSaving] = useState(false);
+
+  const partsValidationMessage = useMemo(() => {
+    if (partsDraft.length > MAX_MANUAL_TASK_PARTS) {
+      return `Можно добавить не больше ${MAX_MANUAL_TASK_PARTS} частей задачи.`;
+    }
+    if (partsDraft.some((part) => part.title.trim().length === 0)) {
+      return "Название каждой части должно содержать хотя бы один символ.";
+    }
+    if (partsDraft.some((part) => part.title.trim().length > MAX_TASK_PART_TITLE_LENGTH)) {
+      return `Название части должно быть не длиннее ${MAX_TASK_PART_TITLE_LENGTH} символов.`;
+    }
+    return null;
+  }, [partsDraft]);
+  const partsAtLimit = partsDraft.length >= MAX_MANUAL_TASK_PARTS;
+  const newPartTooLong = subtaskInput.trim().length > MAX_TASK_PART_TITLE_LENGTH;
+  const addPartDisabled = saving || !subtaskInput.trim() || newPartTooLong || partsAtLimit;
+  const partsStatusMessage = partsValidationMessage ??
+    (newPartTooLong ? `Название части должно быть не длиннее ${MAX_TASK_PART_TITLE_LENGTH} символов.` : null) ??
+    (partsAtLimit ? `Добавлено максимальное количество: ${MAX_MANUAL_TASK_PARTS} частей.` : partsFeedback);
+  const saveDisabled = !title.trim() || saving || !!partsValidationMessage;
 
   const draftTaskIdentityRef = useRef(existingTask?.id ?? "new");
   useEffect(() => {
@@ -228,6 +268,8 @@ export default function TaskFormScreen() {
       completed: !!part.completedAt,
     })));
     setSubtaskInput("");
+    setPartsFeedback(null);
+    createRequestRef.current = null;
   }, [existingTask?.id]);
 
   function adjustHour(delta: number) {
@@ -248,16 +290,26 @@ export default function TaskFormScreen() {
   function addSubtaskFromInput() {
     const value = subtaskInput.trim();
     if (!value) return;
+    if (partsDraft.length >= MAX_MANUAL_TASK_PARTS) {
+      setPartsFeedback(`Можно добавить не больше ${MAX_MANUAL_TASK_PARTS} частей задачи.`);
+      return;
+    }
+    if (value.length > MAX_TASK_PART_TITLE_LENGTH) {
+      setPartsFeedback(`Название части должно быть не длиннее ${MAX_TASK_PART_TITLE_LENGTH} символов.`);
+      return;
+    }
     setPartsDraft((prev) => [...prev, {
       draftId: `new-${++draftIdRef.current}`,
       title: value,
       completed: false,
     }]);
     setSubtaskInput("");
+    setPartsFeedback(null);
   }
 
   function updatePart(draftId: string, title: string) {
     setPartsDraft((prev) => prev.map((part) => part.draftId === draftId ? { ...part, title } : part));
+    setPartsFeedback(null);
   }
 
   function togglePart(draftId: string) {
@@ -266,10 +318,14 @@ export default function TaskFormScreen() {
 
   function removePart(draftId: string) {
     setPartsDraft((prev) => prev.filter((part) => part.draftId !== draftId));
+    setPartsFeedback(null);
   }
 
   async function handleSave() {
-    if (!title.trim() || savingRef.current) return;
+    if (!title.trim() || partsValidationMessage || savingRef.current) {
+      if (partsValidationMessage) setPartsFeedback(partsValidationMessage);
+      return;
+    }
     savingRef.current = true;
     const operation = ++saveOperationRef.current;
     const owner = ownerRef.current;
@@ -319,7 +375,14 @@ export default function TaskFormScreen() {
           dto,
         });
       } else {
-        await createTask.mutateAsync(dto);
+        const fingerprint = JSON.stringify({ ownerId, dto });
+        if (createRequestRef.current?.fingerprint !== fingerprint) {
+          createRequestRef.current = { fingerprint, requestId: newCreateRequestId() };
+        }
+        await createTask.mutateAsync({
+          ...dto,
+          createRequestId: createRequestRef.current.requestId,
+        });
       }
       if (isCurrent()) router.back();
     } catch (err) {
@@ -539,10 +602,21 @@ export default function TaskFormScreen() {
           </Pressable>
           <TextInput
             accessibilityLabel={`Название части: ${part.title}`}
+            accessibilityHint={part.title.trim().length === 0
+              ? "Название части не может быть пустым"
+              : part.title.trim().length > MAX_TASK_PART_TITLE_LENGTH
+                ? `Название части должно быть не длиннее ${MAX_TASK_PART_TITLE_LENGTH} символов`
+                : undefined}
             editable={!saving}
             value={part.title}
             onChangeText={(value) => updatePart(part.draftId, value)}
-            style={[styles.subtaskInput, styles.partTitleInput, part.completed && styles.partCompletedText]}
+            maxLength={MAX_TASK_PART_TITLE_LENGTH}
+            style={[
+              styles.subtaskInput,
+              styles.partTitleInput,
+              (part.title.trim().length === 0 || part.title.trim().length > MAX_TASK_PART_TITLE_LENGTH) && styles.invalidInput,
+              part.completed && styles.partCompletedText,
+            ]}
           />
           <Pressable
             accessibilityRole="button"
@@ -567,6 +641,10 @@ export default function TaskFormScreen() {
           onSubmitEditing={addSubtaskFromInput}
           editable={!saving}
           accessibilityLabel="Новая часть задачи"
+          accessibilityHint={partsAtLimit
+            ? `Достигнут предел: ${MAX_MANUAL_TASK_PARTS} частей`
+            : `Не больше ${MAX_TASK_PART_TITLE_LENGTH} символов`}
+          maxLength={MAX_TASK_PART_TITLE_LENGTH}
           returnKeyType="done"
         />
         <Pressable
@@ -574,25 +652,30 @@ export default function TaskFormScreen() {
           style={styles.subtaskAddButton}
           accessibilityRole="button"
           accessibilityLabel="Добавить часть задачи"
-          accessibilityState={{ disabled: saving }}
-          disabled={saving}
+          accessibilityHint={partsAtLimit ? `Достигнут предел: ${MAX_MANUAL_TASK_PARTS} частей` : undefined}
+          accessibilityState={{ disabled: addPartDisabled }}
+          disabled={addPartDisabled}
         >
           <Text style={styles.subtaskAddButtonText}>+</Text>
         </Pressable>
       </View>
+      {!!partsStatusMessage && (
+        <Text accessibilityRole="alert" style={styles.validationText}>{partsStatusMessage}</Text>
+      )}
       </>}
 
       {/* Действия */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Сохранить задачу"
-        accessibilityState={{ busy: saving, disabled: !title.trim() || saving }}
+        accessibilityHint={partsValidationMessage ?? undefined}
+        accessibilityState={{ busy: saving, disabled: saveDisabled }}
         style={[
           styles.saveButton,
-          (!title.trim() || saving) && styles.saveButtonDisabled,
+          saveDisabled && styles.saveButtonDisabled,
         ]}
         onPress={handleSave}
-        disabled={!title.trim() || saving}
+        disabled={saveDisabled}
       >
         <Text style={styles.saveButtonText}>
           {saving ? "Сохранение…" : "Сохранить"}
@@ -768,9 +851,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#111827",
   },
+  invalidInput: { borderColor: "#DC2626" },
+  validationText: { color: "#B91C1C", fontSize: 13, lineHeight: 18, marginTop: 6 },
   subtaskAddButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: 10,
     backgroundColor: "#F3F4F6",
     alignItems: "center",

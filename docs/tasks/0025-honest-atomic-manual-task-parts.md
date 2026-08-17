@@ -30,6 +30,32 @@ for the root task. A failed mobile save retains the complete local draft for an
 identical retry; synchronous submit locking prevents duplicate mutations, and
 continuation ownership suppresses stale navigation, errors, and cache effects.
 
+Root creation now accepts an optional owner-scoped `createRequestId` UUID. The
+server claims that identity before limit enforcement and task writes in the same
+transaction, stores a SHA-256 hash of the normalized persisted payload, and links
+the claim to the canonical root. An identical committed or concurrent retry
+returns that root with the same parent and part UUIDs without another limit check,
+write, or reminder synchronization. Reusing the identity with different content
+returns deterministic `409 TASK_CREATE_REQUEST_CONFLICT`. Clients that omit the
+identity retain the original create path, direct part writes cannot use it, and
+updates reject it. The published atomic-parts migration remains unchanged; the
+claim table is introduced by a separate forward migration.
+
+For new tasks, TaskForm keeps one request identity for one normalized persisted
+draft. An unchanged failed retry reuses it, while any persisted-field edit rotates
+it before the next attempt. React 18 effect replay now restores mounted ownership
+during setup and invalidates the previous operation generation during cleanup in
+both TaskForm and the shared mutation continuation hook. Existing owner, session,
+task, rapid-submit, cache, navigation, unmount, and stale-error guards remain in
+force.
+
+TaskForm also enforces the parts boundary before any request. Retained titles must
+trim to 1-240 characters and the draft is capped at 50 parts. Invalid drafts stay
+intact, disable Save, make no network call, and show accessible Russian validation
+instead of a connection error. A 51st part is prevented with explicit limit
+feedback. Checkbox/remove controls retain checked/disabled state, Save retains
+busy/disabled state, and the add control now has a 44x44 touch target.
+
 The omitted-`subTasks` path remains backward compatible. Legacy direct part writes
 remain available for ordinary root parents, but cannot add time, duration,
 recurrence, first-step, nested parts, independent start state, or reminder side
@@ -49,21 +75,26 @@ manual parts.
 
 ## Validation
 
-- Focused API DTO and service suites: 2 suites, 20 tests passed.
-- Complete API Jest suite: 25 suites, 310 tests passed.
-- Focused mobile task-form/parts/recurrence suites: 3 suites, 38 tests passed.
-- Complete mobile Jest suite: 39 suites, 481 tests passed.
+- Focused API DTO/service/idempotency suites: 3 suites, 25 tests passed.
+- Complete API Jest suite: 26 suites, 315 tests passed.
+- Focused mobile task-form/parts/StrictMode suites: 3 suites, 46 tests passed.
+- Complete mobile Jest suite: 39 suites, 487 tests passed.
 - API TypeScript build validation, mobile TypeScript validation, Prisma schema
   validation, whitespace validation, full diff review, and changed-file inventory
   passed before publication.
 
 The standard workspace API build was attempted and failed because the installed
 Prisma Client is stale and the declared `@nestjs/schedule` package is absent from
-`node_modules`. Prisma Client could not be regenerated in place because Windows
-held a generated engine file (`EPERM`). The successful API Nest build, TypeScript,
-and Jest validation therefore used a fresh temporary client and a type-compatible
-schedule stub. Prisma emitted the existing duplicate `.env` variable warning. The
-complete mobile suite emitted the existing React Native Modal `act(...)` warning.
+`node_modules`; it reported 64 errors across already-published recurrence, start,
+time-format, nullable-duration, and new idempotency schema fields. Prisma Client
+could not previously be regenerated in place because Windows held a generated
+engine file (`EPERM`). The successful API Nest build, TypeScript, and Jest
+validation therefore used a fresh isolated temporary client, a type-compatible
+schedule stub, and DOM fetch typing compatible with the repository's existing
+OAuth controllers. Prisma schema validation passed. The complete mobile suite
+emitted the existing React Native Modal `act(...)` warning. The duplicate `.env`
+warning observed during the published baseline remains a known Prisma environment
+caveat, although this follow-up validation did not emit it again.
 
 ## Runtime limitation
 

@@ -27,7 +27,7 @@ jest.mock('../stores/auth.store', () => ({
 }));
 
 import React from 'react';
-import { Alert } from 'react-native';
+import { Alert, StyleSheet } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import TaskFormScreen from '../app/task-form';
 
@@ -77,7 +77,37 @@ describe('TaskFormScreen atomic manual parts draft', () => {
         ],
       }),
     });
+    expect(mockUpdate.mock.calls[0][0].dto).not.toHaveProperty('createRequestId');
     expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses one create identity for an unchanged failed draft and rotates it after a persisted edit', async () => {
+    mockParams = { selectedDateKey: '2026-08-17' };
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    mockCreate.mockRejectedValueOnce(new Error('offline')).mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({ id: 'saved' });
+    render(<TaskFormScreen />);
+    fireEvent.changeText(screen.getByPlaceholderText('Название задачи'), 'New parent');
+    fireEvent.changeText(screen.getByPlaceholderText('Добавить часть'), 'Part');
+    fireEvent.press(screen.getByRole('button', { name: 'Добавить часть задачи' }));
+
+    fireEvent.press(screen.getByRole('button', { name: 'Сохранить задачу' }));
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(alert).toHaveBeenCalledTimes(1));
+    const firstIdentity = mockCreate.mock.calls[0][0].createRequestId;
+    expect(firstIdentity).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+
+    fireEvent.press(screen.getByRole('button', { name: 'Сохранить задачу' }));
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(alert).toHaveBeenCalledTimes(2));
+    expect(mockCreate.mock.calls[1][0].createRequestId).toBe(firstIdentity);
+
+    fireEvent.changeText(screen.getByPlaceholderText('Название задачи'), 'Changed parent');
+    fireEvent.press(screen.getByRole('button', { name: 'Сохранить задачу' }));
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(3));
+    expect(mockCreate.mock.calls[2][0].createRequestId).not.toBe(firstIdentity);
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    alert.mockRestore();
   });
 
   it('keeps remove and add local and performs no write on unmount', () => {
@@ -183,5 +213,68 @@ describe('TaskFormScreen atomic manual parts draft', () => {
       .toEqual({ checked: true, disabled: false });
     expect(screen.getByRole('button', { name: 'Удалить часть: Completed part' }).props.accessibilityState)
       .toEqual({ disabled: false });
+  });
+
+  it('keeps an invalid blank edit locally, disables Save, and makes no request', () => {
+    render(<TaskFormScreen />);
+    fireEvent.changeText(screen.getByLabelText('Название части: Existing part'), '   ');
+
+    expect(screen.getByLabelText('Название части:    ').props.value).toBe('   ');
+    expect(screen.getByRole('alert').props.children).toContain('хотя бы один символ');
+    expect(screen.getByRole('button', { name: 'Сохранить задачу' }).props.accessibilityState)
+      .toMatchObject({ disabled: true, busy: false });
+    fireEvent.press(screen.getByRole('button', { name: 'Сохранить задачу' }));
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('accepts exactly 240 title characters and blocks a longer retained draft before the network', async () => {
+    mockUpdate.mockResolvedValue({ id: 'parent' });
+    const view = render(<TaskFormScreen />);
+    const input = screen.getByLabelText('Название части: Existing part');
+    fireEvent.changeText(input, 'a'.repeat(240));
+    fireEvent.press(screen.getByRole('button', { name: 'Сохранить задачу' }));
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1));
+    view.unmount();
+
+    jest.clearAllMocks();
+    mockParams.task = JSON.stringify(existingTask({
+      subTasks: [{ id: 'long', title: 'b'.repeat(241), completedAt: null }],
+    }));
+    render(<TaskFormScreen />);
+    expect(screen.getByDisplayValue('b'.repeat(241))).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Сохранить задачу' }).props.accessibilityState.disabled).toBe(true);
+    expect(screen.getByRole('alert').props.children).toContain('240');
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('prevents a 51st part, retains its input, and exposes the 44-point add target', () => {
+    mockParams.task = JSON.stringify(existingTask({
+      subTasks: Array.from({ length: 50 }, (_, index) => ({
+        id: `part-${index}`,
+        title: `Part ${index + 1}`,
+        completedAt: null,
+      })),
+    }));
+    render(<TaskFormScreen />);
+    fireEvent.changeText(screen.getByPlaceholderText('Добавить часть'), 'Part 51');
+    const add = screen.getByRole('button', { name: 'Добавить часть задачи' });
+
+    expect(add.props.accessibilityState).toEqual({ disabled: true });
+    expect(StyleSheet.flatten(add.props.style)).toMatchObject({ width: 44, height: 44 });
+    expect(screen.getByDisplayValue('Part 51')).toBeTruthy();
+    expect(screen.getByRole('alert').props.children).toContain('50');
+    fireEvent.press(add);
+    expect(screen.queryByDisplayValue('Part 51')).toBeTruthy();
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('saves normally from the live StrictMode setup after effect replay', async () => {
+    mockUpdate.mockResolvedValue({ id: 'parent' });
+    render(<React.StrictMode><TaskFormScreen /></React.StrictMode>);
+    fireEvent.press(screen.getByRole('button', { name: 'Сохранить задачу' }));
+
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1));
+    expect(mockUpdateGuard?.()).toBe(true);
+    expect(mockBack).toHaveBeenCalledTimes(1);
   });
 });

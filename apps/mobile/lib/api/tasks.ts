@@ -25,7 +25,10 @@ function useMutationContinuation() {
   const owner = useAuthStore((state) => state.user?.id);
   const session = useAuthStore((state) => state.sessionGeneration);
   const mounted = useRef(true); const current = useRef(0);
-  useEffect(() => () => { mounted.current = false; current.current += 1; }, []);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; current.current += 1; };
+  }, []);
   const begin = () => ({ operation: ++current.current, owner, session });
   const guard = (context?: ReturnType<typeof begin>) => () => !!context && mounted.current &&
     current.current === context.operation && useAuthStore.getState().user?.id === context.owner &&

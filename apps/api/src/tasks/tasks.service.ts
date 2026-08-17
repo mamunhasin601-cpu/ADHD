@@ -7,7 +7,7 @@ import { TaskPartWriteDto } from './dto/task-part-write.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { GetTasksQueryDto } from './dto/get-tasks-query.dto';
 import type { Prisma, Task } from '@prisma/client';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { formatInTimeZone, fromZonedTime, toDate } from 'date-fns-tz';
 
 const SUPPORTED_RULES = ['FREQ=DAILY', 'FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR'] as const;
@@ -38,11 +38,6 @@ export class TasksService {
       }
       this.assertLegacyPartWrite(dto);
     }
-    // Проверяем лимит задач для Free пользователей
-    if (!dto.parentTaskId) {
-      await this.planService.enforceTaskLimit(userId);
-    }
-
     const timezone = dto.isRecurring ? await this.profileTimezone(userId, dto.deviceTimezone) : null;
     const start = dto.startTime ? new Date(dto.startTime) : null;
     const anchorKey = start && timezone ? formatInTimeZone(start, timezone, 'yyyy-MM-dd') : null;
@@ -59,6 +54,16 @@ export class TasksService {
         recurrenceDateKey: anchorKey,
         parentTaskId: dto.parentTaskId ?? null,
     };
+
+    if (!dto.parentTaskId && dto.createRequestId) {
+      return this.createIdempotentRoot(userId, dto, data, timezone, anchorKey);
+    }
+    if (dto.parentTaskId && dto.createRequestId) {
+      throw new BadRequestException('createRequestId доступен только для корневой задачи');
+    }
+
+    // Legacy clients keep the original behavior when no request identity is supplied.
+    if (!dto.parentTaskId) await this.planService.enforceTaskLimit(userId);
 
     if (!dto.isRecurring && hasParts) {
       const task = await this.prisma.$transaction(async (tx) => {
@@ -108,6 +113,133 @@ export class TasksService {
     });
     await Promise.all(occurrences.map((occurrence) => this.syncReminder(occurrence)));
     return { ...result.template, newOccurrenceIds: result.newOccurrenceIds };
+  }
+
+  private async createIdempotentRoot(
+    userId: string,
+    dto: CreateTaskDto,
+    data: Prisma.TaskUncheckedCreateInput,
+    timezone: string | null,
+    anchorKey: string | null,
+  ): Promise<Task & { newOccurrenceIds?: string[] }> {
+    const requestId = dto.createRequestId!;
+    const payloadHash = this.createPayloadHash(data, dto.subTasks);
+
+    try {
+      const created = await this.prisma.$transaction(async (tx) => {
+        const requestStore = tx.taskCreateRequest;
+        await requestStore.create({ data: { userId, requestId, payloadHash } });
+        await this.planService.enforceTaskLimit(userId, tx);
+
+        if (dto.isRecurring) {
+          const { today, target } = this.horizon(timezone!);
+          const template = await tx.task.create({
+            data: { ...data, recurrenceGeneratedThrough: null },
+            include: { subTasks: true },
+          });
+          const newOccurrenceIds = await this.insertProjection(
+            tx, template, timezone!, anchorKey! > today ? anchorKey! : today, target,
+          );
+          const committedTemplate = await tx.task.update({
+            where: { id: template.id },
+            data: {
+              recurrenceTimezone: timezone,
+              recurrenceDateKey: anchorKey,
+              recurrenceGeneratedThrough: target,
+            },
+            include: { subTasks: true },
+          });
+          await requestStore.update({
+            where: { userId_requestId: { userId, requestId } },
+            data: { taskId: committedTemplate.id },
+          });
+          return { task: committedTemplate, newOccurrenceIds };
+        }
+
+        const parent = await tx.task.create({ data, include: { subTasks: true } });
+        const parts: Task[] = [];
+        for (const part of dto.subTasks ?? []) {
+          parts.push(await tx.task.create({
+            data: this.partCreateData(userId, parent.id, part),
+            include: { subTasks: true },
+          }));
+        }
+        const task = { ...parent, subTasks: parts };
+        await requestStore.update({
+          where: { userId_requestId: { userId, requestId } },
+          data: { taskId: task.id },
+        });
+        return { task, newOccurrenceIds: undefined };
+      });
+
+      if (created.task.isRecurring) {
+        const occurrences = await this.prisma.task.findMany({
+          where: { id: { in: created.newOccurrenceIds ?? [] } },
+        });
+        await Promise.all(occurrences.map((occurrence) => this.syncReminder(occurrence)));
+        return { ...created.task, newOccurrenceIds: created.newOccurrenceIds };
+      }
+      await this.syncReminder(created.task);
+      return created.task;
+    } catch (error) {
+      if (!this.isUniqueConstraintError(error)) throw error;
+
+      const requestStore = this.prisma.taskCreateRequest;
+      const claim = await requestStore.findUnique({
+        where: { userId_requestId: { userId, requestId } },
+      });
+      if (!claim) throw error;
+      if (claim.payloadHash !== payloadHash) {
+        throw new ConflictException({
+          message: 'createRequestId уже использован для другого содержимого задачи',
+          code: 'TASK_CREATE_REQUEST_CONFLICT',
+        });
+      }
+      if (!claim.taskId) {
+        throw new ConflictException({
+          message: 'Создание задачи с этим createRequestId ещё выполняется',
+          code: 'TASK_CREATE_REQUEST_IN_PROGRESS',
+        });
+      }
+      const canonical = await this.prisma.task.findUnique({
+        where: { id: claim.taskId },
+        include: { subTasks: true },
+      });
+      if (!canonical || canonical.userId !== userId) {
+        throw new ConflictException({
+          message: 'Не удалось восстановить результат создания задачи',
+          code: 'TASK_CREATE_REQUEST_INVALID',
+        });
+      }
+      return canonical;
+    }
+  }
+
+  private createPayloadHash(
+    data: Prisma.TaskUncheckedCreateInput,
+    parts: TaskPartWriteDto[] | undefined,
+  ): string {
+    const normalized = {
+      title: data.title,
+      firstStep: data.firstStep ?? null,
+      startTime: data.startTime instanceof Date ? data.startTime.toISOString() : data.startTime ?? null,
+      durationMinutes: data.durationMinutes ?? null,
+      color: data.color,
+      isRecurring: data.isRecurring,
+      recurrenceRule: data.recurrenceRule ?? null,
+      recurrenceTimezone: data.recurrenceTimezone ?? null,
+      recurrenceDateKey: data.recurrenceDateKey ?? null,
+      parentTaskId: null,
+      subTasks: (parts ?? []).map((part) => ({
+        title: part.title.trim(),
+        completed: part.completed ?? false,
+      })),
+    };
+    return createHash('sha256').update(JSON.stringify(normalized)).digest('hex');
+  }
+
+  private isUniqueConstraintError(error: unknown): error is { code: 'P2002' } {
+    return !!error && typeof error === 'object' && 'code' in error && error.code === 'P2002';
   }
 
   async findAll(userId: string, query: GetTasksQueryDto): Promise<Task[]> {

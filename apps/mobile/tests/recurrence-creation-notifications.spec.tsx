@@ -1,6 +1,6 @@
 jest.mock('../lib/api-client', () => ({ apiClient: { post: jest.fn(), get: jest.fn(), patch: jest.fn(), delete: jest.fn() } }));
 jest.mock('../lib/local-notifications', () => ({
-  scheduleLocalReminder: jest.fn(), cancelLocalReminder: jest.fn().mockResolvedValue(undefined),
+  scheduleLocalReminder: jest.fn().mockResolvedValue(undefined), cancelLocalReminder: jest.fn().mockResolvedValue(undefined),
   reconcileLocalReminders: jest.fn().mockResolvedValue(undefined), getLocalOnlyMode: jest.fn(), LOCAL_REMINDER_HORIZON_DAYS: 7,
 }));
 import React, { type PropsWithChildren } from 'react';
@@ -12,6 +12,9 @@ import { cancelLocalReminder, getLocalOnlyMode, reconcileLocalReminders } from '
 import { useAuthStore } from '../stores/auth.store';
 
 const wrapperFor = (client: QueryClient) => ({ children }: PropsWithChildren) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+const strictWrapperFor = (client: QueryClient) => ({ children }: PropsWithChildren) => (
+  <React.StrictMode><QueryClientProvider client={client}>{children}</QueryClientProvider></React.StrictMode>
+);
 const series = { id: 'series', isRecurring: true, startTime: '2026-08-15T09:00:00Z', completedAt: null, startedAt: null, newOccurrenceIds: ['o1'] };
 
 describe('recurrence mobile notification lifecycle', () => {
@@ -28,6 +31,20 @@ describe('recurrence mobile notification lifecycle', () => {
     expect(reconcileLocalReminders).toHaveBeenCalledWith(expect.any(Array), localOnly, expect.any(Function));
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tasks'] });
     unmount(); client.clear();
+  });
+
+  it('keeps the live StrictMode continuation after replay and performs current success effects', async () => {
+    (apiClient.post as jest.Mock).mockResolvedValue({ data: { ...series, isRecurring: false, newOccurrenceIds: [] } });
+    const client = new QueryClient({ defaultOptions: { queries: { gcTime: 0 }, mutations: { gcTime: 0 } } });
+    const invalidate = jest.spyOn(client, 'invalidateQueries');
+    const hook = renderHook(() => useCreateTask(new Date('2026-08-17T12:00:00Z'), 'UTC'), {
+      wrapper: strictWrapperFor(client),
+    });
+
+    await act(async () => { await hook.result.current.mutateAsync({ title: 'Strict' }); });
+    expect(invalidate).toHaveBeenCalledWith(expect.objectContaining({ queryKey: expect.any(Array) }));
+    hook.unmount();
+    client.clear();
   });
 
   it('invalidates A -> logout -> A even when the user id is unchanged', async () => {
