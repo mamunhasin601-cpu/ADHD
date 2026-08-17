@@ -125,6 +125,13 @@ Phase 1 реализует минимальное ядро из [PDR-001](../12-
     не показывают и не имитируют текущий момент. Контракт и проверка описаны в
     [Task 0024](../../docs/tasks/0024-profile-local-timeline-geometry.md).
 
+14. **Task 0025 - honest atomic manual task parts - completed.** Ordinary root
+    tasks now persist an optional user-authored parts draft atomically with the
+    parent. Parts remain distinct from `firstStep`, recurring tasks, root task
+    counting, reminders, and independent Today/Thoughts items. Contract and
+    validation evidence are recorded in
+    [Task 0025](../../docs/tasks/0025-honest-atomic-manual-task-parts.md).
+
 Остальные capability Phase 1 остаются на горизонте, но их точный порядок пока
 не принят. Контекстный помощник, overload mode и focus session относятся к
 следующему расширению опыта; AI-декомпозиция, energy-aware suggestions и

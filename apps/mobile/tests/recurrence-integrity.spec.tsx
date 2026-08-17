@@ -22,8 +22,8 @@ describe('recurring task form integrity', () => {
     const daily = screen.getByRole('radio', { name: 'Каждый день' });
     fireEvent.press(daily);
     expect(screen.getByRole('radio', { name: 'Каждый день' }).props.accessibilityState.selected).toBe(true);
-    expect(screen.getByText('Шаги пока недоступны для повторяющихся задач.')).toBeTruthy();
-    expect(screen.queryByPlaceholderText('Добавить шаг')).toBeNull();
+    expect(screen.getByText('Части задачи недоступны для повторяющихся задач.')).toBeTruthy();
+    expect(screen.queryByPlaceholderText('Добавить часть')).toBeNull();
   });
 
   it('preserves the series anchor on a title-only occurrence edit', async () => {
@@ -43,7 +43,7 @@ describe('recurring task form integrity', () => {
     mockParams.task = JSON.stringify({ id: 'task', title: 'Old', firstStep: null, startTime: null,
       recurrenceRule: null, durationMinutes: 25, color: '#6B5BFC', subTasks: [{ id: 'step', title: 'Step' }] });
     render(<TaskFormScreen />); fireEvent.press(screen.getByRole('radio', { name: 'Указать время' })); fireEvent.press(screen.getByRole('radio', { name: 'Каждый день' }));
-    expect(mockAlert).toHaveBeenCalledWith('Сначала уберите шаги', 'Шаги пока недоступны для повторяющихся задач.');
+    expect(mockAlert).toHaveBeenCalledWith('Сначала уберите части', 'Части задачи недоступны для повторяющихся задач.');
     expect(screen.getByRole('radio', { name: 'Не повторять' }).props.accessibilityState).toEqual({ selected: true });
   });
 });

@@ -63,6 +63,8 @@ export interface Task {
 }
 
 export interface CreateTaskDto {
+  /** Owner-scoped retry identity for root creation; distinct from task and part ids. */
+  createRequestId?: string;
   title: string;
   firstStep?: string | null;
   startTime?: string | null; // ISO 8601
@@ -74,10 +76,17 @@ export interface CreateTaskDto {
   editRecurrenceAnchor?: boolean;
   editRecurrencePattern?: boolean;
   parentTaskId?: string | null;
+  subTasks?: TaskPartWrite[];
 }
 
-export interface UpdateTaskDto extends Partial<CreateTaskDto> {
+export interface UpdateTaskDto extends Partial<Omit<CreateTaskDto, 'createRequestId'>> {
   completedAt?: string | null;
+}
+
+export interface TaskPartWrite {
+  id?: string;
+  title: string;
+  completed?: boolean;
 }
 
 // ────────────────────────────────────────────────────────────

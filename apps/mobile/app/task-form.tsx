@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -9,14 +9,11 @@ import {
   Alert,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useQueryClient } from "@tanstack/react-query";
 import type { Task } from "@focus/shared-types";
 import {
   useCreateTask,
   useUpdateTask,
   useDeleteTask,
-  createSubtask,
-  deleteTaskById,
 } from "../lib/api/tasks";
 import { isFreeTierLimitError } from "../lib/api-error";
 import { useAuthStore } from "../stores/auth.store";
@@ -40,6 +37,9 @@ const COLOR_PRESETS = [
   "#F59E0B",
 ];
 
+const MAX_MANUAL_TASK_PARTS = 50;
+const MAX_TASK_PART_TITLE_LENGTH = 240;
+
 type RecurrencePreset = "none" | "daily" | "weekdays";
 
 const RECURRENCE_RULES: Record<RecurrencePreset, string | null> = {
@@ -54,9 +54,11 @@ const RECURRENCE_LABELS: Record<RecurrencePreset, string> = {
   weekdays: "Будни (Пн–Пт)",
 };
 
-const SUBTASK_PRESETS: Record<string, string[]> = {
-  "Уборка комнаты": ["Мусор", "Пол", "Поверхности"],
-  "Утренняя рутина": ["Вода", "Зарядка", "Завтрак"],
+type PartDraft = {
+  id?: string;
+  draftId: string;
+  title: string;
+  completed: boolean;
 };
 
 function roundToStep(value: number, step: number): number {
@@ -69,9 +71,20 @@ function recurrencePresetFromRule(rule: string | null): RecurrencePreset {
   return "none";
 }
 
+function newCreateRequestId(): string {
+  const cryptoApi = globalThis.crypto as (Crypto & { randomUUID?: () => string }) | undefined;
+  if (cryptoApi?.randomUUID) return cryptoApi.randomUUID();
+  const bytes = new Uint8Array(16);
+  if (cryptoApi?.getRandomValues) cryptoApi.getRandomValues(bytes);
+  else for (let index = 0; index < bytes.length; index += 1) bytes[index] = Math.floor(Math.random() * 256);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 export default function TaskFormScreen() {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const params = useLocalSearchParams<{
     task?: string;
     prefillStartTime?: string;
@@ -111,10 +124,40 @@ export default function TaskFormScreen() {
     }
   }, [params.task]);
 
+  const ownerId = useAuthStore((s) => s.user?.id);
+  const sessionGeneration = useAuthStore((s) => s.sessionGeneration);
+  const mountedRef = useRef(true);
+  const saveOperationRef = useRef(0);
+  const savingRef = useRef(false);
+  const saveContinuationGuardRef = useRef<(() => boolean) | null>(null);
+  const ownerRef = useRef(ownerId);
+  const sessionRef = useRef(sessionGeneration);
+  const taskIdentityRef = useRef(existingTask?.id ?? "new");
+  const continuationIdentity = `${ownerId ?? "anonymous"}:${sessionGeneration ?? 0}:${existingTask?.id ?? "new"}`;
+  const previousContinuationIdentityRef = useRef(continuationIdentity);
+  ownerRef.current = ownerId;
+  sessionRef.current = sessionGeneration;
+  taskIdentityRef.current = existingTask?.id ?? "new";
+  useEffect(() => {
+    if (previousContinuationIdentityRef.current === continuationIdentity) return;
+    previousContinuationIdentityRef.current = continuationIdentity;
+    saveOperationRef.current += 1;
+    savingRef.current = false;
+    setSaving(false);
+  }, [continuationIdentity]);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      saveOperationRef.current += 1;
+    };
+  }, []);
+
   const isEditMode = !!existingTask;
 
-  const createTask = useCreateTask(today, profileTimezone);
-  const updateTask = useUpdateTask(today, profileTimezone);
+  const callerGuard = () => saveContinuationGuardRef.current?.() ?? true;
+  const createTask = useCreateTask(today, profileTimezone, callerGuard);
+  const updateTask = useUpdateTask(today, profileTimezone, callerGuard);
   const deleteTask = useDeleteTask(today, profileTimezone);
 
   const [title, setTitle] = useState(
@@ -168,13 +211,66 @@ export default function TaskFormScreen() {
     existingTask?.seriesRecurrenceRule ?? existingTask?.recurrenceRule ?? null,
   );
 
-  const [existingSubtasks, setExistingSubtasks] = useState(
-    existingTask?.subTasks ?? [],
+  const draftIdRef = useRef(0);
+  const [partsDraft, setPartsDraft] = useState<PartDraft[]>(() =>
+    (existingTask?.subTasks ?? []).map((part) => ({
+      id: part.id,
+      draftId: part.id,
+      title: part.title,
+      completed: !!part.completedAt,
+    })),
   );
-  const [newSubtasks, setNewSubtasks] = useState<string[]>([]);
   const [subtaskInput, setSubtaskInput] = useState("");
+  const [partsFeedback, setPartsFeedback] = useState<string | null>(null);
+  const createRequestRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
 
   const [saving, setSaving] = useState(false);
+
+  const partsValidationMessage = useMemo(() => {
+    if (partsDraft.length > MAX_MANUAL_TASK_PARTS) {
+      return `Можно добавить не больше ${MAX_MANUAL_TASK_PARTS} частей задачи.`;
+    }
+    if (partsDraft.some((part) => part.title.trim().length === 0)) {
+      return "Название каждой части должно содержать хотя бы один символ.";
+    }
+    if (partsDraft.some((part) => part.title.trim().length > MAX_TASK_PART_TITLE_LENGTH)) {
+      return `Название части должно быть не длиннее ${MAX_TASK_PART_TITLE_LENGTH} символов.`;
+    }
+    return null;
+  }, [partsDraft]);
+  const partsAtLimit = partsDraft.length >= MAX_MANUAL_TASK_PARTS;
+  const newPartTooLong = subtaskInput.trim().length > MAX_TASK_PART_TITLE_LENGTH;
+  const addPartDisabled = saving || !subtaskInput.trim() || newPartTooLong || partsAtLimit;
+  const partsStatusMessage = partsValidationMessage ??
+    (newPartTooLong ? `Название части должно быть не длиннее ${MAX_TASK_PART_TITLE_LENGTH} символов.` : null) ??
+    (partsAtLimit ? `Добавлено максимальное количество: ${MAX_MANUAL_TASK_PARTS} частей.` : partsFeedback);
+  const saveDisabled = !title.trim() || saving || !!partsValidationMessage;
+
+  const draftTaskIdentityRef = useRef(existingTask?.id ?? "new");
+  useEffect(() => {
+    const nextIdentity = existingTask?.id ?? "new";
+    if (draftTaskIdentityRef.current === nextIdentity) return;
+    draftTaskIdentityRef.current = nextIdentity;
+    draftIdRef.current = 0;
+    setTitle(existingTask?.title ?? params.prefillTitle ?? "");
+    setFirstStep(existingTask?.firstStep ?? "");
+    setHasTime(!!initialStartTime);
+    setWallClockEdited(false);
+    setHour(initialWallClock?.hours ?? blankDefault.hours);
+    setMinute(initialWallClock?.minutes ?? blankDefault.minutes);
+    setDurationMinutes(existingTask ? existingTask.durationMinutes : prefillDuration);
+    setColor(existingTask?.color ?? COLOR_PRESETS[0]);
+    setRecurrencePreset(initialRecurrencePreset);
+    setPartsDraft((existingTask?.subTasks ?? []).map((part) => ({
+      id: part.id,
+      draftId: part.id,
+      title: part.title,
+      completed: !!part.completedAt,
+    })));
+    setSubtaskInput("");
+    setPartsFeedback(null);
+    createRequestRef.current = null;
+  }, [existingTask?.id]);
 
   function adjustHour(delta: number) {
     setWallClockEdited(true);
@@ -194,30 +290,50 @@ export default function TaskFormScreen() {
   function addSubtaskFromInput() {
     const value = subtaskInput.trim();
     if (!value) return;
-    setNewSubtasks((prev) => [...prev, value]);
-    setSubtaskInput("");
-  }
-
-  function addSubtaskPreset(presetName: string) {
-    setNewSubtasks((prev) => [...prev, ...SUBTASK_PRESETS[presetName]]);
-  }
-
-  function removeNewSubtask(index: number) {
-    setNewSubtasks((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  async function removeExistingSubtask(subtaskId: string) {
-    setExistingSubtasks((prev) => prev.filter((s) => s.id !== subtaskId));
-    try {
-      await deleteTaskById(subtaskId);
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-    } catch {
-      Alert.alert("Не удалось удалить шаг", "Попробуйте снова");
+    if (partsDraft.length >= MAX_MANUAL_TASK_PARTS) {
+      setPartsFeedback(`Можно добавить не больше ${MAX_MANUAL_TASK_PARTS} частей задачи.`);
+      return;
     }
+    if (value.length > MAX_TASK_PART_TITLE_LENGTH) {
+      setPartsFeedback(`Название части должно быть не длиннее ${MAX_TASK_PART_TITLE_LENGTH} символов.`);
+      return;
+    }
+    setPartsDraft((prev) => [...prev, {
+      draftId: `new-${++draftIdRef.current}`,
+      title: value,
+      completed: false,
+    }]);
+    setSubtaskInput("");
+    setPartsFeedback(null);
+  }
+
+  function updatePart(draftId: string, title: string) {
+    setPartsDraft((prev) => prev.map((part) => part.draftId === draftId ? { ...part, title } : part));
+    setPartsFeedback(null);
+  }
+
+  function togglePart(draftId: string) {
+    setPartsDraft((prev) => prev.map((part) => part.draftId === draftId ? { ...part, completed: !part.completed } : part));
+  }
+
+  function removePart(draftId: string) {
+    setPartsDraft((prev) => prev.filter((part) => part.draftId !== draftId));
+    setPartsFeedback(null);
   }
 
   async function handleSave() {
-    if (!title.trim()) return;
+    if (!title.trim() || partsValidationMessage || savingRef.current) {
+      if (partsValidationMessage) setPartsFeedback(partsValidationMessage);
+      return;
+    }
+    savingRef.current = true;
+    const operation = ++saveOperationRef.current;
+    const owner = ownerRef.current;
+    const session = sessionRef.current;
+    const taskIdentity = taskIdentityRef.current;
+    const isCurrent = () => mountedRef.current && saveOperationRef.current === operation &&
+      ownerRef.current === owner && sessionRef.current === session && taskIdentityRef.current === taskIdentity;
+    saveContinuationGuardRef.current = isCurrent;
     setSaving(true);
 
     const recurrenceAnchorKey = existingTask?.seriesStartTime
@@ -243,40 +359,46 @@ export default function TaskFormScreen() {
       deviceTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       editRecurrenceAnchor: !!existingTask?.seriesId && wallClockEdited,
       editRecurrencePattern: !!existingTask?.seriesId && recurrencePreset !== initialRecurrencePreset,
+      ...(recurrencePreset === "none" && {
+        subTasks: partsDraft.map(({ id, title: partTitle, completed }) => ({
+          ...(id ? { id } : {}),
+          title: partTitle.trim(),
+          completed,
+        })),
+      }),
     };
 
     try {
-      let parentId: string;
       if (isEditMode && existingTask) {
-        const updated = await updateTask.mutateAsync({
+        await updateTask.mutateAsync({
           id: existingTask.id,
           dto,
         });
-        parentId = updated.id;
       } else {
-        const created = await createTask.mutateAsync(dto);
-        parentId = created.id;
+        const fingerprint = JSON.stringify({ ownerId, dto });
+        if (createRequestRef.current?.fingerprint !== fingerprint) {
+          createRequestRef.current = { fingerprint, requestId: newCreateRequestId() };
+        }
+        await createTask.mutateAsync({
+          ...dto,
+          createRequestId: createRequestRef.current.requestId,
+        });
       }
-
-      for (const subtaskTitle of newSubtasks) {
-        await createSubtask(parentId, subtaskTitle);
-      }
-      if (newSubtasks.length > 0) {
-        queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      }
-
-      router.back();
+      if (isCurrent()) router.back();
     } catch (err) {
-      if (isFreeTierLimitError(err)) {
-        router.replace("/paywall");
-      } else {
+      if (!isCurrent()) return;
+      if (isFreeTierLimitError(err)) router.replace("/paywall");
+      else {
         Alert.alert(
           "Не удалось сохранить",
           "Проверьте соединение и попробуйте снова",
         );
       }
     } finally {
-      setSaving(false);
+      if (isCurrent()) {
+        savingRef.current = false;
+        setSaving(false);
+      }
     }
   }
 
@@ -439,8 +561,8 @@ export default function TaskFormScreen() {
                 Alert.alert("Укажите время", "Повтору нужно конкретное время начала.");
                 return;
               }
-              if (preset !== "none" && (existingSubtasks.length || newSubtasks.length)) {
-                Alert.alert("Сначала уберите шаги", "Шаги пока недоступны для повторяющихся задач.");
+              if (preset !== "none" && partsDraft.length) {
+                Alert.alert("Сначала уберите части", "Части задачи недоступны для повторяющихся задач.");
                 return;
               }
               setRecurrencePreset(preset);
@@ -461,34 +583,49 @@ export default function TaskFormScreen() {
       )}
 
       {recurrencePreset !== "none" ? (
-        <Text style={styles.supportingText}>Шаги пока недоступны для повторяющихся задач.</Text>
+        <Text style={styles.supportingText}>Части задачи недоступны для повторяющихся задач.</Text>
       ) : <>
-      {/* Подзадачи */}
-      <Text style={styles.sectionLabel}>Разбить на шаги</Text>
-      <View style={styles.chipsWrap}>
-        {Object.keys(SUBTASK_PRESETS).map((presetName) => (
+      {/* User-authored task parts stay local until the parent is saved. */}
+      <Text style={styles.sectionLabel}>Части задачи</Text>
+      <Text style={styles.supportingText}>Необязательно. Части сохранятся вместе с этой задачей.</Text>
+      {partsDraft.map((part) => (
+        <View key={part.draftId} style={styles.subtaskRow}>
           <Pressable
-            key={presetName}
-            style={styles.presetChip}
-            onPress={() => addSubtaskPreset(presetName)}
+            accessibilityRole="checkbox"
+            accessibilityLabel={`Отметить часть: ${part.title}`}
+            accessibilityState={{ checked: part.completed, disabled: saving }}
+            disabled={saving}
+            onPress={() => togglePart(part.draftId)}
+            style={styles.partCheck}
           >
-            <Text style={styles.presetChipText}>+ {presetName}</Text>
+            <Text style={styles.partCheckText}>{part.completed ? "✓" : ""}</Text>
           </Pressable>
-        ))}
-      </View>
-
-      {existingSubtasks.map((s) => (
-        <View key={s.id} style={styles.subtaskRow}>
-          <Text style={styles.subtaskText}>{s.title}</Text>
-          <Pressable onPress={() => removeExistingSubtask(s.id)}>
-            <Text style={styles.subtaskRemove}>×</Text>
-          </Pressable>
-        </View>
-      ))}
-      {newSubtasks.map((s, i) => (
-        <View key={`new-${i}`} style={styles.subtaskRow}>
-          <Text style={styles.subtaskText}>{s}</Text>
-          <Pressable onPress={() => removeNewSubtask(i)}>
+          <TextInput
+            accessibilityLabel={`Название части: ${part.title}`}
+            accessibilityHint={part.title.trim().length === 0
+              ? "Название части не может быть пустым"
+              : part.title.trim().length > MAX_TASK_PART_TITLE_LENGTH
+                ? `Название части должно быть не длиннее ${MAX_TASK_PART_TITLE_LENGTH} символов`
+                : undefined}
+            editable={!saving}
+            value={part.title}
+            onChangeText={(value) => updatePart(part.draftId, value)}
+            maxLength={MAX_TASK_PART_TITLE_LENGTH}
+            style={[
+              styles.subtaskInput,
+              styles.partTitleInput,
+              (part.title.trim().length === 0 || part.title.trim().length > MAX_TASK_PART_TITLE_LENGTH) && styles.invalidInput,
+              part.completed && styles.partCompletedText,
+            ]}
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Удалить часть: ${part.title}`}
+            accessibilityState={{ disabled: saving }}
+            disabled={saving}
+            onPress={() => removePart(part.draftId)}
+            style={styles.subtaskRemoveButton}
+          >
             <Text style={styles.subtaskRemove}>×</Text>
           </Pressable>
         </View>
@@ -497,30 +634,48 @@ export default function TaskFormScreen() {
       <View style={styles.subtaskInputRow}>
         <TextInput
           style={styles.subtaskInput}
-          placeholder="Добавить шаг"
+          placeholder="Добавить часть"
           placeholderTextColor="#9CA3AF"
           value={subtaskInput}
           onChangeText={setSubtaskInput}
           onSubmitEditing={addSubtaskFromInput}
+          editable={!saving}
+          accessibilityLabel="Новая часть задачи"
+          accessibilityHint={partsAtLimit
+            ? `Достигнут предел: ${MAX_MANUAL_TASK_PARTS} частей`
+            : `Не больше ${MAX_TASK_PART_TITLE_LENGTH} символов`}
+          maxLength={MAX_TASK_PART_TITLE_LENGTH}
           returnKeyType="done"
         />
         <Pressable
           onPress={addSubtaskFromInput}
           style={styles.subtaskAddButton}
+          accessibilityRole="button"
+          accessibilityLabel="Добавить часть задачи"
+          accessibilityHint={partsAtLimit ? `Достигнут предел: ${MAX_MANUAL_TASK_PARTS} частей` : undefined}
+          accessibilityState={{ disabled: addPartDisabled }}
+          disabled={addPartDisabled}
         >
           <Text style={styles.subtaskAddButtonText}>+</Text>
         </Pressable>
       </View>
+      {!!partsStatusMessage && (
+        <Text accessibilityRole="alert" style={styles.validationText}>{partsStatusMessage}</Text>
+      )}
       </>}
 
       {/* Действия */}
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Сохранить задачу"
+        accessibilityHint={partsValidationMessage ?? undefined}
+        accessibilityState={{ busy: saving, disabled: saveDisabled }}
         style={[
           styles.saveButton,
-          (!title.trim() || saving) && styles.saveButtonDisabled,
+          saveDisabled && styles.saveButtonDisabled,
         ]}
         onPress={handleSave}
-        disabled={!title.trim() || saving}
+        disabled={saveDisabled}
       >
         <Text style={styles.saveButtonText}>
           {saving ? "Сохранение…" : "Сохранить"}
@@ -653,6 +808,32 @@ const styles = StyleSheet.create({
     borderBottomColor: "#F3F4F6",
   },
   subtaskText: { fontSize: 14, color: "#111827" },
+  partCheck: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 4,
+  },
+  partCheckText: {
+    width: 24,
+    height: 24,
+    borderWidth: 1,
+    borderColor: "#6B7280",
+    borderRadius: 5,
+    textAlign: "center",
+    lineHeight: 22,
+    color: "#6B5BFC",
+    fontWeight: "700",
+  },
+  partTitleInput: { paddingVertical: 8 },
+  partCompletedText: { textDecorationLine: "line-through", color: "#6B7280" },
+  subtaskRemoveButton: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   subtaskRemove: { fontSize: 18, color: "#9CA3AF", paddingHorizontal: 8 },
   subtaskInputRow: {
     flexDirection: "row",
@@ -670,9 +851,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#111827",
   },
+  invalidInput: { borderColor: "#DC2626" },
+  validationText: { color: "#B91C1C", fontSize: 13, lineHeight: 18, marginTop: 6 },
   subtaskAddButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: 10,
     backgroundColor: "#F3F4F6",
     alignItems: "center",
