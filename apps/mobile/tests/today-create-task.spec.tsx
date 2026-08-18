@@ -136,6 +136,26 @@ describe('Today quick capture destinations', () => {
     });
   });
 
+  it('does not describe an unplanned future day as wholly free', () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-12T12:00:00.000Z'));
+    render(<GlobalCaptureProvider><TodayScreen /></GlobalCaptureProvider>);
+    fireEvent.press(screen.getByLabelText(/четверг, 13 августа 2026/));
+    expect(screen.getByText('На этот день нет задач')).toBeTruthy();
+    expect(screen.queryByText('Свободный день')).toBeNull();
+    jest.useRealTimers();
+  });
+
+  it('describes thoughts without scheduled tasks as unscheduled, not free time', () => {
+    (useTasksForDate as jest.Mock).mockReturnValue({
+      data: [{ ...scheduledTask, startTime: null }],
+      isLoading: false,
+      isError: false,
+    });
+    render(<GlobalCaptureProvider><TodayScreen /></GlobalCaptureProvider>);
+    expect(screen.getByText('Нет задач со временем')).toBeTruthy();
+    expect(screen.queryByText('Таймлайн свободен')).toBeNull();
+  });
+
   it.each([
     { state: { data: [], isLoading: true, isError: false }, label: /четверг, 13 августа 2026/ },
     { state: { data: [], isLoading: false, isError: true }, label: /четверг, 13 августа 2026/ },

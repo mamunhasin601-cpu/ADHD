@@ -132,6 +132,15 @@ Phase 1 реализует минимальное ядро из [PDR-001](../12-
     validation evidence are recorded in
     [Task 0025](../../docs/tasks/0025-honest-atomic-manual-task-parts.md).
 
+15. **Task 0026 — honest planned free windows — completed.** Today now presents
+    only meaningful, internally bounded free windows proven by scheduled tasks
+    with known ends. The presentation shares profile-local timeline geometry,
+    retains completed history, never labels day edges as availability, and
+    stops claiming later free time after an unknown-duration task. It adds no
+    schedule object, request, reminder, suggestion, or hidden mutation. The
+    contract and validation evidence are recorded in
+    [Task 0026](../../docs/tasks/0026-honest-planned-free-windows.md).
+
 Остальные capability Phase 1 остаются на горизонте, но их точный порядок пока
 не принят. Контекстный помощник, overload mode и focus session относятся к
 следующему расширению опыта; AI-декомпозиция, energy-aware suggestions и

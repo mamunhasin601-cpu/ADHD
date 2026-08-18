@@ -23,6 +23,24 @@ jest.mock("./NowIndicator", () => {
 import React from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { Timeline } from "./Timeline";
+import type { Task } from "@focus/shared-types";
+
+const task = (id: string, hour: number, minute: number, durationMinutes: number | null, completedAt: Date | null = null): Task => ({
+  id,
+  userId: "user",
+  title: id,
+  startTime: new Date(2026, 7, 12, hour, minute),
+  durationMinutes,
+  color: "#6B5BFC",
+  isRecurring: false,
+  recurrenceRule: null,
+  parentTaskId: null,
+  completedAt,
+  startedAt: null,
+  firstStep: null,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+});
 
 const props = {
   tasks: [],
@@ -170,5 +188,48 @@ describe("Timeline auto-scroll ownership", () => {
     rerender(<Timeline {...props} shouldAutoScroll profileTimezone="Europe/Moscow" tasks={[]} />);
     expect(requestAnimationFrame).toHaveBeenCalledTimes(1);
     expect(mockScrollTo).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Timeline free-window presentation", () => {
+  it("renders a neutral, non-interactive label for a proven internal window", () => {
+    render(
+      <Timeline
+        {...props}
+        tasks={[task("first", 9, 0, 60), task("second", 10, 45, 30)]}
+      />,
+    );
+
+    expect(screen.getByText("Свободное окно · 45 мин")).toBeTruthy();
+    const window = screen.getByTestId("timeline-free-window-240-285");
+    expect(window.props.pointerEvents).toBe("none");
+    expect(window.props.accessibilityLabel).toBe("Свободное окно · 45 мин");
+  });
+
+  it("keeps completed scheduled tasks in the displayed historical plan", () => {
+    render(
+      <Timeline
+        {...props}
+        tasks={[
+          task("completed", 9, 0, 30, new Date()),
+          task("next", 10, 0, 30),
+        ]}
+      />,
+    );
+    expect(screen.getByText("Свободное окно · 30 мин")).toBeTruthy();
+  });
+
+  it("does not present an unknown-duration task as having a known end", () => {
+    render(
+      <Timeline
+        {...props}
+        tasks={[
+          task("unknown", 9, 0, null),
+          task("known", 11, 0, 30),
+          task("next", 12, 0, 30),
+        ]}
+      />,
+    );
+    expect(screen.queryByText(/Свободное окно/)).toBeNull();
   });
 });

@@ -239,7 +239,7 @@ export default function TodayScreen() {
       {!isLoading && !isError && totalCount === 0 && (
         <EmptyState
           emoji="🌅"
-          title={isToday ? "Начни свой день" : "Свободный день"}
+          title={isToday ? "Начни свой день" : "На этот день нет задач"}
           description={
             isToday
               ? "Добавь первую задачу, чтобы начать планирование. Нажми + внизу или коснись таймлайна."
@@ -330,7 +330,7 @@ export default function TodayScreen() {
           {scheduledTasks.length === 0 ? (
             <EmptyState
               emoji="📅"
-              title="Таймлайн свободен"
+              title="Нет задач со временем"
               description="Коснись таймлайна, чтобы запланировать задачу на конкретное время."
               actionLabel={unscheduledTasks.length > 0 ? 'Запланировать из «Мыслей»' : undefined}
               onAction={
