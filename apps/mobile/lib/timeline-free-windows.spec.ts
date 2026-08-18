@@ -84,6 +84,30 @@ describe('timeline free-window geometry', () => {
     ]);
   });
 
+  it('returns no window when known intervals touch exactly', () => {
+    expect(
+      computeTimelineFreeWindows([
+        task('first', new Date(2026, 7, 18, 9, 0), 30),
+        task('touching', new Date(2026, 7, 18, 9, 30), 30),
+      ]),
+    ).toEqual([]);
+  });
+
+  it('returns a gap of exactly 30 minutes', () => {
+    expect(
+      computeTimelineFreeWindows([
+        task('first', new Date(2026, 7, 18, 9, 0), 30),
+        task('second', new Date(2026, 7, 18, 10, 0), 30),
+      ]),
+    ).toEqual([
+      expect.objectContaining({
+        startMinutes: 210,
+        endMinutes: 240,
+        durationMinutes: 30,
+      }),
+    ]);
+  });
+
   it('uses an unknown start only as a right boundary and proves nothing after it', () => {
     const windows = computeTimelineFreeWindows([
       task('known', new Date(2026, 7, 18, 9, 0), 30),
@@ -103,6 +127,17 @@ describe('timeline free-window geometry', () => {
         task('unknown', new Date(2026, 7, 18, 9, 0), null),
         task('known', new Date(2026, 7, 18, 11, 0), 30),
         task('next', new Date(2026, 7, 18, 12, 0), 30),
+      ]),
+    ).toEqual([]);
+  });
+
+  it('keeps the uncertainty barrier when known and unknown intervals overlap', () => {
+    expect(
+      computeTimelineFreeWindows([
+        task('known-overlap', new Date(2026, 7, 18, 9, 0), 120),
+        task('unknown-overlap', new Date(2026, 7, 18, 10, 0), null),
+        task('later-known', new Date(2026, 7, 18, 12, 0), 30),
+        task('last', new Date(2026, 7, 18, 13, 0), 30),
       ]),
     ).toEqual([]);
   });
@@ -152,6 +187,61 @@ describe('timeline free-window geometry', () => {
     ], timezone);
     expect(windows[0]).toEqual(
       expect.objectContaining({ startMinutes: 210, endMinutes: 240 }),
+    );
+  });
+
+  it('gives the same absolute instants intentionally different window coordinates across profile zones', () => {
+    const tasks = [
+      task('first', new Date('2026-08-18T12:00:00.000Z'), 30),
+      task('second', new Date('2026-08-18T13:00:00.000Z'), 30),
+    ];
+    const moscow = computeTimelineFreeWindows(tasks, 'Europe/Moscow')[0];
+    const newYork = computeTimelineFreeWindows(tasks, 'America/New_York')[0];
+
+    expect(moscow.durationMinutes).toBe(newYork.durationMinutes);
+    expect(moscow.startMinutes).not.toBe(newYork.startMinutes);
+    expect(moscow.endMinutes).not.toBe(newYork.endMinutes);
+    expect(moscow.top).not.toBe(newYork.top);
+  });
+
+  it('uses device-local Date fields for missing and invalid zones without UTC substitution', () => {
+    const first = new Date('2026-08-18T20:15:00.000Z');
+    const second = new Date('2026-08-18T21:15:00.000Z');
+    const originalGetHours = Date.prototype.getHours;
+    const originalGetMinutes = Date.prototype.getMinutes;
+    const localHours = jest.spyOn(Date.prototype, 'getHours').mockImplementation(function (this: Date) {
+      if (this.getTime() === first.getTime()) return 9;
+      if (this.getTime() === second.getTime()) return 10;
+      return originalGetHours.call(this);
+    });
+    const localMinutes = jest.spyOn(Date.prototype, 'getMinutes').mockImplementation(function (this: Date) {
+      if (this.getTime() === first.getTime() || this.getTime() === second.getTime()) return 0;
+      return originalGetMinutes.call(this);
+    });
+
+    try {
+      for (const timezone of [undefined, 'Not/AZone']) {
+        expect(
+          computeTimelineFreeWindows([
+            task('first', first, 30),
+            task('second', second, 30),
+          ], timezone)[0],
+        ).toEqual(expect.objectContaining({ startMinutes: 210, endMinutes: 240 }));
+      }
+    } finally {
+      localMinutes.mockRestore();
+      localHours.mockRestore();
+    }
+  });
+
+  it('emits only the internal gap and never leading or trailing windows', () => {
+    const windows = computeTimelineFreeWindows([
+      task('first', new Date(2026, 7, 18, 10, 0), 30),
+      task('second', new Date(2026, 7, 18, 11, 0), 30),
+    ]);
+    expect(windows).toHaveLength(1);
+    expect(windows[0]).toEqual(
+      expect.objectContaining({ startMinutes: 270, endMinutes: 300 }),
     );
   });
 });

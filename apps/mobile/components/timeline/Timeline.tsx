@@ -17,6 +17,7 @@ import { formatWallClock } from "../../lib/time-format";
 import { calendarDayWallTimeToInstant, toCanonicalDateParam } from "../../lib/timezone";
 import { getVisibleTimelineTop } from "../../lib/timeline-geometry";
 import { computeTimelineFreeWindows } from "../../lib/timeline-free-windows";
+import { formatTimelineFreeWindowAccessibilityLabel } from "../../lib/timeline-free-window-label";
 
 interface Props {
   tasks: Task[];
@@ -137,13 +138,15 @@ export function Timeline({
 
         {freeWindows.map((window) => {
           const label = `Свободное окно · ${window.durationMinutes} мин`;
+          const accessibilityLabel =
+            formatTimelineFreeWindowAccessibilityLabel(window, timeFormat);
           return (
             <View
               key={`${window.startMinutes}-${window.endMinutes}`}
               testID={`timeline-free-window-${window.startMinutes}-${window.endMinutes}`}
               pointerEvents="none"
               accessible
-              accessibilityLabel={label}
+              accessibilityLabel={accessibilityLabel}
               style={[
                 styles.freeWindow,
                 { top: window.top, height: window.height },

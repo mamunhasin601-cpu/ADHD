@@ -25,11 +25,11 @@ import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { Timeline } from "./Timeline";
 import type { Task } from "@focus/shared-types";
 
-const task = (id: string, hour: number, minute: number, durationMinutes: number | null, completedAt: Date | null = null): Task => ({
+const taskAt = (id: string, startTime: Date, durationMinutes: number | null, completedAt: Date | null = null): Task => ({
   id,
   userId: "user",
   title: id,
-  startTime: new Date(2026, 7, 12, hour, minute),
+  startTime,
   durationMinutes,
   color: "#6B5BFC",
   isRecurring: false,
@@ -41,6 +41,9 @@ const task = (id: string, hour: number, minute: number, durationMinutes: number 
   createdAt: new Date(),
   updatedAt: new Date(),
 });
+
+const task = (id: string, hour: number, minute: number, durationMinutes: number | null, completedAt: Date | null = null): Task =>
+  taskAt(id, new Date(2026, 7, 12, hour, minute), durationMinutes, completedAt);
 
 const props = {
   tasks: [],
@@ -192,6 +195,12 @@ describe("Timeline auto-scroll ownership", () => {
 });
 
 describe("Timeline free-window presentation", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockUser.timeFormat = "H24";
+    mockUser.timezone = undefined;
+  });
+
   it("renders a neutral, non-interactive label for a proven internal window", () => {
     render(
       <Timeline
@@ -203,7 +212,99 @@ describe("Timeline free-window presentation", () => {
     expect(screen.getByText("Свободное окно · 45 мин")).toBeTruthy();
     const window = screen.getByTestId("timeline-free-window-240-285");
     expect(window.props.pointerEvents).toBe("none");
-    expect(window.props.accessibilityLabel).toBe("Свободное окно · 45 мин");
+    expect(window.props.accessibilityRole).toBeUndefined();
+    expect(window.props.accessibilityLabel).toBe(
+      "Свободное окно с 10:00 до 10:45, 45 минут",
+    );
+    expect(screen.queryByRole("button", { name: /Свободное окно/ })).toBeNull();
+  });
+
+  it("uses H12 start, end, and duration in accessibility copy", () => {
+    mockUser.timeFormat = "H12";
+    render(
+      <Timeline
+        {...props}
+        tasks={[task("first", 10, 0, 60), task("second", 11, 45, 30)]}
+      />,
+    );
+    const window = screen.getByTestId("timeline-free-window-300-345");
+    expect(window.props.accessibilityLabel).toMatch(
+      /Свободное окно с 11:00\s*AM до 11:45\s*AM, 45 минут/i,
+    );
+    expect(screen.getByText("Свободное окно · 45 мин")).toBeTruthy();
+  });
+
+  it("uses the mocked SYSTEM device convention for accessibility copy", () => {
+    mockUser.timeFormat = "SYSTEM";
+    const spy = jest
+      .spyOn(Intl, "DateTimeFormat")
+      .mockImplementation(((locale: any, options: any) => ({
+        resolvedOptions: () => ({ hourCycle: "h12", hour12: true }),
+        format: (date: Date) => {
+          const hours = date.getUTCHours();
+          const minutes = String(date.getUTCMinutes()).padStart(2, "0");
+          return `${hours % 12 || 12}:${minutes} ${hours < 12 ? "AM" : "PM"}`;
+        },
+      })) as any);
+    try {
+      render(
+        <Timeline
+          {...props}
+          tasks={[task("first", 10, 0, 60), task("second", 11, 45, 30)]}
+        />,
+      );
+      expect(
+        screen.getByTestId("timeline-free-window-300-345").props
+          .accessibilityLabel,
+      ).toBe("Свободное окно с 11:00 AM до 11:45 AM, 45 минут");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("changes only presentation when the time format changes", () => {
+    const tasks = [task("first", 10, 0, 60), task("second", 11, 45, 30)];
+    const view = render(<Timeline {...props} tasks={tasks} />);
+    const window24 = screen.getByTestId("timeline-free-window-300-345");
+    const taskTop24 = screen.getByTestId("task-block-row-first").props.style[1].top;
+    const geometry24 = window24.props.style[1];
+
+    mockUser.timeFormat = "H12";
+    view.rerender(<Timeline {...props} tasks={tasks} />);
+    const window12 = screen.getByTestId("timeline-free-window-300-345");
+
+    expect(window12.props.style[1]).toEqual(geometry24);
+    expect(screen.getByTestId("task-block-row-first").props.style[1].top).toBe(taskTop24);
+    expect(window24.props.accessibilityLabel).toContain("11:00");
+    expect(window12.props.accessibilityLabel).toMatch(/11:00\s*AM/i);
+    expect(screen.getByText("Свободное окно · 45 мин")).toBeTruthy();
+  });
+
+  it.each([
+    ["2026-12-31", "2026-12-31T11:45:00.000Z"],
+    ["2027-01-01", "2027-01-01T11:45:00.000Z"],
+  ])("lets a free-window press reach exact Moscow slot on %s", (dateKey, expected) => {
+    const tasks = [
+      taskAt("first", new Date("2027-01-01T11:00:00.000Z"), 30),
+      taskAt("second", new Date("2027-01-01T12:00:00.000Z"), 30),
+    ];
+    render(
+      <Timeline
+        {...props}
+        tasks={tasks}
+        currentDateKey={dateKey}
+        profileTimezone="Europe/Moscow"
+      />,
+    );
+    const window = screen.getByTestId("timeline-free-window-510-540");
+    const geometry = window.props.style[1];
+    const canvas = screen.getByText("06:00").parent?.parent;
+    fireEvent(canvas!, "responderRelease", {
+      nativeEvent: { locationY: geometry.top + geometry.height / 2 },
+    });
+
+    expect(window.props.pointerEvents).toBe("none");
+    expect(props.onCreateAt).toHaveBeenLastCalledWith(new Date(expected));
   });
 
   it("keeps completed scheduled tasks in the displayed historical plan", () => {

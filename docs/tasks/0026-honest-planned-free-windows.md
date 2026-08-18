@@ -45,10 +45,19 @@ rest of the timeline. No time-format preference participates in geometry.
 ## Presentation and accessibility
 
 Each proven window is a quiet gray timeline band with a short Russian label and
-matching accessibility label. The band has no CTA and does not capture pointer
-events; the timeline's existing background quick-create behavior remains
-unchanged. There is no score, percentage, warning, success color, encouragement
-to fill the space, or implication that a gap is rest or a buffer.
+visible copy `Свободное окно · N мин`. Its accessibility label adds the start,
+end, and duration derived only from the already-computed geometry, for example
+`Свободное окно с 10:00 до 10:45, 45 минут`. H24 uses 24-hour labels, H12 uses
+the existing AM/PM presentation, and SYSTEM follows the device convention.
+Changing that preference changes only the label: window minute/pixel geometry,
+task layout, and exact-slot capture remain unchanged.
+
+The band has no button role or CTA and uses non-intercepting pointer events. A
+responder release inside a rendered free-window region still reaches the
+timeline background handler. Regression coverage proves exact Moscow-profile
+capture for the selected canonical dates `2026-12-31` and `2027-01-01`, including
+the month/year boundary. There is no score, percentage, warning, success color,
+encouragement to fill the space, or implication that a gap is rest or a buffer.
 
 ## Preserved boundaries
 
@@ -61,19 +70,26 @@ unchanged.
 
 ## Validation
 
-- Focused free-window, Timeline, TaskBlock, NowIndicator, geometry, layout,
-  timezone, and Today coverage: 10 suites, 154 tests passed.
-- Full mobile Jest in a deterministic UTC Node process: 40 suites, 506 tests
-  passed.
+- Focused free-window helper and Timeline coverage: 2 suites, 41 tests passed.
+- Broader free-window, Timeline, TaskBlock, NowIndicator, geometry, layout,
+  timezone, and Today coverage: 10 suites, 165 tests passed.
+- The ordinary Windows full suite completed with 3 failed and 37 passed suites;
+  9 failed and 508 passed tests, 517 total. The exact legacy failing suites were
+  `components/NowCard.spec.tsx`, `tests/task-form.spec.tsx`, and
+  `components/GlobalCapture.spec.tsx`. All new Task 0026 tests passed in this
+  environment.
+- Full mobile Jest with UTC present before Node startup passed 40 suites and 517
+  tests. All new Task 0026 tests therefore pass in both the ordinary Windows and
+  deterministic UTC environments.
 - Mobile TypeScript compilation and whitespace validation passed.
-- The first plain Windows full-suite run used the machine's America/Chicago
-  timezone and exposed an existing test-harness limitation: 3 legacy suites
-  failed 9 assertions that assume setting `process.env.TZ = "UTC"` inside an
-  already-running process changes Windows device-local Date fields. The same
-  complete suite passed when UTC was present at Node process start; no product
-  code or legacy expectations were changed to mask that limitation.
+- The ordinary Windows run exposed the existing test-harness limitation: legacy
+  assertions assume setting `process.env.TZ = "UTC"` inside an already-running
+  process changes Windows device-local Date fields. The same complete suite
+  passed when UTC was present at Node process start; no product code or legacy
+  expectations were changed to mask that limitation.
 - Existing React Native Modal `act(...)` warnings remain visible in Today quick
-  capture tests.
+  capture tests. npm also reported an available major-version update; neither
+  warning was hidden or addressed in this bounded task.
 
 ## Runtime limitations
 
