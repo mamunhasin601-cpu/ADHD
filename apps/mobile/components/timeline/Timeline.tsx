@@ -16,6 +16,8 @@ import { useAuthStore } from "../../stores/auth.store";
 import { formatWallClock } from "../../lib/time-format";
 import { calendarDayWallTimeToInstant, toCanonicalDateParam } from "../../lib/timezone";
 import { getVisibleTimelineTop } from "../../lib/timeline-geometry";
+import { computeTimelineFreeWindows } from "../../lib/timeline-free-windows";
+import { formatTimelineFreeWindowAccessibilityLabel } from "../../lib/timeline-free-window-label";
 
 interface Props {
   tasks: Task[];
@@ -55,6 +57,10 @@ export function Timeline({
   const scrolledTimezoneRef = useRef<string | null>(null);
   const layout = useMemo(
     () => computeTimelineLayout(tasks, profileTimezone),
+    [tasks, profileTimezone],
+  );
+  const freeWindows = useMemo(
+    () => computeTimelineFreeWindows(tasks, profileTimezone),
     [tasks, profileTimezone],
   );
 
@@ -130,6 +136,27 @@ export function Timeline({
           </View>
         ))}
 
+        {freeWindows.map((window) => {
+          const label = `Свободное окно · ${window.durationMinutes} мин`;
+          const accessibilityLabel =
+            formatTimelineFreeWindowAccessibilityLabel(window, timeFormat);
+          return (
+            <View
+              key={`${window.startMinutes}-${window.endMinutes}`}
+              testID={`timeline-free-window-${window.startMinutes}-${window.endMinutes}`}
+              pointerEvents="none"
+              accessible
+              accessibilityLabel={accessibilityLabel}
+              style={[
+                styles.freeWindow,
+                { top: window.top, height: window.height },
+              ]}
+            >
+              <Text style={styles.freeWindowLabel}>{label}</Text>
+            </View>
+          );
+        })}
+
         {shouldAutoScroll && <NowIndicator profileTimezone={profileTimezone} />}
 
         {tasks.map((task) => {
@@ -171,5 +198,21 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: "#E5E7EB",
     marginTop: 6,
+  },
+  freeWindow: {
+    position: "absolute",
+    left: 72,
+    right: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F3F4F6",
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: "#D1D5DB",
+  },
+  freeWindowLabel: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#6B7280",
   },
 });
