@@ -53,6 +53,12 @@ export class NotificationsService {
    * Job payload contains only IDs — never task titles or content (ADR-009).
    */
   async scheduleTaskReminder(task: Task): Promise<void> {
+    // Legacy fixtures and cached callers can omit kind; the storage default and
+    // compatibility contract treat that shape as an ordinary task.
+    if (task.kind && task.kind !== 'TASK') {
+      await this.cancelTaskReminder(task.id);
+      return;
+    }
     if (!task.startTime) return;
 
     const now = Date.now();

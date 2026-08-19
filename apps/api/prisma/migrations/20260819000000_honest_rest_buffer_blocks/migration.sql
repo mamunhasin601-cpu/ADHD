@@ -1,0 +1,4 @@
+CREATE TYPE "TaskKind" AS ENUM ('TASK', 'REST', 'BUFFER');
+
+ALTER TABLE "tasks"
+ADD COLUMN "kind" "TaskKind" NOT NULL DEFAULT 'TASK';

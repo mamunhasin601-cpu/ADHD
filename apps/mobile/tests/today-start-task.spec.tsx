@@ -132,6 +132,24 @@ describe('Today explicit task start', () => {
     expect(screen.getByText('Ближайшее действие')).toBeTruthy(); expect(screen.getByText('Начать')).toBeTruthy();
   });
 
+  it.each(['REST', 'BUFFER'] as const)(
+    'ends an unknown-duration current task at a %s boundary and keeps the next task actionable',
+    (kind) => {
+      mockTasks = [
+        { ...scheduled('unknown', '2026-08-14T09:00:00Z'), durationMinutes: null },
+        { ...scheduled('block', '2026-08-14T10:00:00Z'), kind },
+        scheduled('next', '2026-08-14T12:00:00Z'),
+      ];
+
+      render(<TodayScreen />);
+
+      expect(screen.getByText('Ближайшее действие')).toBeTruthy();
+      expect(screen.getByText('Задача next')).toBeTruthy();
+      expect(screen.queryByText('Задача unknown')).toBeNull();
+      expect(screen.queryByText('Задача block')).toBeNull();
+    },
+  );
+
   it('guards rapid duplicates and disables conflicting actions while pending', async () => {
     let resolve!: (value: any) => void; mockStartImplementation = () => new Promise((done) => { resolve = done; });
     render(<TodayScreen />); const button = screen.getByText('Начать');

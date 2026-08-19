@@ -49,6 +49,10 @@ export class CreateTaskDto {
   title: string;
 
   @IsOptional()
+  @IsIn(['TASK', 'REST', 'BUFFER'])
+  kind?: 'TASK' | 'REST' | 'BUFFER';
+
+  @IsOptional()
   @Transform(({ value }) => typeof value === 'string' ? value.trim() || null : value)
   @IsString()
   @MaxLength(240)

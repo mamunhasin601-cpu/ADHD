@@ -29,6 +29,10 @@ function task(
   };
 }
 
+function planBlock(id: string, kind: 'REST' | 'BUFFER', hour: number, durationMinutes: number | null): Task {
+  return { ...task(id, new Date(2026, 7, 18, hour, 0), durationMinutes), kind };
+}
+
 describe('timeline free-window geometry', () => {
   it('returns a bounded internal window with matching timeline geometry', () => {
     const windows = computeTimelineFreeWindows([
@@ -81,6 +85,32 @@ describe('timeline free-window geometry', () => {
 
     expect(windows).toEqual([
       expect.objectContaining({ startMinutes: 300, endMinutes: 360, durationMinutes: 60 }),
+    ]);
+  });
+
+  it('counts REST and BUFFER as occupied timeline intervals', () => {
+    const windows = computeTimelineFreeWindows([
+      task('first', new Date(2026, 7, 18, 9, 0), 30),
+      planBlock('rest', 'REST', 10, 30),
+      planBlock('buffer', 'BUFFER', 11, 30),
+      task('last', new Date(2026, 7, 18, 12, 0), 30),
+    ]);
+
+    expect(windows.map(({ startMinutes, endMinutes }) => ({ startMinutes, endMinutes }))).toEqual([
+      { startMinutes: 210, endMinutes: 240 },
+      { startMinutes: 270, endMinutes: 300 },
+      { startMinutes: 330, endMinutes: 360 },
+    ]);
+  });
+
+  it('keeps an invalid unknown-duration block as an uncertainty barrier', () => {
+    expect(computeTimelineFreeWindows([
+      task('first', new Date(2026, 7, 18, 9, 0), 30),
+      planBlock('invalid-rest', 'REST', 10, null),
+      task('later', new Date(2026, 7, 18, 12, 0), 30),
+      task('last', new Date(2026, 7, 18, 13, 0), 30),
+    ])).toEqual([
+      expect.objectContaining({ startMinutes: 210, endMinutes: 240 }),
     ]);
   });
 

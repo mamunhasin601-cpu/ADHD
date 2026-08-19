@@ -141,6 +141,16 @@ Phase 1 реализует минимальное ядро из [PDR-001](../12-
     contract and validation evidence are recorded in
     [Task 0026](../../docs/tasks/0026-honest-planned-free-windows.md).
 
+16. **Task 0027 — honest user-owned rest and buffer blocks — completed.** Users
+    can add scheduled `REST` and `BUFFER` plan blocks that occupy Today timeline
+    geometry and bound free windows without becoming actionable tasks. Blocks
+    require a known positive duration, never recur, start, complete, consume the
+    task quota, enter Thoughts or recovery, or receive task reminders. Existing
+    callers that omit `kind` remain ordinary `TASK` records. The storage,
+    lifecycle, form, capture, timeline, accessibility, and validation contract
+    is recorded in
+    [Task 0027](../../docs/tasks/0027-honest-rest-buffer-blocks.md).
+
 Остальные capability Phase 1 остаются на горизонте, но их точный порядок пока
 не принят. Контекстный помощник, overload mode и focus session относятся к
 следующему расширению опыта; AI-декомпозиция, energy-aware suggestions и

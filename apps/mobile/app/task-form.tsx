@@ -9,7 +9,7 @@ import {
   Alert,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import type { Task } from "@focus/shared-types";
+import type { Task, TaskKind } from "@focus/shared-types";
 import {
   useCreateTask,
   useUpdateTask,
@@ -25,6 +25,7 @@ import {
   isValidIANATimezone,
   toCanonicalDateParam,
 } from "../lib/timezone";
+import { normalizeTaskKind } from "../lib/task-kind";
 
 const COLOR_PRESETS = [
   "#6B5BFC",
@@ -90,6 +91,7 @@ export default function TaskFormScreen() {
     prefillStartTime?: string;
     prefillTitle?: string;
     prefillDurationMinutes?: string;
+    prefillKind?: string;
     /** ISO-строка даты выбранного дня — передаётся из today.tsx для корректной инвалидации кэша */
     selectedDate?: string;
     /** Authoritative calendar identity for new Today navigation routes. */
@@ -154,6 +156,7 @@ export default function TaskFormScreen() {
   }, []);
 
   const isEditMode = !!existingTask;
+  const initialKind = normalizeTaskKind(existingTask?.kind ?? params.prefillKind);
 
   const callerGuard = () => saveContinuationGuardRef.current?.() ?? true;
   const createTask = useCreateTask(today, profileTimezone, callerGuard);
@@ -163,6 +166,7 @@ export default function TaskFormScreen() {
   const [title, setTitle] = useState(
     existingTask?.title ?? params.prefillTitle ?? "",
   );
+  const [kind, setKind] = useState<TaskKind>(initialKind);
   const [firstStep, setFirstStep] = useState(existingTask?.firstStep ?? "");
 
   const initialStartTime =
@@ -226,6 +230,15 @@ export default function TaskFormScreen() {
 
   const [saving, setSaving] = useState(false);
 
+  const isBlock = kind !== "TASK";
+  const blockValidationMessage = isBlock
+    ? !hasTime
+      ? "Для отдыха или буфера укажите время."
+      : durationMinutes === null || durationMinutes <= 0
+        ? "Для отдыха или буфера выберите длительность."
+        : null
+    : null;
+
   const partsValidationMessage = useMemo(() => {
     if (partsDraft.length > MAX_MANUAL_TASK_PARTS) {
       return `Можно добавить не больше ${MAX_MANUAL_TASK_PARTS} частей задачи.`;
@@ -244,7 +257,7 @@ export default function TaskFormScreen() {
   const partsStatusMessage = partsValidationMessage ??
     (newPartTooLong ? `Название части должно быть не длиннее ${MAX_TASK_PART_TITLE_LENGTH} символов.` : null) ??
     (partsAtLimit ? `Добавлено максимальное количество: ${MAX_MANUAL_TASK_PARTS} частей.` : partsFeedback);
-  const saveDisabled = !title.trim() || saving || !!partsValidationMessage;
+  const saveDisabled = !title.trim() || saving || !!partsValidationMessage || !!blockValidationMessage;
 
   const draftTaskIdentityRef = useRef(existingTask?.id ?? "new");
   useEffect(() => {
@@ -253,6 +266,7 @@ export default function TaskFormScreen() {
     draftTaskIdentityRef.current = nextIdentity;
     draftIdRef.current = 0;
     setTitle(existingTask?.title ?? params.prefillTitle ?? "");
+    setKind(normalizeTaskKind(existingTask?.kind ?? params.prefillKind));
     setFirstStep(existingTask?.firstStep ?? "");
     setHasTime(!!initialStartTime);
     setWallClockEdited(false);
@@ -271,6 +285,30 @@ export default function TaskFormScreen() {
     setPartsFeedback(null);
     createRequestRef.current = null;
   }, [existingTask?.id]);
+
+  function selectKind(nextKind: TaskKind) {
+    if (nextKind === kind) return;
+    if (isEditMode && (kind === "TASK" || nextKind === "TASK")) {
+      Alert.alert(
+        "Тип нельзя изменить",
+        "В этой версии задачу нельзя преобразовать в отдых или буфер, и наоборот.",
+      );
+      return;
+    }
+    const hasTaskOwnedDraftData = firstStep.trim() ||
+      color !== COLOR_PRESETS[0] ||
+      recurrencePreset !== "none" ||
+      partsDraft.length > 0 ||
+      subtaskInput.trim();
+    if (nextKind !== "TASK" && kind === "TASK" && hasTaskOwnedDraftData) {
+      Alert.alert(
+        "Сначала уберите данные задачи",
+        "Первый шаг, цвет, повтор и части доступны только задаче. Мы не удаляем их автоматически.",
+      );
+      return;
+    }
+    setKind(nextKind);
+  }
 
   function adjustHour(delta: number) {
     setWallClockEdited(true);
@@ -322,7 +360,7 @@ export default function TaskFormScreen() {
   }
 
   async function handleSave() {
-    if (!title.trim() || partsValidationMessage || savingRef.current) {
+    if (!title.trim() || partsValidationMessage || blockValidationMessage || savingRef.current) {
       if (partsValidationMessage) setPartsFeedback(partsValidationMessage);
       return;
     }
@@ -348,25 +386,33 @@ export default function TaskFormScreen() {
           ).toISOString()
       : null;
 
-    const dto = {
-      title: title.trim(),
-      firstStep: firstStep.trim() || null,
-      startTime: startTimeIso,
-      durationMinutes,
-      color,
-      isRecurring: recurrencePreset !== "none",
-      recurrenceRule: RECURRENCE_RULES[recurrencePreset],
-      deviceTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      editRecurrenceAnchor: !!existingTask?.seriesId && wallClockEdited,
-      editRecurrencePattern: !!existingTask?.seriesId && recurrencePreset !== initialRecurrencePreset,
-      ...(recurrencePreset === "none" && {
-        subTasks: partsDraft.map(({ id, title: partTitle, completed }) => ({
-          ...(id ? { id } : {}),
-          title: partTitle.trim(),
-          completed,
-        })),
-      }),
-    };
+    const dto = isBlock
+      ? {
+          title: title.trim(),
+          kind,
+          startTime: startTimeIso,
+          durationMinutes,
+        }
+      : {
+          title: title.trim(),
+          kind,
+          firstStep: firstStep.trim() || null,
+          startTime: startTimeIso,
+          durationMinutes,
+          color,
+          isRecurring: recurrencePreset !== "none",
+          recurrenceRule: RECURRENCE_RULES[recurrencePreset],
+          deviceTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          editRecurrenceAnchor: !!existingTask?.seriesId && wallClockEdited,
+          editRecurrencePattern: !!existingTask?.seriesId && recurrencePreset !== initialRecurrencePreset,
+          ...(recurrencePreset === "none" && {
+            subTasks: partsDraft.map(({ id, title: partTitle, completed }) => ({
+              ...(id ? { id } : {}),
+              title: partTitle.trim(),
+              completed,
+            })),
+          }),
+        };
 
     try {
       if (isEditMode && existingTask) {
@@ -405,7 +451,8 @@ export default function TaskFormScreen() {
   function handleDelete() {
     if (!existingTask) return;
     const wholeSeries = !!existingTask.seriesId || existingTask.isRecurring;
-    Alert.alert(wholeSeries ? "Удалить весь повтор?" : "Удалить задачу?", wholeSeries
+    const deleteLabel = isBlock ? (kind === "REST" ? "Удалить отдых?" : "Удалить буфер?") : "Удалить задачу?";
+    Alert.alert(wholeSeries ? "Удалить весь повтор?" : deleteLabel, wholeSeries
       ? "Будут удалены все задачи этого повтора."
       : existingTask.title, [
       { text: "Отмена", style: "cancel" },
@@ -426,28 +473,54 @@ export default function TaskFormScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <Text style={styles.sectionLabel}>Тип записи</Text>
+      <View accessibilityRole="radiogroup" style={styles.row}>
+        {([
+          ["TASK", "Задача"],
+          ["REST", "Отдых"],
+          ["BUFFER", "Буфер"],
+        ] as const).map(([value, label]) => {
+          const incompatibleEdit = isEditMode && (kind === "TASK" ? value !== "TASK" : value === "TASK");
+          return (
+            <Pressable
+              key={value}
+              accessibilityRole="radio"
+              accessibilityLabel={label}
+              accessibilityState={{ selected: kind === value, disabled: incompatibleEdit || saving }}
+              disabled={incompatibleEdit || saving}
+              style={[styles.toggleChip, kind === value && styles.toggleChipActive, incompatibleEdit && styles.disabledChip]}
+              onPress={() => selectKind(value)}
+            >
+              <Text style={[styles.toggleChipText, kind === value && styles.toggleChipTextActive]}>{label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
       <TextInput
         style={styles.titleInput}
-        placeholder="Название задачи"
+        placeholder={isBlock ? "Название блока" : "Название задачи"}
         placeholderTextColor="#9CA3AF"
         value={title}
         onChangeText={setTitle}
         autoFocus={!isEditMode}
       />
 
-      <Text style={styles.sectionLabel}>Первый маленький шаг</Text>
-      <Text style={styles.supportingText}>Одно конкретное действие, с которого можно начать, а не вся задача.</Text>
-      <TextInput
-        style={styles.firstStepInput}
-        value={firstStep}
-        onChangeText={setFirstStep}
-        placeholder="Например: открыть документ"
-        placeholderTextColor="#9CA3AF"
-        maxLength={240}
-        accessibilityLabel="Первый маленький шаг"
-        editable={!saving}
-        returnKeyType="done"
-      />
+      {!isBlock && <>
+        <Text style={styles.sectionLabel}>Первый маленький шаг</Text>
+        <Text style={styles.supportingText}>Одно конкретное действие, с которого можно начать, а не вся задача.</Text>
+        <TextInput
+          style={styles.firstStepInput}
+          value={firstStep}
+          onChangeText={setFirstStep}
+          placeholder="Например: открыть документ"
+          placeholderTextColor="#9CA3AF"
+          maxLength={240}
+          accessibilityLabel="Первый маленький шаг"
+          editable={!saving}
+          returnKeyType="done"
+        />
+      </>}
 
       {/* Время */}
       <Text style={styles.sectionLabel}>Время</Text>
@@ -455,8 +528,9 @@ export default function TaskFormScreen() {
         <Pressable
           accessibilityRole="radio"
           accessibilityLabel="Без времени"
-          accessibilityState={{ selected: !hasTime }}
-          style={[styles.toggleChip, !hasTime && styles.toggleChipActive]}
+          accessibilityState={{ selected: !hasTime, disabled: isBlock || saving }}
+          disabled={isBlock || saving}
+          style={[styles.toggleChip, !hasTime && styles.toggleChipActive, isBlock && styles.disabledChip]}
           onPress={() => {
             if (recurrencePreset !== "none") {
               setRecurrencePreset("none");
@@ -486,6 +560,7 @@ export default function TaskFormScreen() {
           </Text>
         </Pressable>
       </View>
+      {isBlock && <Text style={styles.supportingText}>Отдых и буфер занимают выбранное время и требуют известной длительности.</Text>}
 
       {hasTime && (
         <View>
@@ -510,7 +585,7 @@ export default function TaskFormScreen() {
       {/* Длительность */}
       <Text style={styles.sectionLabel}>Длительность</Text>
       <View style={styles.chipsWrap}>
-        {TASK_DURATION_PRESETS.map((mins) => (
+        {TASK_DURATION_PRESETS.filter((mins) => !isBlock || mins !== null).map((mins) => (
           <Pressable
             key={mins ?? "unknown"}
             accessibilityRole="button"
@@ -529,13 +604,20 @@ export default function TaskFormScreen() {
           </Pressable>
         ))}
       </View>
+      {!!blockValidationMessage && (
+        <Text accessibilityRole="alert" style={styles.validationText}>{blockValidationMessage}</Text>
+      )}
 
       {/* Цвет */}
+      {!isBlock && <>
       <Text style={styles.sectionLabel}>Цвет</Text>
       <View style={styles.chipsWrap}>
         {COLOR_PRESETS.map((c) => (
           <Pressable
             key={c}
+            accessibilityRole="radio"
+            accessibilityLabel={`Цвет ${c}`}
+            accessibilityState={{ selected: color === c }}
             onPress={() => setColor(c)}
             style={[
               styles.colorSwatch,
@@ -663,12 +745,13 @@ export default function TaskFormScreen() {
         <Text accessibilityRole="alert" style={styles.validationText}>{partsStatusMessage}</Text>
       )}
       </>}
+      </>}
 
       {/* Действия */}
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Сохранить задачу"
-        accessibilityHint={partsValidationMessage ?? undefined}
+        accessibilityLabel={isBlock ? `Сохранить ${kind === "REST" ? "отдых" : "буфер"}` : "Сохранить задачу"}
+        accessibilityHint={blockValidationMessage ?? partsValidationMessage ?? undefined}
         accessibilityState={{ busy: saving, disabled: saveDisabled }}
         style={[
           styles.saveButton,
@@ -685,7 +768,11 @@ export default function TaskFormScreen() {
       {isEditMode && (
         <Pressable style={styles.deleteButton} onPress={handleDelete}>
           <Text style={styles.deleteButtonText}>
-            {existingTask?.seriesId || existingTask?.isRecurring ? "Удалить весь повтор" : "Удалить задачу"}
+            {existingTask?.seriesId || existingTask?.isRecurring
+              ? "Удалить весь повтор"
+              : isBlock
+                ? `Удалить ${kind === "REST" ? "отдых" : "буфер"}`
+                : "Удалить задачу"}
           </Text>
         </Pressable>
       )}
@@ -714,6 +801,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   supportingText: { fontSize: 13, lineHeight: 18, color: "#6B7280", marginBottom: 8 },
+  disabledChip: { opacity: 0.45 },
   firstStepInput: {
     borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10,
     paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: "#111827",

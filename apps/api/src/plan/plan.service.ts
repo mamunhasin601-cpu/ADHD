@@ -34,6 +34,7 @@ export class PlanService {
     const activeTaskCount = await client.task.count({
       where: {
         userId,
+        kind: 'TASK',
         completedAt: null,
         parentTaskId: null, // считаем только верхнеуровневые задачи
         seriesId: null, // concrete occurrences are not user-authored tasks
@@ -73,6 +74,7 @@ current: activeTaskCount,
     const activeTasks = await this.prisma.task.count({
       where: {
         userId,
+        kind: 'TASK',
         completedAt: null,
         parentTaskId: null,
         seriesId: null,

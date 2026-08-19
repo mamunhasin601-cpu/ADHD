@@ -1,23 +1,34 @@
 import type { Task } from '@focus/shared-types';
+import { isTaskRecord } from './task-kind';
 
 /** Selects current work without inferring or persisting an unknown duration. */
 export function findCurrentTask(tasks: Task[], now: Date, dayEnd: Date): Task | null {
-  const scheduled = tasks
-    .filter((task) => task.startTime && !task.completedAt)
+  const scheduledPlan = tasks
+    .filter((task) => task.startTime && !Number.isNaN(new Date(task.startTime).getTime()))
     .sort(
       (a, b) =>
         new Date(a.startTime!).getTime() - new Date(b.startTime!).getTime(),
     );
+  const actionableTasks = scheduledPlan.filter(
+    (task) => isTaskRecord(task) && !task.completedAt,
+  );
   const nowMs = now.getTime();
 
-  return scheduled.find((task, index) => {
+  return actionableTasks.find((task) => {
     const start = new Date(task.startTime!).getTime();
-    const nextStart = scheduled[index + 1]?.startTime
-      ? new Date(scheduled[index + 1].startTime!).getTime()
-      : dayEnd.getTime();
-    const end = task.durationMinutes === null
-      ? nextStart
-      : start + task.durationMinutes * 60 * 1000;
+    const duration = task.durationMinutes;
+    const knownDuration = typeof duration === 'number' &&
+      Number.isFinite(duration) && duration > 0
+      ? duration
+      : null;
+    const nextPlanBoundary = scheduledPlan.find(
+      (entry) => new Date(entry.startTime!).getTime() > start,
+    );
+    const end = knownDuration !== null
+      ? start + knownDuration * 60 * 1000
+      : nextPlanBoundary
+        ? new Date(nextPlanBoundary.startTime!).getTime()
+        : dayEnd.getTime();
     return start <= nowMs && nowMs < end;
   }) ?? null;
 }

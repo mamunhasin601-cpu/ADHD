@@ -25,6 +25,12 @@ enum TimeFormat {
   H12
 }
 
+enum TaskKind {
+  TASK
+  REST
+  BUFFER
+}
+
 // ──────────────────────────────────────────────
 // User
 // ──────────────────────────────────────────────
@@ -68,6 +74,7 @@ model Task {
   userId          String
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   title           String
+  kind            TaskKind  @default(TASK)
   startTime       DateTime?
   durationMinutes Int?
   color           String    @default("#6B5BFC")

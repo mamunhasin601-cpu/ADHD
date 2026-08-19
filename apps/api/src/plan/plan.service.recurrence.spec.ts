@@ -8,7 +8,7 @@ describe('PlanService recurrence counting', () => {
     };
     const result = await new PlanService(prisma).getPlanInfo('owner');
     expect(prisma.task.count).toHaveBeenCalledWith({ where: {
-      userId: 'owner', completedAt: null, parentTaskId: null, seriesId: null, recurrenceEndedAt: null,
+      userId: 'owner', kind: 'TASK', completedAt: null, parentTaskId: null, seriesId: null, recurrenceEndedAt: null,
     }});
     expect(result.usage.activeTasks).toBe(1);
   });

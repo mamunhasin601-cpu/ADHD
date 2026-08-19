@@ -139,6 +139,13 @@ describe('scheduleLocalReminder', () => {
     expect(mockSchedule).not.toHaveBeenCalled();
   });
 
+  it.each(['REST', 'BUFFER'] as const)('cancels stale state and never schedules a %s block', async (kind) => {
+    const task = makeTask({ id: kind.toLowerCase(), kind });
+    await scheduleLocalReminder(task, true);
+    expect(mockCancel).toHaveBeenCalledWith(`focus-task-reminder-${kind.toLowerCase()}`);
+    expect(mockSchedule).not.toHaveBeenCalled();
+  });
+
   it('skips scheduling when startTime is fewer than 5 s in the future', async () => {
     const task = makeTask({ startTime: new Date(Date.now() + 3_000) });
     await scheduleLocalReminder(task, true);
@@ -301,6 +308,13 @@ describe('reconcileLocalReminders', () => {
 
     await reconcileLocalReminders([inbox], true);
 
+    expect(mockSchedule).not.toHaveBeenCalled();
+  });
+
+  it('excludes blocks during reconciliation while cancelling their stale Focus identifiers', async () => {
+    mockGetAll.mockResolvedValue([{ identifier: 'focus-task-reminder-rest' }]);
+    await reconcileLocalReminders([makeTask({ id: 'rest', kind: 'REST' })], true);
+    expect(mockCancel).toHaveBeenCalledWith('focus-task-reminder-rest');
     expect(mockSchedule).not.toHaveBeenCalled();
   });
 

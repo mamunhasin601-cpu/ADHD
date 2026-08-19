@@ -70,6 +70,7 @@ describe('TaskRecoveryService', () => {
 
       const whereArg = prisma.task.findMany.mock.calls[0][0].where;
       expect(whereArg.userId).toBe(userId);
+      expect(whereArg.kind).toBe('TASK');
       expect(whereArg.parentTaskId).toBeNull();
       expect(whereArg.completedAt).toBeNull();
       expect(whereArg.isRecurring).toBe(false);
@@ -229,6 +230,7 @@ describe('TaskRecoveryService', () => {
           where: {
             id: overdueTask.id,
             userId,
+            kind: 'TASK',
             completedAt: null,
             parentTaskId: null,
             isRecurring: false,

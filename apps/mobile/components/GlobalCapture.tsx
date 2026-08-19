@@ -150,7 +150,7 @@ export function GlobalCaptureProvider({ children }: { children: React.ReactNode 
     }
   }
 
-  function openFullForm() {
+  function openFullForm(prefillKind: 'TASK' | 'REST' | 'BUFFER' = 'TASK') {
     if (submissionPending.current) return;
     const trimmedTitle = title.trim();
     setOpen(false);
@@ -160,6 +160,7 @@ export function GlobalCaptureProvider({ children }: { children: React.ReactNode 
         ...(trimmedTitle ? { prefillTitle: trimmedTitle } : {}),
         ...(selection.instant ? { prefillStartTime: selection.instant.toISOString() } : {}),
         ...(duration !== null ? { prefillDurationMinutes: String(duration) } : {}),
+        prefillKind,
         selectedDate: selection.selectedDate.toISOString(),
         selectedDateKey: selection.selectedDateKey,
       },
@@ -176,14 +177,14 @@ export function GlobalCaptureProvider({ children }: { children: React.ReactNode 
         style={[styles.fab, busy && styles.disabled]}
         onPress={openGlobalCapture}
         accessibilityRole="button"
-        accessibilityLabel="Добавить задачу"
+        accessibilityLabel="Добавить запись: задачу, мысль, отдых или буфер"
         accessibilityState={{ disabled: busy, busy }}
         disabled={busy}
       ><Text style={styles.fabText}>＋</Text></Pressable>
       <Modal visible={open} transparent animationType="slide" onRequestClose={resetAndClose}>
         <View style={styles.overlay}><View style={styles.card}>
-          <Text style={styles.title}>Новая задача</Text>
-          <TextInput style={styles.input} placeholder="Название" placeholderTextColor="#9CA3AF" value={title} onChangeText={setTitle} autoFocus onSubmitEditing={() => submit()} returnKeyType="done" accessibilityLabel="Название задачи" />
+          <Text style={styles.title}>Новая запись</Text>
+          <TextInput style={styles.input} placeholder="Название" placeholderTextColor="#9CA3AF" value={title} onChangeText={setTitle} autoFocus onSubmitEditing={() => submit()} returnKeyType="done" accessibilityLabel="Название записи" />
           <Text style={styles.hint}>{selection.instant ? `Выбранное время: ${formatClockTime(selection.instant, timeFormat)}` : 'Без времени — запись сохранится в «Мысли»'}</Text>
           <Text style={styles.durationLabel}>Примерная длительность</Text>
           <View style={styles.presets}>{TASK_DURATION_PRESETS.map((value) => (
@@ -193,7 +194,11 @@ export function GlobalCaptureProvider({ children }: { children: React.ReactNode 
           ))}</View>
           <View style={styles.actions}>
             <Pressable onPress={resetAndClose} accessibilityRole="button" accessibilityLabel="Отменить быстрое добавление"><Text style={styles.secondary}>Отмена</Text></Pressable>
-            <Pressable onPress={openFullForm} accessibilityRole="button" accessibilityLabel="Открыть полную форму задачи" accessibilityState={{ disabled: busy }} disabled={busy}><Text style={styles.secondary}>Подробнее →</Text></Pressable>
+            <Pressable onPress={() => openFullForm('TASK')} accessibilityRole="button" accessibilityLabel="Открыть полную форму задачи" accessibilityState={{ disabled: busy }} disabled={busy}><Text style={styles.secondary}>Подробнее о задаче</Text></Pressable>
+            <View style={styles.blockActions}>
+              <Pressable onPress={() => openFullForm('REST')} accessibilityRole="button" accessibilityLabel="Открыть полную форму отдыха" accessibilityState={{ disabled: busy }} disabled={busy} style={styles.blockAction}><Text style={styles.blockActionText}>Отдых</Text></Pressable>
+              <Pressable onPress={() => openFullForm('BUFFER')} accessibilityRole="button" accessibilityLabel="Открыть полную форму буфера" accessibilityState={{ disabled: busy }} disabled={busy} style={styles.blockAction}><Text style={styles.blockActionText}>Буфер</Text></Pressable>
+            </View>
             {selection.instant && <Pressable onPress={() => submit(null)} accessibilityRole="button" accessibilityLabel="Сохранить задачу в Мысли без времени" accessibilityState={{ disabled, busy }} disabled={disabled}><Text style={styles.thoughts}>В Мысли</Text></Pressable>}
             <Pressable onPress={() => submit()} style={[styles.submit, disabled && styles.disabled]} accessibilityRole="button" accessibilityLabel={selection.instant ? `Добавить задачу на ${formatClockTime(selection.instant, timeFormat)}` : 'Сохранить задачу в Мысли'} accessibilityState={{ disabled, busy }} disabled={disabled}>
               {busy ? <ActivityIndicator color="#FFFFFF" accessibilityLabel="Сохранение задачи" /> : <Text style={styles.submitText}>{selection.instant ? `Добавить на ${formatClockTime(selection.instant, timeFormat)}` : 'Сохранить в Мысли'}</Text>}
@@ -223,6 +228,9 @@ const styles = StyleSheet.create({
   chipTextActive: { color: '#5B4BE7', fontWeight: '600' },
   actions: { marginTop: 22, gap: 14, alignItems: 'stretch' },
   secondary: { color: '#6B5BFC', textAlign: 'center', paddingVertical: 4 },
+  blockActions: { flexDirection: 'row', gap: 10 },
+  blockAction: { flex: 1, minHeight: 42, borderWidth: 1, borderColor: '#B8AA8D', borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  blockActionText: { color: '#4B5563', fontWeight: '600' },
   thoughts: { color: '#5B4BE7', fontWeight: '600', textAlign: 'center', paddingVertical: 8 },
   submit: { minHeight: 48, borderRadius: 10, backgroundColor: '#6B5BFC', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
   submitText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16, textAlign: 'center' },

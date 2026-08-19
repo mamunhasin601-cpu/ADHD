@@ -9,6 +9,7 @@
 
 export type Plan = 'FREE' | 'PRO';
 export type TimeFormat = 'SYSTEM' | 'H24' | 'H12';
+export type TaskKind = 'TASK' | 'REST' | 'BUFFER';
 
 export const FREE_TIER_LIMITS = {
   /** Максимальное количество активных задач для Free пользователей */
@@ -35,6 +36,8 @@ export interface Task {
   id: string;
   userId: string;
   title: string;
+  /** Missing only on legacy cached payloads; consumers must treat it as TASK. */
+  kind?: TaskKind;
   startTime: Date | null;
   durationMinutes: number | null;
   color: string;
@@ -66,6 +69,8 @@ export interface CreateTaskDto {
   /** Owner-scoped retry identity for root creation; distinct from task and part ids. */
   createRequestId?: string;
   title: string;
+  /** Omitted by legacy clients and therefore persisted as TASK. */
+  kind?: TaskKind;
   firstStep?: string | null;
   startTime?: string | null; // ISO 8601
   durationMinutes?: number | null;

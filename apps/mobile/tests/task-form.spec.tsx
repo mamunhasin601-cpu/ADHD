@@ -259,3 +259,145 @@ describe('TaskFormScreen canonical selected day', () => {
     expect(mockCreateTask.mock.calls[0][0].startTime).toBe(exact);
   });
 });
+
+describe('TaskFormScreen rest and buffer blocks', () => {
+  let alertSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockTimeFormat = 'H24';
+    mockTimezone = 'Europe/Moscow';
+    mockCreateTask.mockResolvedValue({ id: 'block' });
+    mockUpdateTask.mockResolvedValue({ id: 'block' });
+    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => alertSpy.mockRestore());
+
+  it.each([
+    ['REST', 'Europe/Moscow', '2026-08-19T11:30:00.000Z'],
+    ['BUFFER', 'America/New_York', '2026-08-19T18:30:00.000Z'],
+  ])('creates %s with the exact untouched %s instant and only block fields', async (kind, timezone, exact) => {
+    mockTimezone = timezone;
+    mockParams = {
+      selectedDateKey: '2026-08-19',
+      selectedDate: '2026-08-19T00:00:00.000Z',
+      prefillKind: kind,
+      prefillTitle: 'Пауза',
+      prefillStartTime: exact,
+      prefillDurationMinutes: '45',
+    };
+    renderTaskForm();
+
+    expect(screen.queryByLabelText('Первый маленький шаг')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Не знаю' })).toBeNull();
+    fireEvent.press(screen.getByText('Сохранить'));
+    await waitFor(() => expect(mockCreateTask).toHaveBeenCalled());
+    expect(mockCreateTask.mock.calls[0][0]).toEqual({
+      title: 'Пауза',
+      kind,
+      startTime: exact,
+      durationMinutes: 45,
+      createRequestId: expect.any(String),
+    });
+  });
+
+  it('requires known duration and safely falls invalid prefillKind back to TASK', () => {
+    mockParams = { selectedDateKey: '2026-08-19', prefillKind: 'EVENT', prefillTitle: 'Legacy' };
+    const view = render(<TaskFormScreen />);
+    expect(screen.getByRole('radio', { name: 'Задача' }).props.accessibilityState.selected).toBe(true);
+    view.unmount();
+
+    mockParams = {
+      selectedDateKey: '2026-08-19',
+      prefillKind: 'REST',
+      prefillTitle: 'Пауза',
+      prefillStartTime: '2026-08-19T11:30:00.000Z',
+    };
+    renderTaskForm();
+    expect(screen.getByLabelText('Сохранить отдых').props.accessibilityState.disabled).toBe(true);
+    expect(screen.getByRole('alert').props.children).toContain('выберите длительность');
+  });
+
+  it('does not discard task-only draft data when changing a new task into a block', () => {
+    mockParams = { selectedDateKey: '2026-08-19', prefillTitle: 'Работа' };
+    renderTaskForm();
+    fireEvent.changeText(screen.getByLabelText('Первый маленький шаг'), 'Открыть документ');
+    fireEvent.press(screen.getByRole('radio', { name: 'Отдых' }));
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Сначала уберите данные задачи',
+      expect.stringContaining('не удаляем их автоматически'),
+    );
+    expect(screen.getByRole('radio', { name: 'Задача' }).props.accessibilityState.selected).toBe(true);
+    expect(screen.getByDisplayValue('Открыть документ')).toBeTruthy();
+  });
+
+  it('retains a selected non-default task color and refuses a block kind change', () => {
+    mockParams = { selectedDateKey: '2026-08-19', prefillTitle: 'Работа' };
+    renderTaskForm();
+    fireEvent.press(screen.getByRole('radio', { name: 'Цвет #F97316' }));
+    fireEvent.press(screen.getByRole('radio', { name: 'Отдых' }));
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Сначала уберите данные задачи',
+      expect.stringContaining('не удаляем их автоматически'),
+    );
+    expect(screen.getByRole('radio', { name: 'Задача' }).props.accessibilityState.selected).toBe(true);
+    expect(screen.getByRole('radio', { name: 'Цвет #F97316' }).props.accessibilityState.selected).toBe(true);
+  });
+
+  it('retains uncommitted part text and refuses a block kind change', () => {
+    mockParams = { selectedDateKey: '2026-08-19', prefillTitle: 'Работа' };
+    renderTaskForm();
+    fireEvent.changeText(screen.getByLabelText('Новая часть задачи'), '  Черновик части  ');
+    fireEvent.press(screen.getByRole('radio', { name: 'Буфер' }));
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Сначала уберите данные задачи',
+      expect.stringContaining('не удаляем их автоматически'),
+    );
+    expect(screen.getByRole('radio', { name: 'Задача' }).props.accessibilityState.selected).toBe(true);
+    expect(screen.getByDisplayValue('  Черновик части  ')).toBeTruthy();
+  });
+
+  it('allows a block kind change when the default task color is untouched', () => {
+    mockParams = { selectedDateKey: '2026-08-19', prefillTitle: 'Пауза' };
+    renderTaskForm();
+    fireEvent.press(screen.getByRole('radio', { name: 'Отдых' }));
+
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(screen.getByRole('radio', { name: 'Отдых' }).props.accessibilityState.selected).toBe(true);
+  });
+
+  it('edits REST to BUFFER while preserving an untouched exact instant', async () => {
+    const exact = '2026-08-19T11:32:27.456Z';
+    mockParams = {
+      selectedDateKey: '2026-08-19',
+      task: JSON.stringify({
+        id: 'rest', title: 'Пауза', kind: 'REST', startTime: exact,
+        durationMinutes: 30, color: '#6B5BFC', recurrenceRule: null, subTasks: [],
+      }),
+    };
+    renderTaskForm();
+    fireEvent.press(screen.getByRole('radio', { name: 'Буфер' }));
+    fireEvent.press(screen.getByText('Сохранить'));
+    await waitFor(() => expect(mockUpdateTask).toHaveBeenCalledWith({
+      id: 'rest',
+      dto: { title: 'Пауза', kind: 'BUFFER', startTime: exact, durationMinutes: 30 },
+    }));
+  });
+
+  it('disables TASK to block conversion while editing', () => {
+    mockParams = {
+      selectedDateKey: '2026-08-19',
+      task: JSON.stringify({
+        id: 'task', title: 'Работа', kind: 'TASK', startTime: null,
+        durationMinutes: null, color: '#6B5BFC', recurrenceRule: null, subTasks: [],
+      }),
+    };
+    renderTaskForm();
+    expect(screen.getByRole('radio', { name: 'Отдых' }).props.accessibilityState.disabled).toBe(true);
+    expect(screen.getByRole('radio', { name: 'Буфер' }).props.accessibilityState.disabled).toBe(true);
+  });
+});

@@ -101,7 +101,7 @@ const scheduledTask = {
 };
 
 function openGlobalCapture() {
-  fireEvent.press(screen.getByLabelText("Добавить задачу"));
+  fireEvent.press(screen.getByLabelText("Добавить запись: задачу, мысль, отдых или буфер"));
 }
 
 function renderWithTimeline() {
@@ -156,6 +156,18 @@ describe('Today quick capture destinations', () => {
     expect(screen.queryByText('Таймлайн свободен')).toBeNull();
   });
 
+  it('keeps a block-only day non-empty and passes the block to Timeline', () => {
+    (useTasksForDate as jest.Mock).mockReturnValue({
+      data: [{ ...scheduledTask, id: 'rest', title: 'Тихая пауза', kind: 'REST' }],
+      isLoading: false,
+      isError: false,
+    });
+    render(<GlobalCaptureProvider><TodayScreen /></GlobalCaptureProvider>);
+    expect(screen.getByText('Тихая пауза')).toBeTruthy();
+    expect(screen.queryByText('Начни свой день')).toBeNull();
+    expect(screen.queryByText('Нет задач со временем')).toBeNull();
+  });
+
   it.each([
     { state: { data: [], isLoading: true, isError: false }, label: /четверг, 13 августа 2026/ },
     { state: { data: [], isLoading: false, isError: true }, label: /четверг, 13 августа 2026/ },
@@ -191,7 +203,7 @@ describe('Today quick capture destinations', () => {
     openGlobalCapture();
 
     expect(screen.getByText('Сохранить в Мысли')).toBeTruthy();
-    fireEvent.changeText(screen.getByLabelText('Название задачи'), '  Купить молоко  ');
+    fireEvent.changeText(screen.getByLabelText('Название записи'), '  Купить молоко  ');
     fireEvent.press(screen.getByText('Сохранить в Мысли'));
 
     await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledWith({
@@ -206,7 +218,7 @@ describe('Today quick capture destinations', () => {
     renderWithTimeline();
 
     expect(screen.getByText('Выбранное время: 14:30')).toBeTruthy();
-    fireEvent.changeText(screen.getByLabelText('Название задачи'), '  Встреча  ');
+    fireEvent.changeText(screen.getByLabelText('Название записи'), '  Встреча  ');
     fireEvent.press(screen.getByText('Добавить на 14:30'));
 
     await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledWith({
@@ -216,11 +228,11 @@ describe('Today quick capture destinations', () => {
     }));
   });
 
-  it('uses H12 consistently while preserving the exact selected instant', async () => { mockTimeFormat='H12'; renderWithTimeline(); const selected=new Date(2026,7,12,14,30); expect(screen.getByText('Выбранное время: 2:30 PM')).toBeTruthy(); fireEvent.changeText(screen.getByLabelText('Название задачи'),'Встреча'); const action=screen.getByLabelText('Добавить задачу на 2:30 PM'); expect(screen.getByText('Добавить на 2:30 PM')).toBeTruthy(); fireEvent.press(action); await waitFor(()=>expect(mockMutateAsync).toHaveBeenCalledWith(expect.objectContaining({startTime:selected.toISOString()}))); });
+  it('uses H12 consistently while preserving the exact selected instant', async () => { mockTimeFormat='H12'; renderWithTimeline(); const selected=new Date(2026,7,12,14,30); expect(screen.getByText('Выбранное время: 2:30 PM')).toBeTruthy(); fireEvent.changeText(screen.getByLabelText('Название записи'),'Встреча'); const action=screen.getByLabelText('Добавить задачу на 2:30 PM'); expect(screen.getByText('Добавить на 2:30 PM')).toBeTruthy(); fireEvent.press(action); await waitFor(()=>expect(mockMutateAsync).toHaveBeenCalledWith(expect.objectContaining({startTime:selected.toISOString()}))); });
 
   it('can save timeline capture to Thoughts without a start time', async () => {
     renderWithTimeline();
-    fireEvent.changeText(screen.getByLabelText('Название задачи'), '  Идея  ');
+    fireEvent.changeText(screen.getByLabelText('Название записи'), '  Идея  ');
     fireEvent.press(screen.getByText('В Мысли'));
 
     await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledWith({
@@ -233,7 +245,7 @@ describe('Today quick capture destinations', () => {
   it('preserves a numeric duration for timed and Thoughts destinations', async () => {
     renderWithTimeline();
     fireEvent.press(screen.getByLabelText('Длительность 45 мин'));
-    fireEvent.changeText(screen.getByLabelText('Название задачи'), 'Timed');
+    fireEvent.changeText(screen.getByLabelText('Название записи'), 'Timed');
     fireEvent.press(screen.getByText('Добавить на 14:30'));
     await waitFor(() => expect(mockMutateAsync).toHaveBeenLastCalledWith(expect.objectContaining({
       startTime: expect.any(String), durationMinutes: 45,
@@ -241,7 +253,7 @@ describe('Today quick capture destinations', () => {
 
     renderWithTimeline();
     fireEvent.press(screen.getByLabelText('Длительность 90 мин'));
-    fireEvent.changeText(screen.getAllByLabelText('Название задачи').at(-1)!, 'Thought');
+    fireEvent.changeText(screen.getAllByLabelText('Название записи').at(-1)!, 'Thought');
     fireEvent.press(screen.getAllByText('В Мысли').at(-1)!);
     await waitFor(() => expect(mockMutateAsync).toHaveBeenLastCalledWith(expect.objectContaining({
       startTime: null, durationMinutes: 90,
@@ -252,7 +264,7 @@ describe('Today quick capture destinations', () => {
     render(<GlobalCaptureProvider><TodayScreen /></GlobalCaptureProvider>);
     openGlobalCapture();
     fireEvent.press(screen.getByLabelText('Длительность 120 мин'));
-    fireEvent.press(screen.getByText('Подробнее →'));
+    fireEvent.press(screen.getByLabelText('Открыть полную форму задачи'));
     expect(mockPush).toHaveBeenCalledWith(expect.objectContaining({
       params: expect.objectContaining({ prefillDurationMinutes: '120' }),
     }));
@@ -263,7 +275,7 @@ describe('Today quick capture destinations', () => {
     render(<GlobalCaptureProvider><TodayScreen /></GlobalCaptureProvider>);
     openGlobalCapture();
     fireEvent.press(screen.getByLabelText('Длительность 60 мин'));
-    fireEvent.changeText(screen.getByLabelText('Название задачи'), 'Retry me');
+    fireEvent.changeText(screen.getByLabelText('Название записи'), 'Retry me');
     fireEvent.press(screen.getByText('Сохранить в Мысли'));
     await waitFor(() => expect(mockMutateAsync).toHaveBeenCalled());
     expect(screen.getByDisplayValue('Retry me')).toBeTruthy();
@@ -273,12 +285,13 @@ describe('Today quick capture destinations', () => {
   it('preserves the trimmed title in the full-form prefill', () => {
     render(<GlobalCaptureProvider><TodayScreen /></GlobalCaptureProvider>);
     openGlobalCapture();
-    fireEvent.changeText(screen.getByLabelText('Название задачи'), '  Разобрать почту  ');
-    fireEvent.press(screen.getByText('Подробнее →'));
+    fireEvent.changeText(screen.getByLabelText('Название записи'), '  Разобрать почту  ');
+    fireEvent.press(screen.getByLabelText('Открыть полную форму задачи'));
 
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/task-form',
       params: {
+        prefillKind: 'TASK',
         prefillTitle: 'Разобрать почту',
         selectedDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
         selectedDateKey: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
@@ -288,12 +301,13 @@ describe('Today quick capture destinations', () => {
 
   it('preserves the trimmed title and selected time in full-form prefills', () => {
     renderWithTimeline();
-    fireEvent.changeText(screen.getByLabelText('Название задачи'), '  Позвонить  ');
-    fireEvent.press(screen.getByText('Подробнее →'));
+    fireEvent.changeText(screen.getByLabelText('Название записи'), '  Позвонить  ');
+    fireEvent.press(screen.getByLabelText('Открыть полную форму задачи'));
 
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/task-form',
       params: {
+        prefillKind: 'TASK',
         prefillTitle: 'Позвонить',
         prefillStartTime: new Date(2026, 7, 12, 14, 30).toISOString(),
         selectedDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
@@ -309,7 +323,7 @@ describe('Today quick capture destinations', () => {
 
     expect(submit.props.accessibilityState).toEqual(expect.objectContaining({ disabled: true, busy: false }));
     fireEvent.press(submit);
-    fireEvent(screen.getByLabelText('Название задачи'), 'submitEditing');
+    fireEvent(screen.getByLabelText('Название записи'), 'submitEditing');
     expect(mockMutateAsync).not.toHaveBeenCalled();
     fireEvent.press(screen.getByLabelText('Отменить быстрое добавление'));
   });
@@ -317,7 +331,7 @@ describe('Today quick capture destinations', () => {
   it('disables every creation destination and planning while creation is pending', () => {
     mockMutateAsync.mockReturnValueOnce(new Promise(() => undefined));
     renderWithTimeline();
-    fireEvent.changeText(screen.getByLabelText('Название задачи'), 'Задача');
+    fireEvent.changeText(screen.getByLabelText('Название записи'), 'Задача');
     fireEvent.press(screen.getByLabelText('Добавить задачу на 14:30'));
 
     const timed = screen.getByLabelText('Добавить задачу на 14:30');

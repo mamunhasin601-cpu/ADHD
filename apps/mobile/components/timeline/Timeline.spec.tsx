@@ -334,3 +334,14 @@ describe("Timeline free-window presentation", () => {
     expect(screen.queryByText(/Свободное окно/)).toBeNull();
   });
 });
+
+it('routes a REST block to editing without invoking task completion', () => {
+  const onToggle = jest.fn();
+  const onOpenTask = jest.fn();
+  const rest = { ...task('rest', 10, 0, 45), kind: 'REST' as const, title: 'Тихая пауза' };
+  render(<Timeline {...props} tasks={[rest]} onToggle={onToggle} onOpenTask={onOpenTask} />);
+
+  fireEvent.press(screen.getByText('Тихая пауза'));
+  expect(onOpenTask).toHaveBeenCalledWith(rest);
+  expect(onToggle).not.toHaveBeenCalled();
+});
