@@ -177,7 +177,7 @@ export function GlobalCaptureProvider({ children }: { children: React.ReactNode 
         style={[styles.fab, busy && styles.disabled]}
         onPress={openGlobalCapture}
         accessibilityRole="button"
-        accessibilityLabel="Добавить запись: задачу, отдых или буфер"
+        accessibilityLabel="Добавить запись: задачу, мысль, отдых или буфер"
         accessibilityState={{ disabled: busy, busy }}
         disabled={busy}
       ><Text style={styles.fabText}>＋</Text></Pressable>

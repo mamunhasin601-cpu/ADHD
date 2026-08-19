@@ -333,6 +333,43 @@ describe('TaskFormScreen rest and buffer blocks', () => {
     expect(screen.getByDisplayValue('Открыть документ')).toBeTruthy();
   });
 
+  it('retains a selected non-default task color and refuses a block kind change', () => {
+    mockParams = { selectedDateKey: '2026-08-19', prefillTitle: 'Работа' };
+    renderTaskForm();
+    fireEvent.press(screen.getByRole('radio', { name: 'Цвет #F97316' }));
+    fireEvent.press(screen.getByRole('radio', { name: 'Отдых' }));
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Сначала уберите данные задачи',
+      expect.stringContaining('не удаляем их автоматически'),
+    );
+    expect(screen.getByRole('radio', { name: 'Задача' }).props.accessibilityState.selected).toBe(true);
+    expect(screen.getByRole('radio', { name: 'Цвет #F97316' }).props.accessibilityState.selected).toBe(true);
+  });
+
+  it('retains uncommitted part text and refuses a block kind change', () => {
+    mockParams = { selectedDateKey: '2026-08-19', prefillTitle: 'Работа' };
+    renderTaskForm();
+    fireEvent.changeText(screen.getByLabelText('Новая часть задачи'), '  Черновик части  ');
+    fireEvent.press(screen.getByRole('radio', { name: 'Буфер' }));
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Сначала уберите данные задачи',
+      expect.stringContaining('не удаляем их автоматически'),
+    );
+    expect(screen.getByRole('radio', { name: 'Задача' }).props.accessibilityState.selected).toBe(true);
+    expect(screen.getByDisplayValue('  Черновик части  ')).toBeTruthy();
+  });
+
+  it('allows a block kind change when the default task color is untouched', () => {
+    mockParams = { selectedDateKey: '2026-08-19', prefillTitle: 'Пауза' };
+    renderTaskForm();
+    fireEvent.press(screen.getByRole('radio', { name: 'Отдых' }));
+
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(screen.getByRole('radio', { name: 'Отдых' }).props.accessibilityState.selected).toBe(true);
+  });
+
   it('edits REST to BUFFER while preserving an untouched exact instant', async () => {
     const exact = '2026-08-19T11:32:27.456Z';
     mockParams = {

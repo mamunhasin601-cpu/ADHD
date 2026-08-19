@@ -38,7 +38,7 @@ function TimelineOpener() {
 function renderOwner(child: React.ReactNode = <Text>tab</Text>) {
   return render(<GlobalCaptureProvider>{child}</GlobalCaptureProvider>);
 }
-function open() { fireEvent.press(screen.getByLabelText('Добавить запись: задачу, отдых или буфер')); }
+function open() { fireEvent.press(screen.getByLabelText('Добавить запись: задачу, мысль, отдых или буфер')); }
 function author(title = 'Новая мысль') {
   fireEvent.changeText(screen.getByLabelText('Название записи'), title);
   fireEvent.press(screen.getByLabelText('Сохранить задачу в Мысли'));

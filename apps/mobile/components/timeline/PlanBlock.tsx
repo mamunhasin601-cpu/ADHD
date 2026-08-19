@@ -23,6 +23,10 @@ function minuteWord(minutes: number): string {
   return 'минут';
 }
 
+function isKnownDuration(durationMinutes: number | null): durationMinutes is number {
+  return Number.isFinite(durationMinutes) && durationMinutes! > 0;
+}
+
 export function PlanBlock({
   task,
   onOpen,
@@ -37,17 +41,23 @@ export function PlanBlock({
 
   const startMinutes = getTimelineMinutesFromStart(new Date(task.startTime), profileTimezone);
   const duration = task.durationMinutes;
+  const knownDuration = isKnownDuration(duration) ? duration : null;
   const top = Math.max(0, (startMinutes / 60) * TIMELINE_CONFIG.hourHeight);
   const height = Math.max(
     TIMELINE_CONFIG.minBlockHeight,
-    duration === null ? TIMELINE_CONFIG.minBlockHeight : (duration / 60) * TIMELINE_CONFIG.hourHeight,
+    knownDuration === null
+      ? TIMELINE_CONFIG.minBlockHeight
+      : (knownDuration / 60) * TIMELINE_CONFIG.hourHeight,
   );
   const startClock = TIMELINE_CONFIG.dayStartHour * 60 + startMinutes;
-  const endClock = duration === null ? null : startClock + duration;
   const typeLabel = kind === 'REST' ? 'Отдых' : 'Буфер';
-  const accessibilityLabel = endClock === null
-    ? `${typeLabel}: ${task.title}, начало ${formatWallClock(Math.floor(startClock / 60) % 24, startClock % 60, timeFormat)}, время окончания и длительность не указаны`
-    : `${typeLabel}: ${task.title}, с ${formatWallClock(Math.floor(startClock / 60) % 24, startClock % 60, timeFormat)} до ${formatWallClock(Math.floor(endClock / 60) % 24, endClock % 60, timeFormat)}, ${duration!} ${minuteWord(duration!)}`;
+  let accessibilityLabel: string;
+  if (knownDuration === null) {
+    accessibilityLabel = `${typeLabel}: ${task.title}, начало ${formatWallClock(Math.floor(startClock / 60) % 24, startClock % 60, timeFormat)}, время окончания и длительность не указаны`;
+  } else {
+    const endClock = startClock + knownDuration;
+    accessibilityLabel = `${typeLabel}: ${task.title}, с ${formatWallClock(Math.floor(startClock / 60) % 24, startClock % 60, timeFormat)} до ${formatWallClock(Math.floor(endClock / 60) % 24, endClock % 60, timeFormat)}, ${knownDuration} ${minuteWord(knownDuration)}`;
+  }
   const columnWidthPercent = 100 / columnCount;
 
   return (

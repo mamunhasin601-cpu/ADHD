@@ -101,7 +101,7 @@ const scheduledTask = {
 };
 
 function openGlobalCapture() {
-  fireEvent.press(screen.getByLabelText("Добавить запись: задачу, отдых или буфер"));
+  fireEvent.press(screen.getByLabelText("Добавить запись: задачу, мысль, отдых или буфер"));
 }
 
 function renderWithTimeline() {

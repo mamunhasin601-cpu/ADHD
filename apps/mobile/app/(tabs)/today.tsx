@@ -128,8 +128,8 @@ export default function TodayScreen() {
           deviceDayEnd.setHours(24, 0, 0, 0);
           return deviceDayEnd;
         })();
-    return findCurrentTask(scheduledTasks, currentTime, dayEnd);
-  }, [scheduledTasks, currentTime, isToday, profileTimezone]);
+    return findCurrentTask(tasks, currentTime, dayEnd);
+  }, [tasks, currentTime, isToday, profileTimezone]);
 
   // Следующая задача: startTime > now, ближайшая
   const nextTask = useMemo(() => {

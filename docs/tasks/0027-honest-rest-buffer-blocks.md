@@ -44,6 +44,12 @@ contains task-only data, choosing a block explains that the data must be removed
 and does not discard it silently. Existing TASK ↔ block conversion controls are
 disabled; REST ↔ BUFFER remains editable.
 
+Task-owned draft data includes a first step, a selected non-default task color,
+recurrence, committed parts, and text still present in the pending part input.
+Any of those values prevents a new TASK draft from changing to REST/BUFFER and
+all entered values remain intact. The untouched default task color does not
+prevent the change.
+
 An invalid or missing `prefillKind` normalizes to `TASK`. Global Capture retains
 the quick task/Thoughts behavior and adds `Отдых` and `Буфер` entries that open
 the full form without quick creation. Title, selected duration, canonical date
@@ -56,8 +62,10 @@ York instants are not rebuilt or shifted.
 `PlanBlock` gives REST and BUFFER a quiet visual treatment distinct from
 `TaskBlock`. Pressing a block opens editing and never invokes completion. Its
 accessibility label states the type, title, start, end, and duration using the
-existing time-format preference. A defensive legacy block with an unknown end
-announces that uncertainty and remains an uncertainty barrier.
+existing time-format preference. A block end is known only when
+`Number.isFinite(durationMinutes) && durationMinutes > 0`. A defensive legacy
+block with a null, zero, negative, or otherwise invalid duration renders at the
+minimum height, announces no invented end, and remains an uncertainty barrier.
 
 Timeline overlap layout and free-window geometry receive all scheduled records,
 so REST and BUFFER occupy their stored intervals. An invalid unknown-duration
@@ -66,21 +74,30 @@ notification invitation, and the unscheduled list use only normalized `TASK`
 records. A day containing only REST/BUFFER remains non-empty and renders the
 timeline. Recovery never moves, completes, or deletes blocks.
 
+Current-work candidates are incomplete scheduled TASK records, but the complete
+dated plan determines uncertainty boundaries. An unknown-duration TASK remains
+current only until the next later scheduled plan entry starts, including REST
+or BUFFER, and is no longer current at that exact boundary. Blocks are never
+returned as current work; the next future TASK remains the next actionable
+record. A TASK with a known positive stored duration keeps its stored end even
+when a plan block overlaps it.
+
 ## Validation
 
 - Focused API task-kind, quota, recovery, recurrence, and notification coverage
   passed 4 suites and 90 tests.
 - Full API Jest passed 27 suites and 331 tests. The API production build passed
   after regenerating Prisma Client from the validated schema.
-- Focused mobile task-kind, form, capture, Today, timeline, geometry, current
-  task, and local-notification coverage passed 9 suites and 153 tests.
-- Full mobile Jest with UTC present before Node startup passed 42 suites and 541
-  tests. Mobile TypeScript, Prisma schema validation, and whitespace validation
-  passed.
-- The ordinary Windows full suite completed with 3 failed and 39 passed suites;
-  9 failed and 532 passed tests, 541 total. The failing legacy suites were
-  `components/NowCard.spec.tsx`, `tests/task-form.spec.tsx`, and
-  `components/GlobalCapture.spec.tsx`; all new Task 0027 tests passed.
+- The Task 0027 follow-up focused mobile run covered current-task, Today, task
+  form, Global Capture, PlanBlock, Timeline, and free-window geometry and passed
+  8 suites and 141 tests.
+- Full mobile Jest with UTC present before Node startup passed 42 suites and 550
+  tests. Mobile TypeScript and whitespace validation passed.
+- The earlier ordinary Windows baseline completed with 3 failed and 39 passed
+  suites; 9 failed and 532 passed tests, 541 total. It was not rerun for this
+  follow-up because its known harness cannot redefine device-local Date fields
+  after Node starts. The failing legacy suites were `components/NowCard.spec.tsx`,
+  `tests/task-form.spec.tsx`, and `components/GlobalCapture.spec.tsx`.
 - The known Windows timezone harness limitation remains visible: tests that
   mutate `process.env.TZ` after Node starts cannot redefine device-local Date
   fields. Deterministic full mobile evidence uses UTC present before Node starts.

@@ -52,8 +52,13 @@ it.each([
   }));
 });
 
-it('keeps an invalid unknown-duration block as an uncertainty presentation', () => {
-  render(<PlanBlock task={makeBlock('BUFFER', null)} onOpen={jest.fn()} timeFormat="H24" profileTimezone="Europe/Moscow" />);
-  expect(screen.getByRole('button').props.accessibilityLabel).toContain('начало 14:30, время окончания и длительность не указаны');
-  expect(screen.getByTestId('plan-block-row-buffer').props.style[1].height).toBe(TIMELINE_CONFIG.minBlockHeight);
-});
+it.each([null, 0, -15])(
+  'keeps invalid duration %p as a minimum-height uncertainty presentation',
+  (duration) => {
+    render(<PlanBlock task={makeBlock('BUFFER', duration)} onOpen={jest.fn()} timeFormat="H24" profileTimezone="Europe/Moscow" />);
+    expect(screen.getByRole('button').props.accessibilityLabel).toContain('начало 14:30, время окончания и длительность не указаны');
+    expect(screen.getByRole('button').props.accessibilityLabel).not.toContain(' до ');
+    expect(screen.getByRole('button').props.accessibilityLabel).not.toContain(`${duration} минут`);
+    expect(screen.getByTestId('plan-block-row-buffer').props.style[1].height).toBe(TIMELINE_CONFIG.minBlockHeight);
+  },
+);

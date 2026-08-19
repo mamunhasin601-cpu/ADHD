@@ -295,11 +295,15 @@ export default function TaskFormScreen() {
       );
       return;
     }
-    if (nextKind !== "TASK" && kind === "TASK" &&
-      (firstStep.trim() || recurrencePreset !== "none" || partsDraft.length > 0)) {
+    const hasTaskOwnedDraftData = firstStep.trim() ||
+      color !== COLOR_PRESETS[0] ||
+      recurrencePreset !== "none" ||
+      partsDraft.length > 0 ||
+      subtaskInput.trim();
+    if (nextKind !== "TASK" && kind === "TASK" && hasTaskOwnedDraftData) {
       Alert.alert(
         "Сначала уберите данные задачи",
-        "Первый шаг, повтор и части доступны только задаче. Мы не удаляем их автоматически.",
+        "Первый шаг, цвет, повтор и части доступны только задаче. Мы не удаляем их автоматически.",
       );
       return;
     }
@@ -611,6 +615,9 @@ export default function TaskFormScreen() {
         {COLOR_PRESETS.map((c) => (
           <Pressable
             key={c}
+            accessibilityRole="radio"
+            accessibilityLabel={`Цвет ${c}`}
+            accessibilityState={{ selected: color === c }}
             onPress={() => setColor(c)}
             style={[
               styles.colorSwatch,
