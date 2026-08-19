@@ -1,9 +1,10 @@
 import type { Task } from '@focus/shared-types';
+import { isTaskRecord } from './task-kind';
 
 /** Selects current work without inferring or persisting an unknown duration. */
 export function findCurrentTask(tasks: Task[], now: Date, dayEnd: Date): Task | null {
   const scheduled = tasks
-    .filter((task) => task.startTime && !task.completedAt)
+    .filter((task) => isTaskRecord(task) && task.startTime && !task.completedAt)
     .sort(
       (a, b) =>
         new Date(a.startTime!).getTime() - new Date(b.startTime!).getTime(),

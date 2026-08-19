@@ -49,6 +49,28 @@ describe('NotificationsService', () => {
   // ── scheduleTaskReminder ──────────────────────────────────────────────────
 
   describe('scheduleTaskReminder', () => {
+    it.each(['REST', 'BUFFER'] as const)('cancels a stale job and never schedules a %s block', async (kind) => {
+      const job = { remove: jest.fn().mockResolvedValue(undefined) };
+      queue.getJob.mockResolvedValueOnce(job);
+      await service.scheduleTaskReminder({
+        ...baseTask,
+        kind,
+        startTime: new Date('2026-07-25T10:30:00.000Z'),
+      });
+
+      expect(queue.getJob).toHaveBeenCalledWith('task-reminder-task-1');
+      expect(job.remove).toHaveBeenCalled();
+      expect(queue.add).not.toHaveBeenCalled();
+    });
+
+    it('keeps an omitted legacy kind compatible with TASK scheduling', async () => {
+      await service.scheduleTaskReminder({
+        ...baseTask,
+        startTime: new Date('2026-07-25T10:30:00.000Z'),
+      });
+      expect(queue.add).toHaveBeenCalledTimes(1);
+    });
+
     it('ставит job с корректным delay и детерминированным jobId', async () => {
       const task = { ...baseTask, startTime: new Date('2026-07-25T10:30:00.000Z') };
 

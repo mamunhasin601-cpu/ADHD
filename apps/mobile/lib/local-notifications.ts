@@ -21,6 +21,7 @@
 
 import * as Notifications from 'expo-notifications';
 import type { Task } from '@focus/shared-types';
+import { isTaskRecord } from './task-kind';
 
 /** How many days ahead to schedule local reminders on bootstrap. */
 export const LOCAL_REMINDER_HORIZON_DAYS = 7;
@@ -68,6 +69,10 @@ export async function scheduleLocalReminder(
   // notification that must be removed when remote push takes over.
   await cancelLocalReminder(task.id);
   if (!shouldContinue()) return;
+
+  // Blocks never receive task reminders; the cancellation above removes any
+  // stale Focus identifier left by an older client.
+  if (!isTaskRecord(task)) return;
 
   // Remote-primary channel policy: after cleanup, skip scheduling new local notification.
   if (!localOnly) return;
@@ -153,7 +158,7 @@ export async function reconcileLocalReminders(
   const now = Date.now();
 
   const future = tasks.filter((t) => {
-    if (!t.startTime || t.completedAt) return false;
+    if (!isTaskRecord(t) || !t.startTime || t.completedAt) return false;
     const ms = new Date(t.startTime).getTime();
     return ms > now + MIN_LEAD_MS && ms <= horizon;
   });

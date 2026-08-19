@@ -56,6 +56,7 @@ export class TaskRecoveryService {
     const tasks = await this.prisma.task.findMany({
       where: {
         userId,
+        kind: 'TASK',
         parentTaskId: null,        // только root tasks (D-1.2)
         completedAt: null,         // только незавершённые (D-1.3)
         isRecurring: false,        // исключаем recurring (D-1.4, D-5)
@@ -144,6 +145,7 @@ const localDayStart = this.getLocalDayStart(userTimezone, referenceInstant);
       select:{
         id: true,
         userId: true,
+        kind: true,
         completedAt: true,
         startTime: true,
         isRecurring: true,
@@ -179,6 +181,7 @@ const localDayStart = this.getLocalDayStart(userTimezone, referenceInstant);
           where: {
             id: item.taskId,
             userId,
+            kind: 'TASK',
             completedAt: null,
             parentTaskId: null,
             isRecurring: false,

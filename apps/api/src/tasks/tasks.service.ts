@@ -7,6 +7,7 @@ import { TaskPartWriteDto } from './dto/task-part-write.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { GetTasksQueryDto } from './dto/get-tasks-query.dto';
 import type { Prisma, Task } from '@prisma/client';
+import type { TaskKind } from '@focus/shared-types';
 import { createHash, randomUUID } from 'crypto';
 import { formatInTimeZone, fromZonedTime, toDate } from 'date-fns-tz';
 
@@ -24,6 +25,8 @@ export class TasksService {
   ) {}
 
   async create(userId: string, dto: CreateTaskDto): Promise<Task & { newOccurrenceIds?: string[] }> {
+    const kind = dto.kind ?? 'TASK';
+    this.assertCreateKind(dto, kind);
     const hasParts = dto.subTasks !== undefined;
     if (hasParts) {
       this.validatePartDraft(dto.subTasks, 'create');
@@ -33,7 +36,7 @@ export class TasksService {
     this.assertRecurrence(dto.isRecurring, dto.recurrenceRule, dto.startTime, dto.parentTaskId);
     if (dto.parentTaskId) {
       const parent = await this.findOne(userId, dto.parentTaskId);
-      if (parent.parentTaskId || parent.isRecurring || parent.seriesId) {
+      if (this.taskKind(parent) !== 'TASK' || parent.parentTaskId || parent.isRecurring || parent.seriesId) {
         throw new BadRequestException('Части доступны только для обычной корневой задачи');
       }
       this.assertLegacyPartWrite(dto);
@@ -44,6 +47,7 @@ export class TasksService {
     const data: Prisma.TaskUncheckedCreateInput = {
         userId,
         title: dto.title,
+        kind,
         firstStep: dto.firstStep ?? null,
         startTime: start,
         durationMinutes: dto.durationMinutes ?? null,
@@ -63,7 +67,7 @@ export class TasksService {
     }
 
     // Legacy clients keep the original behavior when no request identity is supplied.
-    if (!dto.parentTaskId) await this.planService.enforceTaskLimit(userId);
+    if (!dto.parentTaskId && kind === 'TASK') await this.planService.enforceTaskLimit(userId);
 
     if (!dto.isRecurring && hasParts) {
       const task = await this.prisma.$transaction(async (tx) => {
@@ -129,7 +133,9 @@ export class TasksService {
       const created = await this.prisma.$transaction(async (tx) => {
         const requestStore = tx.taskCreateRequest;
         await requestStore.create({ data: { userId, requestId, payloadHash } });
-        await this.planService.enforceTaskLimit(userId, tx);
+        if ((data.kind ?? 'TASK') === 'TASK') {
+          await this.planService.enforceTaskLimit(userId, tx);
+        }
 
         if (dto.isRecurring) {
           const { today, target } = this.horizon(timezone!);
@@ -221,6 +227,7 @@ export class TasksService {
   ): string {
     const normalized = {
       title: data.title,
+      kind: data.kind ?? 'TASK',
       firstStep: data.firstStep ?? null,
       startTime: data.startTime instanceof Date ? data.startTime.toISOString() : data.startTime ?? null,
       durationMinutes: data.durationMinutes ?? null,
@@ -253,6 +260,7 @@ export class TasksService {
       // Inbox-режим: только задачи без startTime (unscheduled).
       // Параметр date и scheduledFrom/To игнорируются — Inbox не привязан к дню.
       where['startTime'] = null;
+      where['kind'] = 'TASK';
     } else if (query.scheduledFrom) {
       // Bounded range query (bootstrap reconciliation, ADR-009).
       // Maximum server-enforced horizon: 30 days from scheduledFrom.
@@ -267,6 +275,7 @@ export class TasksService {
         to = new Date(from.getTime() + maxHorizonMs);
       }
       where['startTime'] = { gte: from, lte: to };
+      where['kind'] = 'TASK';
     } else if (query.date) {
       // Фильтр по дате: задачи, которые начинаются в указанный день
       // Получаем timezone пользователя
@@ -293,6 +302,7 @@ export class TasksService {
 
     if (query.incomplete) {
       where['completedAt'] = null;
+      where['kind'] = 'TASK';
     }
 
     const tasks = await this.prisma.task.findMany({
@@ -332,6 +342,26 @@ export class TasksService {
     const hasParts = dto.subTasks !== undefined;
     if (hasParts) this.validatePartDraft(dto.subTasks, 'update');
     const selected = await this.findOne(userId, taskId);
+    const selectedKind = this.taskKind(selected);
+    const nextKind = dto.kind ?? selectedKind;
+    if (selectedKind === 'TASK' ? nextKind !== 'TASK' : nextKind === 'TASK') {
+      throw new BadRequestException('Преобразование задачи в блок или блока в задачу пока недоступно');
+    }
+    if (selectedKind !== 'TASK') {
+      this.assertBlockUpdate(selected, dto, nextKind);
+      const block = await this.prisma.task.update({
+        where: { id: selected.id },
+        data: {
+          ...(dto.title !== undefined && { title: dto.title }),
+          ...(dto.kind !== undefined && { kind: dto.kind }),
+          ...(dto.startTime !== undefined && { startTime: new Date(dto.startTime!) }),
+          ...(dto.durationMinutes !== undefined && { durationMinutes: dto.durationMinutes }),
+        },
+        include: { subTasks: true },
+      });
+      await this.syncReminder(block);
+      return block;
+    }
     const series = selected.seriesId ? await this.findOne(userId, selected.seriesId) : selected;
 
     if (hasParts && (series.isRecurring || !!selected.seriesId || !!selected.parentTaskId || dto.isRecurring === true)) {
@@ -510,6 +540,7 @@ export class TasksService {
   /** Atomically records the first explicit start; concurrent retries cannot replace it. */
   async start(userId: string, taskId: string): Promise<Task> {
     const existing = await this.findOne(userId, taskId);
+    if (this.taskKind(existing) !== 'TASK') throw new BadRequestException('Блок отдыха или буфера нельзя начать как задачу');
     if (existing.isRecurring) throw new BadRequestException('Начните конкретную задачу повтора');
     if (existing.parentTaskId) throw new BadRequestException('Часть задачи нельзя запускать отдельно');
     if (existing.completedAt) {
@@ -531,6 +562,7 @@ export class TasksService {
   /** Отметить задачу как выполненную / невыполненную */
   async toggleComplete(userId: string, taskId: string): Promise<Task> {
     const task = await this.findOne(userId, taskId);
+    if (this.taskKind(task) !== 'TASK') throw new BadRequestException('Блок отдыха или буфера нельзя завершить как задачу');
     if (task.isRecurring) throw new BadRequestException('Завершите конкретную задачу повтора');
 
     const updated = await this.prisma.task.update({
@@ -559,7 +591,7 @@ export class TasksService {
       const raw = part as TaskPartWriteDto & Record<string, unknown>;
       if ('userId' in raw || 'parentTaskId' in raw || 'startTime' in raw || 'durationMinutes' in raw ||
         'isRecurring' in raw || 'recurrenceRule' in raw || 'reminder' in raw || 'createdAt' in raw ||
-        'updatedAt' in raw || 'completedAt' in raw || 'firstStep' in raw || 'subTasks' in raw || 'seriesId' in raw) {
+        'updatedAt' in raw || 'completedAt' in raw || 'firstStep' in raw || 'subTasks' in raw || 'seriesId' in raw || 'kind' in raw) {
         throw new BadRequestException('Часть содержит недопустимые поля');
       }
       if (part.id) {
@@ -585,6 +617,7 @@ export class TasksService {
       userId,
       parentTaskId,
       title: part.title.trim(),
+      kind: 'TASK',
       completedAt: part.completed ? new Date() : null,
       startTime: null,
       durationMinutes: null,
@@ -611,7 +644,7 @@ export class TasksService {
    */
   private async syncReminder(task: Task): Promise<void> {
     try {
-      if (task.completedAt || task.startedAt || !task.startTime) {
+      if (this.taskKind(task) !== 'TASK' || task.completedAt || task.startedAt || !task.startTime) {
         await this.notifications.cancelTaskReminder(task.id);
       } else {
         await this.notifications.scheduleTaskReminder(task);
@@ -632,6 +665,7 @@ export class TasksService {
   /** Maintains an authoritative rolling horizon based on profile-local today. */
   async extendSeries(userId: string, seriesId: string, deviceTimezone?: string): Promise<number> {
     const series = await this.findOne(userId, seriesId);
+    if (this.taskKind(series) !== 'TASK') throw new BadRequestException('Блоки не поддерживают повтор');
     if (!series.isRecurring || series.recurrenceEndedAt || !series.startTime || !series.recurrenceRule) return 0;
     if (!SUPPORTED_RULES.includes(series.recurrenceRule as typeof SUPPORTED_RULES[number])) throw new BadRequestException('Неподдерживаемое правило повторения');
     const timezone = await this.resolveSeriesTimezone(series, userId, deviceTimezone);
@@ -650,7 +684,7 @@ export class TasksService {
   }
 
   async extendAllSeries(userId: string, deviceTimezone?: string): Promise<number> {
-    const rows = await this.prisma.task.findMany({ where: { userId, isRecurring: true, recurrenceEndedAt: null, seriesId: null }, select: { id: true } });
+    const rows = await this.prisma.task.findMany({ where: { userId, kind: 'TASK', isRecurring: true, recurrenceEndedAt: null, seriesId: null }, select: { id: true } });
     let count = 0; for (const { id } of rows) count += await this.extendSeries(userId, id, deviceTimezone); return count;
   }
 
@@ -658,7 +692,7 @@ export class TasksService {
   async renewRecurrenceHorizons(batchSize = 100): Promise<number> {
     let cursor: string | undefined; let total = 0;
     do {
-      const rows = await this.prisma.task.findMany({ where: { isRecurring: true, recurrenceEndedAt: null, seriesId: null },
+      const rows = await this.prisma.task.findMany({ where: { kind: 'TASK', isRecurring: true, recurrenceEndedAt: null, seriesId: null },
         select: { id: true, userId: true }, orderBy: { id: 'asc' }, take: batchSize,
         ...(cursor && { cursor: { id: cursor }, skip: 1 }) });
       for (const row of rows) {
@@ -680,7 +714,7 @@ export class TasksService {
     for (let key = first; key <= target; key = this.addDateKey(key, 1)) {
       const weekday = new Date(`${key}T12:00:00Z`).getUTCDay();
       if (series.recurrenceRule === 'FREQ=DAILY' || (weekday >= 1 && weekday <= 5)) candidates.push({ id: randomUUID(), userId: series.userId,
-        title: series.title, firstStep: series.firstStep, durationMinutes: series.durationMinutes, color: series.color,
+        title: series.title, kind: 'TASK', firstStep: series.firstStep, durationMinutes: series.durationMinutes, color: series.color,
         startTime: fromZonedTime(`${key}T${wall}`, timezone), seriesId: series.id, recurrenceDateKey: key, isRecurring: false, recurrenceRule: series.recurrenceRule });
     }
     if (!candidates.length) return [];
@@ -714,6 +748,41 @@ export class TasksService {
       try { new Intl.DateTimeFormat('en', { timeZone: timezone }).format(); return timezone; } catch { /* explicit next candidate */ }
     }
     throw new BadRequestException('Нужен допустимый timezone профиля или устройства');
+  }
+
+  private taskKind(task: { kind?: TaskKind | null }): TaskKind {
+    return task.kind ?? 'TASK';
+  }
+
+  private assertCreateKind(dto: CreateTaskDto, kind: TaskKind): void {
+    if (kind === 'TASK') return;
+    if (kind !== 'REST' && kind !== 'BUFFER') {
+      throw new BadRequestException('Неподдерживаемый тип записи');
+    }
+    if (!dto.startTime || !Number.isInteger(dto.durationMinutes) || (dto.durationMinutes ?? 0) <= 0) {
+      throw new BadRequestException('Блоку отдыха или буфера нужны время и положительная длительность');
+    }
+    if (dto.parentTaskId || dto.isRecurring || dto.recurrenceRule || dto.firstStep ||
+      dto.subTasks !== undefined || dto.editRecurrenceAnchor || dto.editRecurrencePattern) {
+      throw new BadRequestException('Блок отдыха или буфера не может иметь повтор, первый шаг, части или родителя');
+    }
+  }
+
+  private assertBlockUpdate(selected: Task, dto: UpdateTaskDto, nextKind: TaskKind): void {
+    if (nextKind !== 'REST' && nextKind !== 'BUFFER') {
+      throw new BadRequestException('Блок можно изменить только между отдыхом и буфером');
+    }
+    if (dto.firstStep !== undefined || dto.color !== undefined || dto.isRecurring !== undefined ||
+      dto.recurrenceRule !== undefined || dto.parentTaskId !== undefined || dto.subTasks !== undefined ||
+      dto.completedAt !== undefined || dto.editRecurrenceAnchor !== undefined ||
+      dto.editRecurrencePattern !== undefined) {
+      throw new BadRequestException('Для блока можно изменить только название, тип, время и длительность');
+    }
+    const nextStart = dto.startTime === undefined ? selected.startTime : dto.startTime ? new Date(dto.startTime) : null;
+    const nextDuration = dto.durationMinutes === undefined ? selected.durationMinutes : dto.durationMinutes;
+    if (!nextStart || Number.isNaN(nextStart.getTime()) || !Number.isInteger(nextDuration) || (nextDuration ?? 0) <= 0) {
+      throw new BadRequestException('Блоку отдыха или буфера нужны время и положительная длительность');
+    }
   }
 
 }

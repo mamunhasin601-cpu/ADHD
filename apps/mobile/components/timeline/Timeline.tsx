@@ -18,6 +18,8 @@ import { calendarDayWallTimeToInstant, toCanonicalDateParam } from "../../lib/ti
 import { getVisibleTimelineTop } from "../../lib/timeline-geometry";
 import { computeTimelineFreeWindows } from "../../lib/timeline-free-windows";
 import { formatTimelineFreeWindowAccessibilityLabel } from "../../lib/timeline-free-window-label";
+import { PlanBlock } from "./PlanBlock";
+import { taskKind } from "../../lib/task-kind";
 
 interface Props {
   tasks: Task[];
@@ -161,6 +163,19 @@ export function Timeline({
 
         {tasks.map((task) => {
           const taskLayout = layout.get(task.id);
+          if (taskKind(task) !== "TASK") {
+            return (
+              <PlanBlock
+                key={task.id}
+                task={task}
+                onOpen={onOpenTask}
+                timeFormat={timeFormat}
+                columnIndex={taskLayout?.columnIndex}
+                columnCount={taskLayout?.columnCount}
+                profileTimezone={profileTimezone}
+              />
+            );
+          }
           return (
             <TaskBlock
               key={task.id}

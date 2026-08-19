@@ -35,6 +35,7 @@ import { NotificationInvitation } from '../../components/NotificationInvitation'
 import { WeekStrip } from '../../components/WeekStrip';
 import { useNotificationLifecycle } from '../../lib/notification-lifecycle';
 import { useGlobalCapture } from '../../components/GlobalCapture';
+import { isTaskRecord } from '../../lib/task-kind';
 
 /**
  * Экран "Сегодня" — главный экран таймлайна дня.
@@ -105,12 +106,15 @@ export default function TodayScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  const scheduledTasks = tasks.filter((task: Task) => task.startTime && !task.completedAt);
-  const unscheduledTasks = tasks.filter((task: Task) => !task.startTime);
+  const taskRecords = tasks.filter(isTaskRecord);
+  const scheduledTasks = taskRecords.filter((task: Task) => task.startTime && !task.completedAt);
+  const unscheduledTasks = taskRecords.filter((task: Task) => !task.startTime);
+  const timelineEntries = tasks.filter((task: Task) => task.startTime);
 
   // Прогресс дня: завершенные / все задачи
-  const completedCount = tasks.filter((task: Task) => task.completedAt).length;
-  const totalCount = tasks.length;
+  const completedCount = taskRecords.filter((task: Task) => task.completedAt).length;
+  const totalCount = taskRecords.length;
+  const hasPlanEntries = tasks.length > 0;
 
   // Known durations use their real end. Unknown durations remain current until
   // the next scheduled task (or the end of the profile-local Today view).
@@ -236,7 +240,7 @@ export default function TodayScreen() {
         </View>
       )}
 
-      {!isLoading && !isError && totalCount === 0 && (
+      {!isLoading && !isError && !hasPlanEntries && (
         <EmptyState
           emoji="🌅"
           title={isToday ? "Начни свой день" : "На этот день нет задач"}
@@ -265,7 +269,7 @@ export default function TodayScreen() {
         />
       )}
 
-      {!isLoading && !isError && totalCount > 0 && (
+      {!isLoading && !isError && hasPlanEntries && (
         <>
           {isToday && (currentTask || nextTask) && (
             <><NowCard
@@ -327,7 +331,7 @@ export default function TodayScreen() {
               ))}
             </View>
           )}
-          {scheduledTasks.length === 0 ? (
+          {timelineEntries.length === 0 ? (
             <EmptyState
               emoji="📅"
               title="Нет задач со временем"

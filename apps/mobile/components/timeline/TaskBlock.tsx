@@ -2,6 +2,7 @@ import { View, Pressable, Text, StyleSheet } from 'react-native';
 import type { Task } from '@focus/shared-types';
 import { TIMELINE_CONFIG } from '../../lib/timeline-config';
 import { getTimelineMinutesFromStart } from '../../lib/timeline-geometry';
+import { taskKind } from '../../lib/task-kind';
 
 interface Props {
   task: Task;
@@ -23,7 +24,7 @@ interface Props {
  * без ручных измерений ширины экрана.
  */
 export function TaskBlock({ task, onToggle, onOpen, columnIndex = 0, columnCount = 1, isCurrent = false, profileTimezone }: Props) {
-  if (!task.startTime) return null;
+  if (!task.startTime || taskKind(task) !== 'TASK') return null;
 
   const startMinutes = getTimelineMinutesFromStart(new Date(task.startTime), profileTimezone);
   const top = Math.max(0, (startMinutes / 60) * TIMELINE_CONFIG.hourHeight);

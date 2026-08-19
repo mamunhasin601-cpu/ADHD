@@ -14,3 +14,10 @@ it('keeps unknown duration current until the next task rather than one hour', ()
   expect(findCurrentTask([unknown, next], new Date('2026-08-12T11:30:00Z'), new Date('2026-08-13T00:00:00Z'))).toBe(unknown);
   expect(findCurrentTask([unknown, next], new Date('2026-08-12T12:00:00Z'), new Date('2026-08-13T00:00:00Z'))).toBe(next);
 });
+
+it('ignores rest and buffer blocks for current work selection', () => {
+  const rest = { ...task('rest', '2026-08-12T09:00:00Z', 180), kind: 'REST' as const };
+  const work = task('work', '2026-08-12T10:00:00Z', 30);
+  expect(findCurrentTask([rest, work], new Date('2026-08-12T09:30:00Z'), new Date('2026-08-13T00:00:00Z'))).toBeNull();
+  expect(findCurrentTask([rest, work], new Date('2026-08-12T10:15:00Z'), new Date('2026-08-13T00:00:00Z'))).toBe(work);
+});

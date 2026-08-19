@@ -38,13 +38,13 @@ function TimelineOpener() {
 function renderOwner(child: React.ReactNode = <Text>tab</Text>) {
   return render(<GlobalCaptureProvider>{child}</GlobalCaptureProvider>);
 }
-function open() { fireEvent.press(screen.getByLabelText('Добавить задачу')); }
+function open() { fireEvent.press(screen.getByLabelText('Добавить запись: задачу, отдых или буфер')); }
 function author(title = 'Новая мысль') {
-  fireEvent.changeText(screen.getByLabelText('Название задачи'), title);
+  fireEvent.changeText(screen.getByLabelText('Название записи'), title);
   fireEvent.press(screen.getByLabelText('Сохранить задачу в Мысли'));
 }
 function authorTimed(title = 'Время') {
-  fireEvent.changeText(screen.getByLabelText('Название задачи'), title);
+  fireEvent.changeText(screen.getByLabelText('Название записи'), title);
   fireEvent.press(screen.getByLabelText('Добавить задачу на 11:30'));
 }
 function deferred<T = unknown>() {
@@ -96,7 +96,7 @@ describe('GlobalCaptureProvider', () => {
     const create = deferred();
     mockMutateAsync.mockReturnValue(create.promise);
     renderOwner(); open();
-    fireEvent.changeText(screen.getByLabelText('Название задачи'), '  Купить чай  ');
+    fireEvent.changeText(screen.getByLabelText('Название записи'), '  Купить чай  ');
     fireEvent.press(screen.getByLabelText('Длительность 45 мин'));
     const submit = screen.getByLabelText('Сохранить задачу в Мысли');
     fireEvent.press(submit); fireEvent.press(submit);
@@ -139,7 +139,7 @@ describe('GlobalCaptureProvider', () => {
     const view = renderOwner(); open(); author('Старое');
     mockPathname = '/focus';
     view.rerender(<GlobalCaptureProvider><Text>focus</Text></GlobalCaptureProvider>);
-    open(); fireEvent.changeText(screen.getByLabelText('Название задачи'), 'Новое');
+    open(); fireEvent.changeText(screen.getByLabelText('Название записи'), 'Новое');
     await act(async () => first.resolve({ id: 'old' }));
     expect(mockRefetchQueries).not.toHaveBeenCalled();
     expect(screen.getByDisplayValue('Новое')).toBeTruthy();
@@ -217,5 +217,28 @@ describe('GlobalCaptureProvider', () => {
     mockMutateAsync.mockRejectedValueOnce(freeTierError);
     author('Лимит');
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/paywall'));
+  });
+
+  it.each([
+    ['Отдых', 'отдыха', 'REST'],
+    ['Буфер', 'буфера', 'BUFFER'],
+  ])('opens %s in the full form without quick creation and preserves timeline input', (label, labelGenitive, kind) => {
+    renderOwner(<TimelineOpener />);
+    fireEvent.press(screen.getByLabelText('Открыть слот'));
+    fireEvent.changeText(screen.getByLabelText('Название записи'), '  Переход  ');
+    fireEvent.press(screen.getByLabelText('Длительность 45 мин'));
+    fireEvent.press(screen.getByLabelText(`Открыть полную форму ${labelGenitive}`));
+
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/task-form',
+      params: expect.objectContaining({
+        prefillKind: kind,
+        prefillTitle: 'Переход',
+        prefillStartTime: '2026-08-15T11:30:00.000Z',
+        prefillDurationMinutes: '45',
+        selectedDateKey: '2026-08-15',
+      }),
+    });
   });
 });
