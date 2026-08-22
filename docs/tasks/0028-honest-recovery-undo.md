@@ -22,7 +22,11 @@ one transaction. Ownership is checked before revealing state. An expired unused
 identity returns `RECOVERY_UNDO_EXPIRED`; a task whose timestamp or `updatedAt`
 changed returns `RECOVERY_UNDO_STALE` and rolls back the whole restore; replay of
 a consumed identity returns `already-undone` without another write. The claim is
-inside the restore transaction, making rapid duplicate requests safe.
+inside the restore transaction, making rapid duplicate requests safe. A replay
+does not write task state again: it reads the tasks' current authoritative
+values, reconciles reminders again, and reports that attempt's real `ok` or
+`partial` result. Thus a lost first response remains recoverable without hiding
+reminder failure or overwriting a task edited after the first Undo.
 
 Only Recovery-eligible `TASK` roots are snapshotted, so unselected tasks and
 `REST`/`BUFFER` records never enter undo. The narrow update changes only
@@ -41,6 +45,11 @@ owner, auth `sessionGeneration`, and monotonically increasing operation
 identity. Busy state and operation identity prevent duplicate taps; a newer
 operation supersedes an older notice. Success, expired, stale, partial, and
 generic failure use calm accessible live-region copy.
+
+React 18 development effect replay explicitly reacquires mounted ownership.
+Any owner-id or `sessionGeneration` replacement invalidates pending operations,
+clears Undo, busy, error, and partial state, and prevents stale continuations
+from touching replacement-session UI or caches.
 
 ## Validation
 

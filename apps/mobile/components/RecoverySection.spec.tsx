@@ -17,6 +17,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RecoverySection } from './RecoverySection';
 import { apiClient } from '../lib/api-client';
 import { getLocalDateString, toCanonicalDateParam } from '../lib/timezone';
+import { useAuthStore } from '../stores/auth.store';
 
 // ── Boundary mocks ───────────────────────────────────────────────────────────
 
@@ -93,6 +94,7 @@ function renderSection(props?: {
   profileTimezone?: string | null;
   selectedDate?: Date;
   onTimezoneInvalid?: () => void;
+  strictMode?: boolean;
 }) {
   queryClient = new QueryClient({
     defaultOptions: {
@@ -108,7 +110,7 @@ function renderSection(props?: {
   });
   invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
-  const utils = render(
+  const section = (
     <QueryClientProvider client={queryClient}>
       <RecoverySection
         selectedDate={props?.selectedDate ?? new Date()}
@@ -117,8 +119,9 @@ function renderSection(props?: {
         profileTimezone={props && 'profileTimezone' in props ? props.profileTimezone : TZ}
         onTimezoneInvalid={props?.onTimezoneInvalid}
       />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const utils = render(props?.strictMode ? <React.StrictMode>{section}</React.StrictMode> : section);
   unmountTree = utils.unmount;
   return utils;
 }
@@ -148,9 +151,12 @@ function selectForInbox(taskId: string) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockGet.mockReset();
+  mockPost.mockReset();
   capturedDateOnChange = null;
   capturedTimeOnChange = null;
   mockGet.mockResolvedValue(recoveryResponse([task1, task2]));
+  useAuthStore.setState({ user: { ...task1, id: 'user-a' } as any, sessionGeneration: 1 });
 });
 
 afterEach(async () => {
@@ -222,6 +228,18 @@ describe('RecoverySection — open and cancel', () => {
 });
 
 describe('RecoverySection — ok response', () => {
+  it('remains owned after StrictMode effect replay and can execute Undo', async () => {
+    mockPost
+      .mockResolvedValueOnce({ data: { updatedCount: 1, taskUpdateStatus: 'ok', reminderSyncStatus: 'ok', undoId: 'strict-undo', undoExpiresAt: new Date(Date.now() + 600000).toISOString() } })
+      .mockResolvedValueOnce({ data: { restoredCount: 1, taskRestoreStatus: 'ok', reminderSyncStatus: 'ok', tasks: [{ id: task1.id, startTime: task1.startTime }] } });
+    renderSection({ strictMode: true });
+    fireEvent.press(await screen.findByTestId('recovery-banner'));
+    selectForInbox(task1.id);
+    fireEvent.press(screen.getByTestId('confirm-btn'));
+    fireEvent.press(await screen.findByTestId('recovery-undo-button'));
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/tasks/recovery/undo', { undoId: 'strict-undo' }));
+  });
+
   it('keeps an accessible Undo outside the remounted banner and submits once', async () => {
     mockPost
       .mockResolvedValueOnce({ data: { updatedCount: 1, taskUpdateStatus: 'ok', reminderSyncStatus: 'ok', undoId: 'undo-1', undoExpiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString() } })
@@ -340,6 +358,66 @@ describe('RecoverySection — ok response', () => {
 
     const keys = invalidateSpy.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey));
     expect(keys).not.toContain(JSON.stringify(['tasks', 'inbox']));
+  });
+});
+
+describe('RecoverySection — authenticated replacement', () => {
+  it('removes A notice and prevents B from submitting A undo identity', async () => {
+    mockPost.mockResolvedValue({ data: { updatedCount: 1, taskUpdateStatus: 'ok', reminderSyncStatus: 'ok', undoId: 'undo-a', undoExpiresAt: new Date(Date.now() + 600000).toISOString() } });
+    renderSection();
+    fireEvent.press(await screen.findByTestId('recovery-banner'));
+    selectForInbox(task1.id);
+    fireEvent.press(screen.getByTestId('confirm-btn'));
+    expect(await screen.findByTestId('recovery-undo-button')).toBeTruthy();
+    act(() => useAuthStore.setState({ user: { ...task1, id: 'user-b' } as any, sessionGeneration: 3 }));
+    await waitFor(() => expect(screen.queryByTestId('recovery-undo-confirmation')).toBeNull());
+    expect(mockPost.mock.calls.filter(([url]) => url === '/tasks/recovery/undo')).toHaveLength(0);
+  });
+
+  it.each(['success', 'error'])('stale Apply %s cannot affect B UI or caches', async (outcome) => {
+    let resolve!: (value: unknown) => void;
+    let reject!: (error: unknown) => void;
+    mockPost.mockImplementationOnce(() => new Promise((res, rej) => { resolve = res; reject = rej; }));
+    renderSection();
+    fireEvent.press(await screen.findByTestId('recovery-banner'));
+    selectForInbox(task1.id);
+    fireEvent.press(screen.getByTestId('confirm-btn'));
+    await waitFor(() => expect(mockPost).toHaveBeenCalled());
+    invalidateSpy.mockClear();
+    act(() => useAuthStore.setState({ user: { ...task1, id: 'user-b' } as any, sessionGeneration: 4 }));
+    await act(async () => {
+      if (outcome === 'success') resolve({ data: { updatedCount: 1, taskUpdateStatus: 'ok', reminderSyncStatus: 'partial', undoId: 'undo-a', undoExpiresAt: new Date(Date.now() + 600000).toISOString() } });
+      else reject(new Error('late failure'));
+      await Promise.resolve();
+    });
+    expect(screen.queryByTestId('recovery-undo-confirmation')).toBeNull();
+    expect(screen.queryByTestId('partial-reminder-notice')).toBeNull();
+    expect(screen.queryByText(/Не удалось перенести/)).toBeNull();
+    expect(invalidateSpy).not.toHaveBeenCalled();
+  });
+
+  it.each(['success', 'error'])('stale Undo %s cannot affect B UI or caches', async (outcome) => {
+    let resolveUndo!: (value: unknown) => void;
+    let rejectUndo!: (error: unknown) => void;
+    mockPost
+      .mockResolvedValueOnce({ data: { updatedCount: 1, taskUpdateStatus: 'ok', reminderSyncStatus: 'ok', undoId: 'undo-a', undoExpiresAt: new Date(Date.now() + 600000).toISOString() } })
+      .mockImplementationOnce(() => new Promise((res, rej) => { resolveUndo = res; rejectUndo = rej; }));
+    renderSection();
+    fireEvent.press(await screen.findByTestId('recovery-banner'));
+    selectForInbox(task1.id);
+    fireEvent.press(screen.getByTestId('confirm-btn'));
+    fireEvent.press(await screen.findByTestId('recovery-undo-button'));
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/tasks/recovery/undo', { undoId: 'undo-a' }));
+    invalidateSpy.mockClear();
+    act(() => useAuthStore.setState({ user: { ...task1, id: 'user-b' } as any, sessionGeneration: 5 }));
+    await act(async () => {
+      if (outcome === 'success') resolveUndo({ data: { restoredCount: 1, taskRestoreStatus: 'ok', reminderSyncStatus: 'partial', tasks: [{ id: task1.id, startTime: task1.startTime }] } });
+      else rejectUndo({ response: { data: { code: 'RECOVERY_UNDO_STALE' } } });
+      await Promise.resolve();
+    });
+    expect(screen.queryByTestId('recovery-undo-confirmation')).toBeNull();
+    expect(screen.queryByTestId('partial-reminder-notice')).toBeNull();
+    expect(invalidateSpy).not.toHaveBeenCalled();
   });
 });
 

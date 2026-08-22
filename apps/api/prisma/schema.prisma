@@ -73,6 +73,8 @@ model RecoveryUndo {
   createdAt  DateTime @default(now())
   expiresAt  DateTime
   consumedAt DateTime?
+  reminderSyncStatus String?
+  failedReminderSyncs String[] @default([])
   items      RecoveryUndoItem[]
 
   @@index([userId, expiresAt])

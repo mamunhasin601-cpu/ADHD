@@ -76,7 +76,13 @@ export function RecoverySection({
   const mounted = useRef(true);
   const operation = useRef(0);
   const undoSubmissionPending = useRef(false);
-  useEffect(() => () => { mounted.current = false; operation.current += 1; }, []);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      operation.current += 1;
+    };
+  }, []);
 
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [partialVisible, setPartialVisible] = useState(false);
@@ -86,6 +92,19 @@ export function RecoverySection({
   const [undoNotice, setUndoNotice] = useState<{
     id: string; expiresAt: number; status: 'ready' | 'success' | 'expired' | 'stale' | 'error'; partial: boolean;
   } | null>(null);
+  const authIdentity = useRef({ owner, sessionGeneration });
+  useEffect(() => {
+    const previous = authIdentity.current;
+    authIdentity.current = { owner, sessionGeneration };
+    if (previous.owner === owner && previous.sessionGeneration === sessionGeneration) return;
+    operation.current += 1;
+    undoSubmissionPending.current = false;
+    setUndoNotice(null);
+    setMutationError(null);
+    setPartialVisible(false);
+    reschedule.reset();
+    undo.reset();
+  }, [owner, sessionGeneration]);
   useEffect(() => {
     if (!undoNotice || undoNotice.status !== 'ready') return;
     const delay = Math.max(0, undoNotice.expiresAt - Date.now());

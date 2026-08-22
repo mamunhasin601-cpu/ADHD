@@ -16,9 +16,16 @@ describe('TaskRecoveryService authoritative undo', () => {
       recoveryUndoItem: { findMany: jest.fn().mockResolvedValue([item]) },
       task: { updateMany: jest.fn().mockResolvedValue({ count: options.stale ? 0 : 1 }), findMany: jest.fn().mockResolvedValue([{ ...task, startTime: item.previousStartTime }]) },
     };
-    const prisma: any = { recoveryUndo: { findUnique: jest.fn().mockResolvedValue(record) }, $transaction: jest.fn((fn) => fn(tx)) };
-    const notifications: any = { scheduleTaskReminder: jest.fn().mockRejectedValue(options.reminderFails ? new Error('queue') : undefined), cancelTaskReminder: jest.fn().mockResolvedValue(undefined) };
-    return { service: new TaskRecoveryService(prisma, notifications), tx, notifications };
+    const prisma: any = {
+      recoveryUndo: { findUnique: jest.fn().mockResolvedValue(record), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      task: { findMany: jest.fn().mockResolvedValue([{ ...task, startTime: item.previousStartTime }]) },
+      $transaction: jest.fn((fn) => fn(tx)),
+    };
+    const scheduleTaskReminder = jest.fn();
+    if (options.reminderFails) scheduleTaskReminder.mockRejectedValue(new Error('queue'));
+    else scheduleTaskReminder.mockResolvedValue(undefined);
+    const notifications: any = { scheduleTaskReminder, cancelTaskReminder: jest.fn().mockResolvedValue(undefined) };
+    return { service: new TaskRecoveryService(prisma, notifications), prisma, tx, notifications };
   }
 
   it.each([[previous], [null]])('restores the exact authoritative previous instant, including null', async (previousStart) => {
@@ -34,8 +41,29 @@ describe('TaskRecoveryService authoritative undo', () => {
   });
 
   it('makes replay idempotent without rewriting tasks', async () => {
-    const { service, tx } = harness({ replay: true });
-    await expect(service.undoRecovery('owner', 'undo-1', now)).resolves.toMatchObject({ taskRestoreStatus: 'already-undone', restoredCount: 0 });
+    const { service, prisma, tx } = harness({ replay: true });
+    await expect(service.undoRecovery('owner', 'undo-1', now)).resolves.toMatchObject({
+      taskRestoreStatus: 'already-undone', restoredCount: 0,
+      tasks: [{ id: 'task-1', startTime: previous }],
+    });
+    expect(tx.task.updateMany).not.toHaveBeenCalled();
+    expect(prisma.task.findMany).toHaveBeenCalled();
+  });
+
+  it('a retry after a lost response reconciles reminders and reports repeated failure honestly', async () => {
+    const { service, prisma, tx } = harness({ replay: true, reminderFails: true });
+    const result = await service.undoRecovery('owner', 'undo-1', now);
+    expect(result).toMatchObject({ taskRestoreStatus: 'already-undone', reminderSyncStatus: 'partial', failedReminderSyncs: ['task-1'] });
+    expect(tx.task.updateMany).not.toHaveBeenCalled();
+    expect(prisma.recoveryUndo.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ reminderSyncStatus: 'partial' }) }));
+  });
+
+  it('replay reads a later authoritative edit without overwriting it', async () => {
+    const { service, prisma, tx } = harness({ replay: true });
+    const later = new Date('2026-08-24T09:00:00.999Z');
+    prisma.task.findMany.mockResolvedValue([{ ...task, startTime: later }]);
+    const result = await service.undoRecovery('owner', 'undo-1', now);
+    expect(result.tasks).toEqual([{ id: 'task-1', startTime: later }]);
     expect(tx.task.updateMany).not.toHaveBeenCalled();
   });
 
