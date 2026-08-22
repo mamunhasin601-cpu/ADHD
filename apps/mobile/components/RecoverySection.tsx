@@ -1,8 +1,9 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { RecoveryBanner, type RecoveryItemSelection } from './RecoveryBanner';
 import { PartialReminderNotice } from './PartialReminderNotice';
-import { useOverdueTasks, useRescheduleOverdueTasks } from '../lib/api/tasks';
+import { useOverdueTasks, useRescheduleOverdueTasks, useUndoRecovery } from '../lib/api/tasks';
+import { useAuthStore } from '../stores/auth.store';
 import { isValidIANATimezone, toCanonicalDateParam } from '../lib/timezone';
 
 interface Props {
@@ -69,16 +70,39 @@ export function RecoverySection({
     selectedDate,
     timezoneValid ? tz : undefined,
   );
+  const undo = useUndoRecovery(selectedDate, timezoneValid ? tz : undefined);
+  const owner = useAuthStore((state) => state.user?.id);
+  const sessionGeneration = useAuthStore((state) => state.sessionGeneration);
+  const mounted = useRef(true);
+  const operation = useRef(0);
+  const undoSubmissionPending = useRef(false);
+  useEffect(() => () => { mounted.current = false; operation.current += 1; }, []);
 
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [partialVisible, setPartialVisible] = useState(false);
   // Incrementing forces RecoveryBanner to remount, clearing local selection
   // state so a task removed by query invalidation cannot be resubmitted.
   const [bannerResetKey, setBannerResetKey] = useState(0);
+  const [undoNotice, setUndoNotice] = useState<{
+    id: string; expiresAt: number; status: 'ready' | 'success' | 'expired' | 'stale' | 'error'; partial: boolean;
+  } | null>(null);
+  useEffect(() => {
+    if (!undoNotice || undoNotice.status !== 'ready') return;
+    const delay = Math.max(0, undoNotice.expiresAt - Date.now());
+    const timer = setTimeout(() => setUndoNotice((value) => value?.id === undoNotice.id ? { ...value, status: 'expired' } : value), delay);
+    return () => clearTimeout(timer);
+  }, [undoNotice?.id, undoNotice?.status, undoNotice?.expiresAt]);
 
   const handleConfirm = useCallback(
     (selections: RecoveryItemSelection[]) => {
-      if (!recoveryData) return;
+      if (!recoveryData || reschedule.isPending) return;
+      undoSubmissionPending.current = false;
+      const identity = ++operation.current;
+      const operationOwner = owner;
+      const operationSession = sessionGeneration;
+      const owns = () => mounted.current && operation.current === identity &&
+        useAuthStore.getState().user?.id === operationOwner &&
+        useAuthStore.getState().sessionGeneration === operationSession;
       setMutationError(null);
       reschedule.mutate(
         {
@@ -89,12 +113,17 @@ export function RecoverySection({
         },
         {
           onSuccess: (data) => {
+            if (!owns()) return;
             setMutationError(null);
             // Reset submitted state on both ok and partial — the move committed.
             setBannerResetKey((k) => k + 1);
             setPartialVisible(data.reminderSyncStatus === 'partial');
+            if (data.undoId && data.undoExpiresAt) {
+              setUndoNotice({ id: data.undoId, expiresAt: new Date(data.undoExpiresAt).getTime(), status: 'ready', partial: data.reminderSyncStatus === 'partial' });
+            }
           },
           onError: (err: unknown) => {
+            if (!owns()) return;
             const axiosError = err as { response?: { status?: number } };
             if (axiosError.response?.status === 409) {
               setMutationError(
@@ -109,8 +138,35 @@ export function RecoverySection({
         },
       );
     },
-    [reschedule, recoveryData],
+    [reschedule, recoveryData, owner, sessionGeneration],
   );
+
+  const handleUndo = useCallback(() => {
+    if (!undoNotice || undoNotice.status !== 'ready' || undo.isPending || undoSubmissionPending.current) return;
+    undoSubmissionPending.current = true;
+    const identity = ++operation.current;
+    const id = undoNotice.id;
+    const operationOwner = owner;
+    const operationSession = sessionGeneration;
+    const owns = () => mounted.current && operation.current === identity &&
+      useAuthStore.getState().user?.id === operationOwner &&
+      useAuthStore.getState().sessionGeneration === operationSession;
+    undo.mutate(id, {
+      onSuccess: (data) => {
+        undoSubmissionPending.current = false;
+        if (!owns()) return;
+        setUndoNotice((value) => value?.id === id ? { ...value, status: 'success', partial: data.reminderSyncStatus === 'partial' } : value);
+        setPartialVisible(data.reminderSyncStatus === 'partial');
+      },
+      onError: (error: unknown) => {
+        undoSubmissionPending.current = false;
+        if (!owns()) return;
+        const code = (error as { response?: { data?: { code?: string } } }).response?.data?.code;
+        const status = code === 'RECOVERY_UNDO_EXPIRED' ? 'expired' : code === 'RECOVERY_UNDO_STALE' ? 'stale' : 'error';
+        setUndoNotice((value) => value?.id === id ? { ...value, status } : value);
+      },
+    });
+  }, [undo, undoNotice, owner, sessionGeneration]);
 
   const overdueTasks = recoveryData?.tasks ?? [];
   const hasOverdueTasks = isToday && overdueTasks.length > 0;
@@ -156,6 +212,25 @@ export function RecoverySection({
         <PartialReminderNotice onDismiss={() => setPartialVisible(false)} />
       )}
 
+      {undoNotice && (
+        <View testID="recovery-undo-confirmation" style={styles.undoNotice} accessible accessibilityRole="alert" accessibilityLiveRegion="polite">
+          <Text style={styles.undoText}>
+            {undoNotice.status === 'ready' && 'Задачи перенесены. Можно спокойно отменить изменение.'}
+            {undoNotice.status === 'success' && 'Перенос отменён. Задачи возвращены на прежнее место.'}
+            {undoNotice.status === 'expired' && 'Время отмены закончилось. Текущие задачи не изменены.'}
+            {undoNotice.status === 'stale' && 'Задача уже изменилась, поэтому отмена не применена.'}
+            {undoNotice.status === 'error' && 'Не удалось отменить перенос. Текущие задачи не изменены.'}
+          </Text>
+          {undoNotice.status === 'ready' && (
+            <Pressable testID="recovery-undo-button" onPress={handleUndo} disabled={undo.isPending}
+              accessible accessibilityRole="button" accessibilityLabel="Отменить перенос задач"
+              accessibilityState={{ disabled: undo.isPending, busy: undo.isPending }} style={styles.undoButton}>
+              <Text style={styles.undoButtonText}>{undo.isPending ? 'Отменяем…' : 'Отменить'}</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
       {!isRecoveryLoading && hasOverdueTasks && recoveryData && (
         <RecoveryBanner
           key={bannerResetKey}
@@ -193,4 +268,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   tzActionText: { fontSize: 14, color: '#6B5BFC', fontWeight: '600' },
+  undoNotice: { marginHorizontal: 20, marginVertical: 8, padding: 14, borderRadius: 10, backgroundColor: '#F5F3FF', borderWidth: 1, borderColor: '#C4B5FD' },
+  undoText: { color: '#374151', fontSize: 14, lineHeight: 20 },
+  undoButton: { minHeight: 44, marginTop: 8, paddingHorizontal: 16, justifyContent: 'center', alignSelf: 'flex-start' },
+  undoButtonText: { color: '#6B5BFC', fontWeight: '700', fontSize: 15 },
 });

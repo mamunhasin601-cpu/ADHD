@@ -201,11 +201,21 @@ export interface RescheduleRecoveryRequest {
  * POST /tasks/recovery/reschedule response
  */
 export interface RescheduleRecoveryResponse {
+  undoId?: string;
+  undoExpiresAt?: string;
   updatedCount: number;
   taskUpdateStatus: 'ok';
   reminderSyncStatus: 'ok' | 'partial';
   /** taskIds для которых reminder sync не удался */
   failedReminderSyncs?: string[];
+}
+
+export interface UndoRecoveryResponse {
+  restoredCount: number;
+  taskRestoreStatus: 'ok' | 'already-undone';
+  reminderSyncStatus: 'ok' | 'partial';
+  failedReminderSyncs?: string[];
+  tasks: Array<{ id: string; startTime: string | Date | null }>;
 }
 
 // ────────────────────────────────────────────────────────────

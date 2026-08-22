@@ -151,6 +151,15 @@ Phase 1 реализует минимальное ядро из [PDR-001](../12-
     is recorded in
     [Task 0027](../../docs/tasks/0027-honest-rest-buffer-blocks.md).
 
+17. **Task 0028 — honest Recovery undo — completed.** A committed Recovery move
+    now creates a bounded, owner-scoped and one-time server identity that can
+    atomically restore exact prior nullable timestamps without overwriting later
+    task changes. Today keeps a calm accessible `Отменить` affordance outside
+    the remounting preview banner; reminder and cache reconciliation reports
+    partial failure honestly. The contract and automated validation are recorded
+    in [Task 0028](../../docs/tasks/0028-honest-recovery-undo.md); Android runtime
+    remains not verified.
+
 Остальные capability Phase 1 остаются на горизонте, но их точный порядок пока
 не принят. Контекстный помощник, overload mode и focus session относятся к
 следующему расширению опыта; AI-декомпозиция, energy-aware suggestions и

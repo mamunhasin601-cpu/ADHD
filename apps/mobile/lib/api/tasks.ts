@@ -16,6 +16,7 @@ import type {
   OverdueTasksResponse,
   RescheduleRecoveryRequest,
   RescheduleRecoveryResponse,
+  UndoRecoveryResponse,
 } from '@focus/shared-types';
 import { useAuthStore } from '../../stores/auth.store';
 
@@ -367,9 +368,11 @@ export function useOverdueTasks(
  */
 export function useRescheduleOverdueTasks(date: Date, userTimezone?: string | null) {
   const queryClient = useQueryClient();
+  const continuation = useMutationContinuation();
   const dateParam = toDateParam(date, userTimezone);
 
   return useMutation({
+    onMutate: () => continuation.begin(),
     mutationFn: async (dto: RescheduleRecoveryRequest): Promise<RescheduleRecoveryResponse> => {
       const { data } = await apiClient.post<RescheduleRecoveryResponse>(
         '/tasks/recovery/reschedule',
@@ -377,7 +380,9 @@ export function useRescheduleOverdueTasks(date: Date, userTimezone?: string | nu
       );
       return data;
     },
-    onSuccess: (data, variables) => {
+    onSuccess: async (data, variables, context) => {
+      const guard = continuation.guard(context);
+      if (!guard()) return;
       // Инвалидируем recovery list
       queryClient.invalidateQueries({ queryKey: recoveryKey(dateParam) });
       // Инвалидируем Today
@@ -392,6 +397,7 @@ export function useRescheduleOverdueTasks(date: Date, userTimezone?: string | nu
       // For items with a new start time → reschedule using a synthetic task object.
       // scheduleLocalReminder only needs task.id and task.startTime.
       for (const item of variables.items) {
+        if (!guard()) return;
         if (item.targetStartTime === null) {
           cancelLocalReminder(item.taskId).catch(() => {});
         } else {
@@ -410,6 +416,33 @@ export function useRescheduleOverdueTasks(date: Date, userTimezone?: string | nu
         queryClient.invalidateQueries({ queryKey: recoveryKey(dateParam) });
       }
       // Прочие ошибки — предыдущее состояние экрана остаётся intact
+    },
+  });
+}
+
+export function useUndoRecovery(date: Date, userTimezone?: string | null) {
+  const queryClient = useQueryClient();
+  const continuation = useMutationContinuation();
+  const dateParam = toDateParam(date, userTimezone);
+  return useMutation({
+    onMutate: () => continuation.begin(),
+    mutationFn: async (undoId: string): Promise<UndoRecoveryResponse> => {
+      const { data } = await apiClient.post<UndoRecoveryResponse>('/tasks/recovery/undo', { undoId });
+      return data;
+    },
+    onSuccess: async (data, _undoId, context) => {
+      const guard = continuation.guard(context);
+      if (!guard()) return;
+      queryClient.invalidateQueries({ queryKey: tasksKey(dateParam) });
+      queryClient.invalidateQueries({ queryKey: inboxKey() });
+      queryClient.invalidateQueries({ queryKey: recoveryKey(dateParam) });
+      // Every dated task query may contain an exactly restored instant.
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      for (const task of data.tasks) {
+        if (!guard()) return;
+        if (!task.startTime) await cancelLocalReminder(task.id).catch(() => undefined);
+        else await scheduleLocalReminder({ id: task.id, startTime: new Date(task.startTime) } as Task, getLocalOnlyMode()).catch(() => undefined);
+      }
     },
   });
 }

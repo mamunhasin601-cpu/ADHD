@@ -222,9 +222,30 @@ describe('RecoverySection — open and cancel', () => {
 });
 
 describe('RecoverySection — ok response', () => {
+  it('keeps an accessible Undo outside the remounted banner and submits once', async () => {
+    mockPost
+      .mockResolvedValueOnce({ data: { updatedCount: 1, taskUpdateStatus: 'ok', reminderSyncStatus: 'ok', undoId: 'undo-1', undoExpiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString() } })
+      .mockResolvedValueOnce({ data: { restoredCount: 1, taskRestoreStatus: 'ok', reminderSyncStatus: 'ok', tasks: [{ id: task1.id, startTime: task1.startTime }] } });
+    mockGet.mockResolvedValueOnce(recoveryResponse([task1, task2])).mockResolvedValue(recoveryResponse([task2]));
+    renderSection();
+    fireEvent.press(await screen.findByTestId('recovery-banner'));
+    selectForInbox(task1.id);
+    fireEvent.press(screen.getByTestId('confirm-btn'));
+    const button = await screen.findByTestId('recovery-undo-button');
+    expect(screen.getByTestId('recovery-undo-confirmation')).toBeTruthy();
+    fireEvent.press(button);
+    fireEvent.press(button);
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/tasks/recovery/undo', { undoId: 'undo-1' }));
+    expect(mockPost.mock.calls.filter(([url]) => url === '/tasks/recovery/undo')).toHaveLength(1);
+    await waitFor(() => expect(screen.getByText('Перенос отменён. Задачи возвращены на прежнее место.')).toBeTruthy());
+    const keys = invalidateSpy.mock.calls.map((call) => JSON.stringify(call[0]?.queryKey));
+    expect(keys).toContain(JSON.stringify(['tasks', 'inbox']));
+    expect(keys).toContain(JSON.stringify(['tasks']));
+  });
+
   it('resets submitted state and shows no partial notice', async () => {
     mockPost.mockResolvedValue({
-      data: { updatedCount: 1, taskUpdateStatus: 'ok', reminderSyncStatus: 'ok' },
+      data: { updatedCount: 1, taskUpdateStatus: 'ok', reminderSyncStatus: 'ok', undoId: 'undo-1', undoExpiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString() },
     });
     mockGet
       .mockResolvedValueOnce(recoveryResponse([task1, task2]))
@@ -244,7 +265,7 @@ describe('RecoverySection — ok response', () => {
 
   it('sends the correct Inbox payload through the production hook', async () => {
     mockPost.mockResolvedValue({
-      data: { updatedCount: 1, taskUpdateStatus: 'ok', reminderSyncStatus: 'ok' },
+      data: { updatedCount: 1, taskUpdateStatus: 'ok', reminderSyncStatus: 'ok', undoId: 'undo-1', undoExpiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString() },
     });
     renderSection();
     fireEvent.press(await screen.findByTestId('recovery-banner'));
@@ -259,7 +280,7 @@ describe('RecoverySection — ok response', () => {
 
   it('invalidates recovery, today and inbox keys for an Inbox move', async () => {
     mockPost.mockResolvedValue({
-      data: { updatedCount: 1, taskUpdateStatus: 'ok', reminderSyncStatus: 'ok' },
+      data: { updatedCount: 1, taskUpdateStatus: 'ok', reminderSyncStatus: 'ok', undoId: 'undo-1', undoExpiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString() },
     });
     renderSection();
     fireEvent.press(await screen.findByTestId('recovery-banner'));
@@ -279,7 +300,7 @@ describe('RecoverySection — ok response', () => {
 
   it('does not invalidate inbox for a scheduled (non-Inbox) destination', async () => {
     mockPost.mockResolvedValue({
-      data: { updatedCount: 1, taskUpdateStatus: 'ok', reminderSyncStatus: 'ok' },
+      data: { updatedCount: 1, taskUpdateStatus: 'ok', reminderSyncStatus: 'ok', undoId: 'undo-1', undoExpiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString() },
     });
     renderSection();
     fireEvent.press(await screen.findByTestId('recovery-banner'));
@@ -403,7 +424,7 @@ describe('RecoverySection — partial response', () => {
 describe('RecoverySection — resubmission safety', () => {
   it('a subset success cannot resubmit a task removed by query invalidation', async () => {
     mockPost.mockResolvedValue({
-      data: { updatedCount: 1, taskUpdateStatus: 'ok', reminderSyncStatus: 'ok' },
+      data: { updatedCount: 1, taskUpdateStatus: 'ok', reminderSyncStatus: 'ok', undoId: 'undo-1', undoExpiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString() },
     });
     mockGet
       .mockResolvedValueOnce(recoveryResponse([task1, task2]))

@@ -3,6 +3,9 @@
  * Различает успешный task update и частичный reminder sync
  */
 export class RescheduleRecoveryResponseDto {
+  /** Owner-scoped, one-time server identity. No previous values are exposed. */
+  undoId?: string;
+  undoExpiresAt?: string;
   /**
    * Количество задач, успешно обновлённых в БД
    */
