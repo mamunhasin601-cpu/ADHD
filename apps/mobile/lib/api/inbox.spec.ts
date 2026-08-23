@@ -32,8 +32,16 @@ jest.mock('../api-client', () => ({
   },
 }));
 
+const mockAuthState = { user: { id: 'user-1' }, sessionGeneration: 1 };
+jest.mock('../../stores/auth.store', () => ({
+  useAuthStore: Object.assign((selector: any) => selector(mockAuthState), {
+    getState: () => mockAuthState,
+  }),
+}));
+
 // Импорты после mock-деклараций
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { renderHook } from '@testing-library/react-native';
 import { apiClient } from '../api-client';
 import { useInboxTasks, useToggleInboxTask, useRescheduleOverdueTasks } from '../api/tasks';
 
@@ -230,12 +238,12 @@ describe('useRescheduleOverdueTasks инвалидирует Inbox при null d
   });
 
   it('onSuccess с null → инвалидирует inboxKey', async () => {
-    useRescheduleOverdueTasks(new Date('2026-08-04'));
+    renderHook(() => useRescheduleOverdueTasks(new Date('2026-08-04')));
 
     const variables = {
       items: [{ taskId: 'task-1', targetStartTime: null }],
     };
-    capturedMutationConfig.onSuccess({}, variables);
+    capturedMutationConfig.onSuccess({}, variables, capturedMutationConfig.onMutate());
 
     const calls = mockQueryClient.invalidateQueries.mock.calls;
     const invalidatedKeys = calls.map((c: any[]) => c[0].queryKey);
@@ -243,12 +251,12 @@ describe('useRescheduleOverdueTasks инвалидирует Inbox при null d
   });
 
   it('onSuccess без null → НЕ инвалидирует inboxKey', async () => {
-    useRescheduleOverdueTasks(new Date('2026-08-04'));
+    renderHook(() => useRescheduleOverdueTasks(new Date('2026-08-04')));
 
     const variables = {
       items: [{ taskId: 'task-1', targetStartTime: '2026-08-05T10:00:00.000Z' }],
     };
-    capturedMutationConfig.onSuccess({}, variables);
+    capturedMutationConfig.onSuccess({}, variables, capturedMutationConfig.onMutate());
 
     const calls = mockQueryClient.invalidateQueries.mock.calls;
     const invalidatedKeys = calls.map((c: any[]) => c[0].queryKey);

@@ -20,6 +20,7 @@ import { GetTasksQueryDto } from './dto/get-tasks-query.dto';
 import { GetRecoveryQueryDto } from './dto/get-recovery-query.dto';
 import { RescheduleRecoveryDto } from './dto/reschedule-recovery.dto';
 import { ExtendRecurrenceDto } from './dto/extend-recurrence.dto';
+import { UndoRecoveryDto } from './dto/undo-recovery.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { User } from '@prisma/client';
@@ -69,6 +70,12 @@ export class TasksController {
     @Body() dto: RescheduleRecoveryDto,
   ) {
     return this.taskRecoveryService.rescheduleOverdueTasks(user.id, dto.items);
+  }
+
+  @Post('recovery/undo')
+  @HttpCode(HttpStatus.OK)
+  undoRecovery(@CurrentUser() user: User, @Body() dto: UndoRecoveryDto) {
+    return this.taskRecoveryService.undoRecovery(user.id, dto.undoId);
   }
 
   /** Explicit lifecycle write; GET remains read-only. Includes migrated series. */

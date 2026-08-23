@@ -61,8 +61,36 @@ model User {
   notificationLogs      NotificationLog[]
   deviceTokens          DeviceToken[]
   taskCreateRequests    TaskCreateRequest[]
+  recoveryUndos        RecoveryUndo[]
 
   @@map("users")
+}
+
+model RecoveryUndo {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+  consumedAt DateTime?
+  reminderSyncStatus String?
+  failedReminderSyncs String[] @default([])
+  items      RecoveryUndoItem[]
+
+  @@index([userId, expiresAt])
+  @@map("recovery_undos")
+}
+
+model RecoveryUndoItem {
+  undoId          String
+  taskId          String
+  previousStartTime DateTime?
+  appliedStartTime  DateTime?
+  appliedUpdatedAt  DateTime
+  undo             RecoveryUndo @relation(fields: [undoId], references: [id], onDelete: Cascade)
+
+  @@id([undoId, taskId])
+  @@map("recovery_undo_items")
 }
 
 // ──────────────────────────────────────────────

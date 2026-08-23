@@ -107,6 +107,8 @@ describe('Recovery routes — authenticated integration (real guard + strategy +
   let mockPrisma: {
     user: { findUnique: jest.Mock };
     task: { findMany: jest.Mock; updateMany: jest.Mock };
+    recoveryUndo: { create: jest.Mock };
+    recoveryUndoItem: { createMany: jest.Mock };
     $transaction: jest.Mock;
   };
   let mockNotifications: {
@@ -136,6 +138,8 @@ describe('Recovery routes — authenticated integration (real guard + strategy +
     mockPrisma = {
       user: { findUnique: jest.fn() },
       task: { findMany: jest.fn(), updateMany: jest.fn() },
+      recoveryUndo: { create: jest.fn(({ data }) => ({ id: 'undo-auth', ...data })) },
+      recoveryUndoItem: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
       $transaction: jest.fn(),
     };
 
@@ -204,6 +208,8 @@ describe('Recovery routes — authenticated integration (real guard + strategy +
     // Restore the default implementations needed by every test.
     mockNotifications.scheduleTaskReminder.mockResolvedValue(undefined);
     mockNotifications.cancelTaskReminder.mockResolvedValue(undefined);
+    mockPrisma.recoveryUndo.create.mockImplementation(async ({ data }: any) => ({ id: 'undo-auth', ...data }));
+    mockPrisma.recoveryUndoItem.createMany.mockResolvedValue({ count: 1 });
 
     // Resolve users BY REQUESTED ID. Unknown ids resolve to null so the real
     // JwtStrategy throws UnauthorizedException, exactly as in production.

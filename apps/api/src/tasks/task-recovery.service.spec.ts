@@ -37,6 +37,10 @@ describe('TaskRecoveryService', () => {
         findMany: jest.fn().mockResolvedValue([overdueTask]),
         updateMany: jest.fn(),
       },
+      recoveryUndo: {
+        create: jest.fn().mockImplementation(({ data }: any) => Promise.resolve({ id: 'undo-1', ...data })),
+      },
+      recoveryUndoItem: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
       $transaction: jest.fn(),
     };
 

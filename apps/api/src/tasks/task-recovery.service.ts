@@ -9,11 +9,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RescheduleItemDto } from './dto/reschedule-recovery.dto';
 import { RescheduleRecoveryResponseDto } from './dto/reschedule-recovery-response.dto';
+import { UndoRecoveryResponseDto } from './dto/undo-recovery.dto';
 import { toDate, formatInTimeZone } from 'date-fns-tz';
 import type { Task } from '@prisma/client';
 
 @Injectable()
 export class TaskRecoveryService {
+  private static readonly UNDO_TTL_MS = 15 * 60 * 1000;
   private readonly logger = new Logger(TaskRecoveryService.name);
 
   constructor(
@@ -172,7 +174,13 @@ const localDayStart = this.getLocalDayStart(userTimezone, referenceInstant);
 
     // Enforce recovery eligibility in the write itself so a concurrent completion
     // or reschedule cannot be overwritten.
-    await this.prisma.$transaction(async (tx) => {
+    const undo = await this.prisma.$transaction(async (tx) => {
+      const record = await tx.recoveryUndo.create({
+        data: {
+          userId,
+          expiresAt: new Date(referenceInstant.getTime() + TaskRecoveryService.UNDO_TTL_MS),
+        },
+      });
       for (const item of items) {
         const newStartTime =
           item.targetStartTime != null ? new Date(item.targetStartTime) : null;
@@ -199,14 +207,23 @@ const localDayStart = this.getLocalDayStart(userTimezone, referenceInstant);
           });
         }
       }
+      const applied = await tx.task.findMany({
+        where: { id: { in: taskIds }, userId },
+      });
+      const originals = new Map(existingTasks.map((task) => [task.id, task.startTime]));
+      await tx.recoveryUndoItem.createMany({
+        data: applied.map((task) => ({
+          undoId: record.id,
+          taskId: task.id,
+          previousStartTime: originals.get(task.id) ?? null,
+          appliedStartTime: task.startTime,
+          appliedUpdatedAt: task.updatedAt,
+        })),
+      });
+      return { record, applied };
     });
 
-    const updatedTasks = await this.prisma.task.findMany({
-      where: {
-        id: { in: taskIds },
-        userId,
-      },
-    });
+    const updatedTasks = undo.applied;
 
     this.logger.log(
       // Observability contract (ADR-008 / Package 0001 / Task 0009):
@@ -251,10 +268,92 @@ const localDayStart = this.getLocalDayStart(userTimezone, referenceInstant);
     }
 
     return {
+      undoId: undo.record.id,
+      undoExpiresAt: undo.record.expiresAt.toISOString(),
       updatedCount: updatedTasks.length,
       taskUpdateStatus: 'ok',
       reminderSyncStatus,
       ...(failedReminderSyncs.length > 0 && { failedReminderSyncs }),
+    };
+  }
+
+  /** Restores only the authoritative snapshot captured in the apply transaction. */
+  async undoRecovery(
+    userId: string,
+    undoId: string,
+    referenceInstant: Date = new Date(),
+  ): Promise<UndoRecoveryResponseDto> {
+    const existing = await this.prisma.recoveryUndo.findUnique({ where: { id: undoId } });
+    if (!existing || existing.userId !== userId) {
+      throw new ForbiddenException('Recovery undo not found or access denied');
+    }
+    if (!existing.consumedAt && existing.expiresAt.getTime() <= referenceInstant.getTime()) {
+      throw new ConflictException({ message: 'Recovery undo has expired', code: 'RECOVERY_UNDO_EXPIRED' });
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.recoveryUndo.updateMany({
+        where: { id: undoId, userId, consumedAt: null, expiresAt: { gt: referenceInstant } },
+        data: { consumedAt: referenceInstant },
+      });
+      if (claimed.count === 0) {
+        const replay = await tx.recoveryUndo.findUnique({ where: { id: undoId } });
+        if (replay?.consumedAt) {
+          const snapshot = await tx.recoveryUndoItem.findMany({ where: { undoId } });
+          return { replay: true, taskIds: snapshot.map((item) => item.taskId), tasks: [] as Task[] };
+        }
+        throw new ConflictException({ message: 'Recovery undo has expired', code: 'RECOVERY_UNDO_EXPIRED' });
+      }
+      const snapshot = await tx.recoveryUndoItem.findMany({ where: { undoId } });
+      for (const item of snapshot) {
+        const restored = await tx.task.updateMany({
+          where: {
+            id: item.taskId,
+            userId,
+            kind: 'TASK',
+            updatedAt: item.appliedUpdatedAt,
+            startTime: item.appliedStartTime,
+          },
+          data: { startTime: item.previousStartTime },
+        });
+        if (restored.count !== 1) {
+          throw new ConflictException({
+            message: 'A recovered task changed after Recovery',
+            code: 'RECOVERY_UNDO_STALE',
+          });
+        }
+      }
+      const tasks = await tx.task.findMany({ where: { id: { in: snapshot.map((i) => i.taskId) }, userId } });
+      return { replay: false, taskIds: snapshot.map((item) => item.taskId), tasks };
+    });
+
+    // A replay never writes task state again. It reads current authoritative
+    // rows so a lost first response can reconcile the restored values, while a
+    // later user edit is never overwritten or represented as the old snapshot.
+    const tasks = result.replay
+      ? await this.prisma.task.findMany({ where: { id: { in: result.taskIds }, userId } })
+      : result.tasks;
+    const failedReminderSyncs: string[] = [];
+    for (const task of tasks) {
+      try {
+        if (!task.startTime || task.completedAt) await this.notifications.cancelTaskReminder(task.id);
+        else await this.notifications.scheduleTaskReminder(task);
+      } catch (error) {
+        this.logger.error(`Reminder sync failed after recovery undo commit: failureClass=${error instanceof Error ? error.constructor.name : 'Unknown'}`);
+        failedReminderSyncs.push(task.id);
+      }
+    }
+    const reminderSyncStatus = failedReminderSyncs.length ? 'partial' : 'ok';
+    await this.prisma.recoveryUndo.updateMany({
+      where: { id: undoId, userId, consumedAt: { not: null } },
+      data: { reminderSyncStatus, failedReminderSyncs },
+    });
+    return {
+      restoredCount: result.replay ? 0 : tasks.length,
+      taskRestoreStatus: result.replay ? 'already-undone' : 'ok',
+      reminderSyncStatus,
+      ...(failedReminderSyncs.length && { failedReminderSyncs }),
+      tasks: tasks.map((task) => ({ id: task.id, startTime: task.startTime })),
     };
   }
 }
