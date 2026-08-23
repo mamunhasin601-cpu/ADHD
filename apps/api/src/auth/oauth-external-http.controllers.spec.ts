@@ -9,11 +9,17 @@ const response = () => {
   return res;
 };
 
-async function invoke(Controller: typeof YandexOAuthController | typeof VkOAuthController | typeof MailruOAuthController, instance: any, code: string | undefined, res: any) {
+async function invoke(
+  Controller: typeof YandexOAuthController | typeof VkOAuthController | typeof MailruOAuthController,
+  instance: any,
+  code: string | undefined,
+  res: any,
+  error?: string,
+) {
   if (Controller === VkOAuthController) {
-    return instance.handleCallback(code, undefined, undefined, res);
+    return instance.handleCallback(code, error, 'provider description and secret', res);
   }
-  return instance.handleCallback(code, undefined, res);
+  return instance.handleCallback(code, error, res);
 }
 
 describe('OAuth controllers external transport', () => {
@@ -23,17 +29,20 @@ describe('OAuth controllers external transport', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it.each([
-    ['Yandex', YandexOAuthController, 'yandex', [{ access_token: 'provider-access' }, { id: 'y-1', default_email: 'y@example.test' }], ['yandex.token', 'none', 'yandex.profile', 'safe-transient']],
-    ['VK', VkOAuthController, 'vk', [{ access_token: 'provider-access', user_id: 42, email: 'v@example.test' }, { response: [{ first_name: 'V' }] }], ['vk.token', 'none', 'vk.profile', 'safe-transient']],
-    ['Mail.ru', MailruOAuthController, 'mailru', [{ access_token: 'provider-access' }, [{ uid: 'm-1', email: 'm@example.test' }]], ['mailru.token', 'none', 'mailru.profile', 'safe-transient']],
-  ] as const)('%s selects explicit token/profile operations and preserves deep-link success', async (_name, Controller, _provider, replies, expected) => {
-    transport.requestJson.mockResolvedValueOnce(replies[0]).mockResolvedValueOnce(replies[1]);
+    ['Yandex', YandexOAuthController, { access_token: 'provider-access' }, { id: 'y-1', default_email: 'y@example.test', first_name: 'Y' }, ['yandex.token', 'none', 'yandex.profile', 'safe-transient'], { provider: 'yandex', providerId: 'y-1', email: 'y@example.test', firstName: 'Y', lastName: undefined }],
+    ['VK', VkOAuthController, { access_token: 'provider-access', user_id: 42, email: 'v@example.test' }, { response: [{ first_name: 'V', last_name: 'K' }] }, ['vk.token', 'none', 'vk.profile', 'safe-transient'], { provider: 'vk', providerId: '42', email: 'v@example.test', firstName: 'V', lastName: 'K' }],
+    ['Mail.ru', MailruOAuthController, { access_token: 'provider-access' }, [{ uid: 'm-1', email: 'm@example.test', first_name: 'M', last_name: 'R' }], ['mailru.token', 'none', 'mailru.profile', 'safe-transient'], { provider: 'mailru', providerId: 'm-1', email: 'm@example.test', firstName: 'M', lastName: 'R' }],
+  ] as const)('%s selects explicit operations, maps a profile, and preserves deep-link tokens', async (_name, Controller, tokenReply, profileReply, expected, profile) => {
+    transport.requestJson.mockResolvedValueOnce(tokenReply).mockResolvedValueOnce(profileReply);
     const res = response();
     await invoke(Controller, new Controller(oauth as any, transport as any), 'code', res);
     expect(transport.requestJson).toHaveBeenNthCalledWith(1, expect.objectContaining({ operation: expected[0], retry: expected[1] }));
     expect(transport.requestJson).toHaveBeenNthCalledWith(2, expect.objectContaining({ operation: expected[2], retry: expected[3] }));
-    expect(oauth.handleOAuthCallback).toHaveBeenCalledTimes(1);
-    expect(res.redirect).toHaveBeenCalledWith(expect.stringContaining('focus://auth/callback'));
+    expect(oauth.handleOAuthCallback).toHaveBeenCalledWith(profile);
+    const deepLink = res.redirect.mock.calls[0][0];
+    expect(deepLink).toContain('focus://auth/callback');
+    expect(deepLink).toContain('accessToken=access');
+    expect(deepLink).toContain('refreshToken=refresh');
   });
 
   it.each([YandexOAuthController, VkOAuthController, MailruOAuthController])('keeps missing code at 400 without transport (%p)', async (Controller) => {
@@ -43,6 +52,15 @@ describe('OAuth controllers external transport', () => {
     expect(res.status).toHaveBeenCalledWith(400);
   });
 
+  it.each([YandexOAuthController, VkOAuthController, MailruOAuthController])('redacts provider callback errors at 400 without transport (%p)', async (Controller) => {
+    const res = response();
+    await invoke(Controller, new Controller(oauth as any, transport as any), 'code', res, 'provider-error-secret');
+    expect(transport.requestJson).not.toHaveBeenCalled();
+    expect(oauth.handleOAuthCallback).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(JSON.stringify(res.json.mock.calls[0][0])).not.toMatch(/provider-error-secret|description|code|secret|token|error/i);
+  });
+
   it.each([YandexOAuthController, VkOAuthController, MailruOAuthController])('redacts transport failure and prevents issuance (%p)', async (Controller) => {
     transport.requestJson.mockRejectedValueOnce(new Error('provider secret and code'));
     const res = response();
@@ -50,5 +68,31 @@ describe('OAuth controllers external transport', () => {
     expect(oauth.handleOAuthCallback).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith(expect.not.objectContaining({ error: expect.anything(), description: expect.anything() }));
+  });
+
+  it.each([
+    ['Yandex', YandexOAuthController, { error: 'secret provider payload' }],
+    ['VK', VkOAuthController, { error: 'secret provider payload' }],
+    ['Mail.ru', MailruOAuthController, { error: 'secret provider payload' }],
+  ] as const)('%s rejects an HTTP-200 token payload without profile lookup or disclosure', async (_name, Controller, tokenReply) => {
+    transport.requestJson.mockResolvedValueOnce(tokenReply);
+    const res = response();
+    await invoke(Controller, new Controller(oauth as any, transport as any), 'callback-code-secret', res);
+    expect(transport.requestJson).toHaveBeenCalledTimes(1);
+    expect(oauth.handleOAuthCallback).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(JSON.stringify(res.json.mock.calls[0][0])).not.toMatch(/secret|payload|code|token|error|description/i);
+  });
+
+  it.each([YandexOAuthController, VkOAuthController, MailruOAuthController])('prevents issuance when profile transport fails (%p)', async (Controller) => {
+    transport.requestJson
+      .mockResolvedValueOnce(Controller === VkOAuthController ? { access_token: 'provider', user_id: 1 } : { access_token: 'provider' })
+      .mockRejectedValueOnce(new Error('provider response URL token secret'));
+    const res = response();
+    await invoke(Controller, new Controller(oauth as any, transport as any), 'callback-code-secret', res);
+    expect(transport.requestJson).toHaveBeenCalledTimes(2);
+    expect(oauth.handleOAuthCallback).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(JSON.stringify(res.json.mock.calls[0][0])).not.toMatch(/provider|response|URL|token|secret|code|error|description/i);
   });
 });

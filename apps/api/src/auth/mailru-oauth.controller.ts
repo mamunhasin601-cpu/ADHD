@@ -54,7 +54,7 @@ export class MailruOAuthController {
   ) {
     if (error) {
       return res.status(HttpStatus.BAD_REQUEST).json({
-        message: 'Mail.ru OAuth error',
+        message: 'OAuth callback was not accepted',
       });
     }
 
@@ -82,7 +82,7 @@ export class MailruOAuthController {
         },
       });
 
-      if (tokenData.error) {
+      if (tokenData.error || !tokenData.access_token) {
         throw new Error('Mail.ru token exchange rejected');
       }
 

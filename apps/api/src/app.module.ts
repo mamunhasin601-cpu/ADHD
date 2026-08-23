@@ -8,7 +8,6 @@ import { TasksModule } from './tasks/tasks.module';
 import { RoutinesModule } from './routines/routines.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PlanModule } from './plan/plan.module';
-import { ExternalHttpModule } from './external-http/external-http.module';
 import { validateCoreEnvironment } from './config/core-environment';
 import { redisConnectionFromUrl } from './config/redis-connection';
 
@@ -28,7 +27,6 @@ import { redisConnectionFromUrl } from './config/redis-connection';
       }),
     }),
 
-    ExternalHttpModule,
     PrismaModule,
     AuthModule,
     UsersModule,

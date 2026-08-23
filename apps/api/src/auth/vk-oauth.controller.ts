@@ -55,7 +55,7 @@ export class VkOAuthController {
   ) {
     if (error) {
       return res.status(HttpStatus.BAD_REQUEST).json({
-        message: 'VK OAuth error',
+        message: 'OAuth callback was not accepted',
       });
     }
 
@@ -76,7 +76,7 @@ export class VkOAuthController {
 
       const tokenData = await this.externalHttp.requestJson<any>({ operation: 'vk.token', url: tokenUrl.toString(), retry: 'none' });
 
-      if (tokenData.error) {
+      if (tokenData.error || !tokenData.access_token || tokenData.user_id == null) {
         throw new Error('VK token exchange rejected');
       }
 

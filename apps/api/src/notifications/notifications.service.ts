@@ -1,4 +1,4 @@
-import { Injectable, Logger, ConflictException, Optional } from '@nestjs/common';
+import { Injectable, Logger, ConflictException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
@@ -46,7 +46,7 @@ export class NotificationsService {
     @InjectQueue(TASK_REMINDERS_QUEUE)
     private readonly taskReminderQueue: Queue<TaskReminderJobData>,
     private readonly prisma: PrismaService,
-    @Optional() private readonly externalHttp?: ExternalHttpService,
+    private readonly externalHttp: ExternalHttpService,
   ) {}
 
   // ── Scheduling ──────────────────────────────────────────────────────────────
@@ -241,8 +241,7 @@ export class NotificationsService {
 
   private async _sendToToken(token: string): Promise<TokenDeliveryResult> {
     try {
-      const transport = this.externalHttp ?? new ExternalHttpService();
-      const result = await transport.requestJson<{
+      const result = await this.externalHttp.requestJson<{
         data?: { status: string; details?: { error?: string } };
       }>({
         operation: 'expo.push',

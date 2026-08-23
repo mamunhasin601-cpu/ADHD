@@ -32,6 +32,7 @@ import { NotificationsService } from './notifications.service';
 import { JwtStrategy } from '../auth/strategies/jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
+import { ExternalHttpService } from '../external-http/external-http.service';
 
 const TEST_SECRET = 'notif-auth-integration-test-secret';
 
@@ -115,6 +116,7 @@ describe('NotificationsController — authenticated integration (real guard + st
         NotificationsService,
         JwtStrategy,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: ExternalHttpService, useValue: { requestJson: jest.fn() } },
         { provide: ConfigService, useValue: { getOrThrow: () => TEST_SECRET } },
       ],
     }).compile();

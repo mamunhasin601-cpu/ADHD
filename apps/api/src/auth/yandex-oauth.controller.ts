@@ -53,7 +53,7 @@ export class YandexOAuthController {
   ) {
     if (error) {
       return res.status(HttpStatus.BAD_REQUEST).json({
-        message: 'Yandex OAuth error',
+        message: 'OAuth callback was not accepted',
       });
     }
 
@@ -82,6 +82,9 @@ export class YandexOAuthController {
         }),
         },
       });
+      if (tokenData.error || !tokenData.access_token) {
+        throw new Error('Yandex token exchange rejected');
+      }
       const accessToken = tokenData.access_token;
 
       // 2. Получаем профиль пользователя
