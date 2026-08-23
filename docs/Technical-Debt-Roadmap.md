@@ -39,10 +39,12 @@
 
 | ID | Проблема | Файл(ы) | Сложность | Риск | Влияние | Зависимости | Порядок |
 |---|---|---|---|---|---|---|---:|
-| C-01 | Upgrade до Pro не требует receipt/payment validation и может выдать entitlement любому JWT-пользователю. | `apps/api/src/plan/plan.controller.ts`, `apps/api/src/plan/plan.service.ts`, `apps/mobile/app/paywall.tsx` | S/M | Critical | Critical | Нужен только runtime env policy; billing provider можно подключить следующим этапом | 1 |
-| C-02 | Нет regression test, который запрещает dev-upgrade в production configuration. | `apps/api/test/`, `apps/api/src/plan/` | M | High | Critical | C-01 | 2 |
+| C-01 (boundary complete; billing pending) | Production plan mutation now fails closed; no receipt/payment entitlement provider exists. | `apps/api/src/plan/plan.controller.ts`, `apps/api/src/plan/plan.service.ts`, `apps/mobile/app/paywall.tsx` | S/M | Critical | Critical | A future billing decision and verified server-side entitlement flow remain separate work | 1 |
+| C-02 (complete) | Regression coverage locks production denial, exact dev gating, authentication, ownership, unchanged state, GET compatibility, and safe audit output. | `apps/api/src/plan/plan.controller.auth.spec.ts`, `apps/mobile/tests/paywall.spec.tsx` | M | High | Critical | C-01 boundary | 2 |
 
 **Definition of Done:** в production route отсутствует/возвращает `404/403` без entitlement proof; dev flag fail-closed; добавлены unit/e2e tests и audit event для plan changes.
+
+Task 0029 satisfies this fail-closed boundary and test requirement. It does **not** claim that billing, subscriptions, prices, receipts, or production entitlement activation exist; see [`tasks/0029-honest-production-safe-plan-entitlement-boundary.md`](tasks/0029-honest-production-safe-plan-entitlement-boundary.md).
 
 ### Security Improvements
 
