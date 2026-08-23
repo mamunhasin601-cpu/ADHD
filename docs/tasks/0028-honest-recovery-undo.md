@@ -1,6 +1,6 @@
 # Task 0028 — Honest Recovery undo
 
-**Status:** completed by automated validation; Android runtime remains **NOT VERIFIED**.
+**Status:** completed by automated validation and Android emulator happy-path verification.
 
 ## Product boundary
 
@@ -61,5 +61,20 @@ integration covers banner-remount persistence, accessible Undo, duplicate taps,
 success copy, and broad cache invalidation; existing lifecycle suites exercise
 auth replacement and unmount boundaries.
 
-Android emulator/device evidence was not produced for this change. Jest is not
-runtime evidence, therefore Android runtime remains **NOT VERIFIED**.
+### Android runtime evidence — 2026-08-23
+
+The Recovery Apply/Undo happy path was verified on a Pixel 7 Android emulator
+while the API, PostgreSQL, Redis, Metro, and Android development build were
+running:
+
+- Recovery moved exactly one scheduled `TASK` to Thoughts.
+- A persistent accessible `Отменить` action appeared outside the Recovery modal.
+- `POST /tasks/recovery/undo` returned HTTP 200.
+- The Recovery count changed from 6 to 5 after Apply and returned to 6 after Undo.
+- The exact original `startTime` `2026-08-22T10:00:00` was restored.
+- The authoritative undo identity received a non-null `consumedAt`.
+- `reminderSyncStatus` was `ok` and `failedReminderSyncs` was empty.
+- No API runtime errors occurred during the Apply/Undo flow.
+
+Android emulator runtime for the Recovery Apply/Undo happy path: VERIFIED.
+Physical-device validation and Android runtime for expiry, stale-write, partial-reminder, and session-replacement failure paths: NOT VERIFIED.
