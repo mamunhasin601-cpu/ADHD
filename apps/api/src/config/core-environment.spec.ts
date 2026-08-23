@@ -1,4 +1,4 @@
-import { CORE_ENVIRONMENT_KEYS, validateCoreEnvironment } from './core-environment';
+import { REQUIRED_CORE_ENVIRONMENT_KEYS, validateCoreEnvironment } from './core-environment';
 
 const validEnvironment = () => ({
   NODE_ENV: 'production',
@@ -17,10 +17,16 @@ describe('validateCoreEnvironment', () => {
     });
   });
 
-  it.each(CORE_ENVIRONMENT_KEYS)('rejects missing %s independently', (key) => {
+  it.each(REQUIRED_CORE_ENVIRONMENT_KEYS)('rejects missing %s independently', (key) => {
     const environment: Record<string, unknown> = validEnvironment();
     delete environment[key];
     expect(() => validateCoreEnvironment(environment)).toThrow(key);
+  });
+
+  it('defaults an absent PORT to numeric 3000', () => {
+    const environment: Record<string, unknown> = validEnvironment();
+    delete environment.PORT;
+    expect(validateCoreEnvironment(environment).PORT).toBe(3000);
   });
 
   it.each(['', 'Production', ' production', 'production ', 'staging'])(
@@ -38,10 +44,36 @@ describe('validateCoreEnvironment', () => {
   });
 
   it.each([
+    'redis://localhost/not-a-db',
+    'redis://localhost/-1',
+    'redis://localhost/1.5',
+    'redis://localhost/1/2',
+    `redis://user:redis-password@localhost/${'9'.repeat(400)}`,
+  ])('rejects invalid Redis database path without disclosing the URL: %p', (REDIS_URL) => {
+    let message = '';
+    try {
+      validateCoreEnvironment({ ...validEnvironment(), REDIS_URL });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain('REDIS_URL');
+    expect(message).not.toContain(REDIS_URL);
+    expect(message).not.toContain('redis-password');
+  });
+
+  it.each(['redis://localhost', 'redis://localhost/', 'redis://localhost/0', 'redis://localhost/12'])(
+    'accepts valid Redis database path %p',
+    (REDIS_URL) => expect(validateCoreEnvironment({ ...validEnvironment(), REDIS_URL }).REDIS_URL).toBe(REDIS_URL),
+  );
+
+  it.each([
     ['JWT_SECRET', 'short'],
     ['JWT_REFRESH_SECRET', ' short-secret-that-is-long-enough-123456789 '],
     ['JWT_SECRET', 'замените-на-длинную-случайную-строку-минимум-64-символа'],
     ['JWT_REFRESH_SECRET', 'другая-длинная-случайная-строка-для-refresh-токенов'],
+    ['JWT_SECRET', 'change-me-change-me-change-me-change-me'],
+    ['JWT_REFRESH_SECRET', 'replace-me-replace-me-replace-me-replace-me'],
+    ['JWT_SECRET', 'your-secret-here-your-secret-here-your-secret-here'],
   ])('rejects weak, padded, or example %s values without disclosing them', (key, value) => {
     let message = '';
     try {
@@ -65,7 +97,7 @@ describe('validateCoreEnvironment', () => {
     }
   });
 
-  it.each(['0', '65536', '3.5', '3000 ', 'abc', '-1'])(
+  it.each(['', ' ', '0', '65536', '3.5', '3000 ', 'abc', '-1'])(
     'rejects invalid PORT %p',
     (PORT) => expect(() => validateCoreEnvironment({ ...validEnvironment(), PORT })).toThrow('PORT'),
   );
@@ -77,4 +109,3 @@ describe('validateCoreEnvironment', () => {
     })).toThrow(expect.not.stringContaining(password));
   });
 });
-

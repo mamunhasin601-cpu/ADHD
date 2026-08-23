@@ -7,6 +7,10 @@ export const CORE_ENVIRONMENT_KEYS = [
   'PORT',
 ] as const;
 
+export const REQUIRED_CORE_ENVIRONMENT_KEYS = CORE_ENVIRONMENT_KEYS.filter(
+  (key) => key !== 'PORT',
+);
+
 export type NodeEnvironment = 'development' | 'test' | 'production';
 
 export interface CoreEnvironment extends Record<string, unknown> {
@@ -21,6 +25,9 @@ export interface CoreEnvironment extends Record<string, unknown> {
 const EXAMPLE_JWT_SECRETS = new Set([
   'замените-на-длинную-случайную-строку-минимум-64-символа',
   'другая-длинная-случайная-строка-для-refresh-токенов',
+  'change-me-change-me-change-me-change-me',
+  'replace-me-replace-me-replace-me-replace-me',
+  'your-secret-here-your-secret-here-your-secret-here',
 ]);
 
 function requiredExactString(
@@ -50,6 +57,20 @@ function requireUrl(value: string, key: 'DATABASE_URL' | 'REDIS_URL', protocols:
   }
 }
 
+function requireValidRedisDatabasePath(value: string): void {
+  const pathname = new URL(value).pathname;
+  if (pathname === '' || pathname === '/') return;
+
+  if (!/^\/\d+$/.test(pathname)) {
+    throw new Error('Invalid core configuration: REDIS_URL database path must be a non-negative integer');
+  }
+
+  const database = Number(pathname.slice(1));
+  if (!Number.isSafeInteger(database) || database < 0) {
+    throw new Error('Invalid core configuration: REDIS_URL database path must be a non-negative integer');
+  }
+}
+
 /** Pure validation only: this function never opens a database or network connection. */
 export function validateCoreEnvironment(
   environment: Record<string, unknown>,
@@ -64,6 +85,7 @@ export function validateCoreEnvironment(
 
   const redisUrl = requiredExactString(environment, 'REDIS_URL');
   requireUrl(redisUrl, 'REDIS_URL', ['redis:', 'rediss:']);
+  requireValidRedisDatabasePath(redisUrl);
 
   const jwtSecret = requiredExactString(environment, 'JWT_SECRET');
   const jwtRefreshSecret = requiredExactString(environment, 'JWT_REFRESH_SECRET');
@@ -79,13 +101,16 @@ export function validateCoreEnvironment(
     throw new Error('Invalid core configuration: JWT_SECRET and JWT_REFRESH_SECRET must be different');
   }
 
-  const portValue = requiredExactString(environment, 'PORT');
-  if (!/^\d+$/.test(portValue)) {
-    throw new Error('Invalid core configuration: PORT must be an integer from 1 through 65535');
-  }
-  const port = Number(portValue);
-  if (port < 1 || port > 65535) {
-    throw new Error('Invalid core configuration: PORT must be an integer from 1 through 65535');
+  let port = 3000;
+  if (environment.PORT !== undefined) {
+    const portValue = requiredExactString(environment, 'PORT');
+    if (!/^\d+$/.test(portValue)) {
+      throw new Error('Invalid core configuration: PORT must be an integer from 1 through 65535');
+    }
+    port = Number(portValue);
+    if (port < 1 || port > 65535) {
+      throw new Error('Invalid core configuration: PORT must be an integer from 1 through 65535');
+    }
   }
 
   return {
@@ -98,4 +123,3 @@ export function validateCoreEnvironment(
     PORT: port,
   };
 }
-
