@@ -157,8 +157,10 @@ Phase 1 реализует минимальное ядро из [PDR-001](../12-
     task changes. Today keeps a calm accessible `Отменить` affordance outside
     the remounting preview banner; reminder and cache reconciliation reports
     partial failure honestly. The contract and automated validation are recorded
-    in [Task 0028](../../docs/tasks/0028-honest-recovery-undo.md); Android runtime
-    remains not verified.
+    in [Task 0028](../../docs/tasks/0028-honest-recovery-undo.md).
+
+    Android emulator runtime for the Recovery Apply/Undo happy path: VERIFIED.
+    Physical-device validation and Android runtime for expiry, stale-write, partial-reminder, and session-replacement failure paths: NOT VERIFIED.
 
 Остальные capability Phase 1 остаются на горизонте, но их точный порядок пока
 не принят. Контекстный помощник, overload mode и focus session относятся к
