@@ -1,9 +1,11 @@
-import { Injectable, Logger, ConflictException } from '@nestjs/common';
+import { Injectable, Logger, ConflictException, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { TASK_REMINDERS_QUEUE, JOBS } from './notifications.constants';
 import type { Task } from '@prisma/client';
+import { ExternalHttpService } from '../external-http/external-http.service';
+import { ExternalHttpError } from '../external-http/external-http.error';
 
 /**
  * Compact job payload (ADR-009): only task/user IDs needed for worker lookup.
@@ -44,6 +46,7 @@ export class NotificationsService {
     @InjectQueue(TASK_REMINDERS_QUEUE)
     private readonly taskReminderQueue: Queue<TaskReminderJobData>,
     private readonly prisma: PrismaService,
+    @Optional() private readonly externalHttp?: ExternalHttpService,
   ) {}
 
   // ── Scheduling ──────────────────────────────────────────────────────────────
@@ -238,7 +241,14 @@ export class NotificationsService {
 
   private async _sendToToken(token: string): Promise<TokenDeliveryResult> {
     try {
-      const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      const transport = this.externalHttp ?? new ExternalHttpService();
+      const result = await transport.requestJson<{
+        data?: { status: string; details?: { error?: string } };
+      }>({
+        operation: 'expo.push',
+        retry: 'none',
+        url: 'https://exp.host/--/api/v2/push/send',
+        options: {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -257,21 +267,18 @@ export class NotificationsService {
           sound: 'default',
           data: { type: 'task-reminder' },
         }),
+        },
       });
-
-      const result = (await response.json()) as {
-        data?: { status: string; message?: string; details?: { error?: string } };
-      };
       const ticket = result.data;
 
       if (ticket?.status === 'ok') return { status: 'sent' };
       if (ticket?.details?.error === 'DeviceNotRegistered') return { status: 'device-not-registered' };
 
-      return { status: 'error', message: ticket?.message ?? 'unknown' };
+      return { status: 'error', message: 'invalid-response' };
     } catch (err) {
-      const failureClass = err instanceof Error ? err.constructor.name : 'Unknown';
+      const failureClass = err instanceof ExternalHttpError ? err.failureClass : 'network';
       this.logger.error(`Push delivery failed: failureClass=${failureClass}`);
-      return { status: 'error', message: (err as Error).message };
+      return { status: 'error', message: failureClass };
     }
   }
 

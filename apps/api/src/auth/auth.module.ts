@@ -8,11 +8,13 @@ import { YandexOAuthController } from './yandex-oauth.controller';
 import { VkOAuthController } from './vk-oauth.controller';
 import {MailruOAuthController } from './mailru-oauth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { ExternalHttpModule } from '../external-http/external-http.module';
 
 @Module({
   imports: [
     PassportModule,
     JwtModule.register({}), // секреты передаём динамически в AuthService.generateTokens
+    ExternalHttpModule,
   ],
   controllers: [AuthController, YandexOAuthController, VkOAuthController, MailruOAuthController],
   providers: [AuthService, OAuthService, JwtStrategy],

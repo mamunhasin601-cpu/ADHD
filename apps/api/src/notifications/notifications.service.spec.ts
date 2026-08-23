@@ -1,6 +1,7 @@
 import { NotificationsService } from './notifications.service';
 import { ConflictException } from '@nestjs/common';
 import type { Task } from '@prisma/client';
+import { ExternalHttpService } from '../external-http/external-http.service';
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
@@ -37,7 +38,7 @@ describe('NotificationsService', () => {
       },
       notificationLog: { findFirst: jest.fn(), create: jest.fn() },
     };
-    service = new NotificationsService(queue as any, prisma as any);
+    service = new NotificationsService(queue as any, prisma as any, new ExternalHttpService());
     jest.useFakeTimers().setSystemTime(new Date('2026-07-25T10:00:00.000Z'));
   });
 
