@@ -1,8 +1,3 @@
-jest.mock('../auth/jwt-secrets', () => ({
-  JWT_SECRET: 'plan-boundary-test-secret',
-  JWT_REFRESH_SECRET: 'plan-boundary-refresh-secret',
-}));
-
 import supertest = require('supertest');
 import { INestApplication, Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -12,6 +7,7 @@ import { PlanController } from './plan.controller';
 import { PlanService } from './plan.service';
 import { JwtStrategy } from '../auth/strategies/jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
+import { ConfigService } from '@nestjs/config';
 
 const users: Record<string, any> = {
   a: { id: 'a', email: 'a@example.test', passwordHash: 'hash', timezone: 'UTC', plan: 'FREE', proExpiresAt: null },
@@ -42,7 +38,12 @@ describe('PlanController entitlement boundary', () => {
     const module = await Test.createTestingModule({
       imports: [PassportModule, JwtModule.register({ secret: 'plan-boundary-test-secret' })],
       controllers: [PlanController],
-      providers: [PlanService, JwtStrategy, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        PlanService,
+        JwtStrategy,
+        { provide: PrismaService, useValue: prisma },
+        { provide: ConfigService, useValue: { getOrThrow: () => 'plan-boundary-test-secret' } },
+      ],
     }).compile();
     app = module.createNestApplication();
     await app.init();

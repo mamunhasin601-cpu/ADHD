@@ -22,12 +22,6 @@
  * NOT covered here: Redis/PostgreSQL-backed e2e (requires live infrastructure).
  */
 
-// Mock jwt-secrets BEFORE any imports so requireEnv does not throw.
-jest.mock('../auth/jwt-secrets', () => ({
-  JWT_SECRET: 'notif-auth-integration-test-secret',
-  JWT_REFRESH_SECRET: 'notif-auth-integration-refresh-secret',
-}));
-
 import supertest = require('supertest');
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe, ConflictException } from '@nestjs/common';
@@ -37,6 +31,7 @@ import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
 import { JwtStrategy } from '../auth/strategies/jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
+import { ConfigService } from '@nestjs/config';
 
 const TEST_SECRET = 'notif-auth-integration-test-secret';
 
@@ -120,6 +115,7 @@ describe('NotificationsController — authenticated integration (real guard + st
         NotificationsService,
         JwtStrategy,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: ConfigService, useValue: { getOrThrow: () => TEST_SECRET } },
       ],
     }).compile();
 

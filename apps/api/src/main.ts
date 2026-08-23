@@ -1,11 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { ConfigService } from '@nestjs/config';
 import type { NextFunction, Request, Response } from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const logger = new Logger('Bootstrap');
+  const config = app.get(ConfigService);
 
   // Глобальный валидатор — отклоняет запросы с невалидными данными
   app.useGlobalPipes(
@@ -19,7 +21,7 @@ async function bootstrap() {
   );
 
   // CORS для веб-версии в dev-режиме
-  if (process.env.NODE_ENV !== 'production') {
+  if (config.getOrThrow('NODE_ENV') !== 'production') {
     app.enableCors({
       origin: ['http://localhost:3001', 'http://localhost:19006'],
       credentials: true,
@@ -34,7 +36,7 @@ async function bootstrap() {
     });
   }
 
-  const port = process.env.PORT ?? 3000;
+  const port = config.getOrThrow<number>('PORT');
   await app.listen(port);
   logger.log(`🚀 API запущен на http://localhost:${port}`);
 }

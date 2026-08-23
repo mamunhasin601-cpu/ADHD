@@ -4,11 +4,6 @@ import { randomBytes } from 'crypto';
 import { BCRYPT_ROUNDS, OAUTH_BOOTSTRAP_SECRET_BYTES } from './auth.constants';
 import { OAuthProfile, OAuthService } from './oauth.service';
 
-jest.mock('./jwt-secrets', () => ({
-  JWT_SECRET: 'test-access-secret',
-  JWT_REFRESH_SECRET: 'test-refresh-secret',
-}));
-
 jest.mock('crypto', () => ({
   ...jest.requireActual<typeof import('crypto')>('crypto'),
   randomBytes: jest.fn(),
