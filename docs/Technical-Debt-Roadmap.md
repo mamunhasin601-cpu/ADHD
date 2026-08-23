@@ -53,7 +53,7 @@ Task 0029 satisfies this fail-closed boundary and test requirement. It does **no
 | S-01 | **Частично выполнено:** новые OAuth users получают неизвестный им CSPRNG bootstrap secret (32 bytes, bcrypt cost 12), без `Math.random()`. Исторические OAuth-created hashes не ротированы; passwordless/auth-method policy и required `passwordHash` остаются нерешёнными. | `apps/api/src/auth/oauth.service.ts`, `apps/api/src/auth/auth.constants.ts`, Prisma schema | S/M | High | High | New-account boundary complete; historical/account policy requires a separate decision | 3 |
 | S-02 | OAuth controllers и push service используют прямой `fetch` без timeout, ограниченного retry и redaction policy. | `apps/api/src/auth/yandex-oauth.controller.ts`, `vk-oauth.controller.ts`, `mailru-oauth.controller.ts`, `apps/api/src/notifications/notifications.service.ts` | L | High | High | S-01; observability из S-04 желательно после transport | 4 |
 | S-03 | Account linking по email/phone не оформлен как явная подтверждаемая security policy; возможны race/ambiguous identity cases. | `apps/api/src/auth/oauth.service.ts`, `apps/api/src/auth/auth.service.ts`, auth DTOs | L | High | High | S-01; repository transaction из A-03 | 5 |
-| S-04 | Нет единой валидации обязательных secrets/provider config; часть runtime misconfiguration обнаруживается поздно. | `apps/api/src/main.ts`, `apps/api/src/app.module.ts`, `.env.example`, `apps/api/.env` | M | Medium | High | C-01; не коммитить реальные env | 6 |
+| S-04 (partially complete) | Единая fail-fast валидация core `NODE_ENV`, PostgreSQL, Redis, JWT и port завершена. OAuth provider configuration, безопасный внешний HTTP transport, production deployment/runtime verification и более широкая observability остаются нерешёнными. | `apps/api/src/main.ts`, `apps/api/src/app.module.ts`, `apps/api/src/config/`, `.env.example` | M | Medium | High | Core boundary complete; S-02, OAuth/operations work remain | 6 |
 | S-05 | Push payload может расшириться до названий задач/notes и отправить PII внешнему провайдеру. | `apps/api/src/notifications/notifications.service.ts`, `notifications.constants.ts` | M | Medium | Medium/High | S-02 | 7 |
 
 **Definition of Done:** security-sensitive randomness устранена; OAuth-only accounts не имеют usable password либо получают CSPRNG secret; timeout покрыт тестами; payload имеет typed allowlist snapshot; secrets валидируются fail-fast и не логируются.
@@ -115,7 +115,7 @@ Task 0029 satisfies this fail-closed boundary and test requirement. It does **no
 | C-01 | Production-safe plan entitlement; dev route fail-closed/удалён | S/M | Critical | Critical | — |
 | C-02 | Tests для production запрета и ownership текущего плана | M | High | Critical | C-01 |
 | S-01 | CSPRNG или passwordless OAuth account policy | S/M | High | High | — |
-| S-04 | Env validation для JWT/OAuth/DB и безопасный startup | M | Medium | High | C-01 |
+| S-04 (частично) | Core validation для `NODE_ENV`/PostgreSQL/Redis/JWT/port завершена; OAuth config, production runtime и observability остаются | M | Medium | High | C-01 |
 | Q-01 | Ignore/remove build artifact | S | Low | Medium | — |
 | D-03 (часть 1) | Минимальные auth/plan regression tests | M | Medium | High | C-01, S-01 |
 

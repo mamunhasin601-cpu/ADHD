@@ -11,11 +11,6 @@ jest.mock('bcrypt', () => ({
   ),
 }));
 
-jest.mock('./jwt-secrets', () => ({
-  JWT_SECRET: 'test-access-secret',
-  JWT_REFRESH_SECRET: 'test-refresh-secret',
-}));
-
 describe('AuthService password compatibility', () => {
   it('registers at the shared cost and accepts the same password on login', async () => {
     let storedUser: any;
@@ -34,7 +29,11 @@ describe('AuthService password compatibility', () => {
     const jwtService: any = {
       sign: jest.fn((payload, options) => `${payload.sub}:${options.secret}`),
     };
-    const service = new AuthService(prisma, jwtService);
+    const config: any = {
+      getOrThrow: (key: string) => key === 'JWT_SECRET' ? 'test-access-secret' : 'test-refresh-secret',
+      get: jest.fn(),
+    };
+    const service = new AuthService(prisma, jwtService, config);
     const registration = await service.register({
       email: 'password@example.test',
       password: 'correct horse battery staple',

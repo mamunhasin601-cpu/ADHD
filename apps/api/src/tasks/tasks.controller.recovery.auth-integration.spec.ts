@@ -34,12 +34,6 @@
  * environment — see docs/Backend.md.
  */
 
-// Mock jwt-secrets BEFORE any imports so requireEnv does not throw.
-jest.mock('../auth/jwt-secrets', () => ({
-  JWT_SECRET: 'integration-test-secret-7A',
-  JWT_REFRESH_SECRET: 'integration-test-refresh-7A',
-}));
-
 import supertest = require('supertest');
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
@@ -51,6 +45,7 @@ import { TaskRecoveryService } from './task-recovery.service';
 import { JwtStrategy } from '../auth/strategies/jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ConfigService } from '@nestjs/config';
 
 const TEST_SECRET = 'integration-test-secret-7A';
 
@@ -172,10 +167,11 @@ describe('Recovery routes — authenticated integration (real guard + strategy +
             remove: jest.fn(),
           },
         },
-        // Real auth strategy — reads JWT_SECRET from the mocked jwt-secrets module
+        // Real auth strategy — reads the same validated configuration source as AuthService
         JwtStrategy,
         // Mocked infrastructure only
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: ConfigService, useValue: { getOrThrow: () => TEST_SECRET } },
         { provide: NotificationsService, useValue: mockNotifications },
       ],
     }).compile();
