@@ -1,4 +1,4 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import { Injectable, ForbiddenException, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { FREE_TIER_LIMITS } from '@focus/shared-types';
 import type { Prisma } from '@prisma/client';
@@ -7,6 +7,8 @@ type PlanReadClient = Pick<Prisma.TransactionClient, 'user' | 'task'>;
 
 @Injectable()
 export class PlanService {
+  private readonly logger = new Logger(PlanService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   /**
@@ -93,10 +95,9 @@ current: activeTaskCount,
     };
   }
 
-  /**
-   * Обновляет план пользователя (вызывается после успешной оплаты).
-   */
+  /** Development-only mutation; no payment or production entitlement is implied. */
   async upgradeToPro(userId: string, expiresAt?: Date): Promise<void> {
+    this.assertDevelopmentMutationEnabled();
     await this.prisma.user.update({
       where: { id: userId },
       data: {
@@ -104,12 +105,12 @@ current: activeTaskCount,
         proExpiresAt: expiresAt ?? null, // null = бессрочно
       },
     });
+    this.logDevelopmentMutation(userId, 'PRO');
   }
 
-  /**
-   * Даунгрейд до Free (например, истёк срок подписки).
-   */
+  /** Development-only mutation; no subscription lifecycle is implemented. */
   async downgradeToFree(userId: string): Promise<void> {
+    this.assertDevelopmentMutationEnabled();
     await this.prisma.user.update({
       where: { id: userId },
       data: {
@@ -117,5 +118,24 @@ current: activeTaskCount,
         proExpiresAt: null,
       },
     });
+    this.logDevelopmentMutation(userId, 'FREE');
+  }
+
+  private assertDevelopmentMutationEnabled(): void {
+    const enabled = process.env.NODE_ENV !== 'production'
+      && process.env.ENABLE_DEV_PLAN_MUTATIONS === 'true';
+
+    if (!enabled) {
+      // Deliberately indistinguishable from an absent route in disabled environments.
+      throw new NotFoundException('Not Found');
+    }
+  }
+
+  private logDevelopmentMutation(userId: string, targetPlan: 'FREE' | 'PRO'): void {
+    this.logger.log(JSON.stringify({
+      event: 'development_plan_mutation',
+      actorUserId: userId,
+      targetPlan,
+    }));
   }
 }

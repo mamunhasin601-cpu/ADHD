@@ -20,8 +20,7 @@ export class PlanController {
 
   /**
    * POST /plan/upgrade
-   * Апгрейд до Pro (в реальном приложении вызывается после подтверждения платежа).
-   * Сейчас работает как dev endpoint без проверки платежа.
+   * Development-only plan mutation. PlanService fails closed unless explicitly enabled.
    */
   @Post('upgrade')
   @HttpCode(HttpStatus.OK)
@@ -32,7 +31,7 @@ export class PlanController {
 
   /**
    * POST /plan/downgrade
-   * Даунгрейд до Free (для тестирования).
+   * Development-only plan mutation. PlanService fails closed unless explicitly enabled.
    */
   @Post('downgrade')
   @HttpCode(HttpStatus.OK)
