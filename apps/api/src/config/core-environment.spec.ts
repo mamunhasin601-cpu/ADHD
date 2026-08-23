@@ -67,6 +67,23 @@ describe('validateCoreEnvironment', () => {
   );
 
   it.each([
+    'redis://%E0%A4%A:password@localhost/0',
+    'redis://user:%E0%A4%A@localhost/0',
+  ])('rejects malformed Redis credential encoding with a safe error for %p', (REDIS_URL) => {
+    let message = '';
+    try {
+      validateCoreEnvironment({ ...validEnvironment(), REDIS_URL });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain('REDIS_URL');
+    expect(message).not.toContain(REDIS_URL);
+    expect(message).not.toContain('user');
+    expect(message).not.toContain('password');
+    expect(message).not.toContain('%E0%A4%A');
+  });
+
+  it.each([
     ['JWT_SECRET', 'short'],
     ['JWT_REFRESH_SECRET', ' short-secret-that-is-long-enough-123456789 '],
     ['JWT_SECRET', 'замените-на-длинную-случайную-строку-минимум-64-символа'],

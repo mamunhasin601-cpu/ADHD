@@ -52,3 +52,39 @@ This task provides **no** live API, PostgreSQL, Redis, deployment, OAuth provide
 
 Those OAuth, transport, production operations, observability, and device/runtime gaps remain follow-up work.
 
+## Automated validation — 2026-08-23
+
+The final focused regression command was:
+
+```text
+npm test --workspace=apps/api -- --runInBand src/config/core-environment.spec.ts src/config/redis-connection.spec.ts src/auth/auth.service.spec.ts src/plan/plan.controller.auth.spec.ts src/notifications/notifications.controller.auth.spec.ts src/tasks/tasks.controller.recovery.auth-integration.spec.ts
+```
+
+All 6 suites passed, with 105 tests passed and no snapshots. The suites were `core-environment.spec.ts`, `redis-connection.spec.ts`, `auth.service.spec.ts`, `plan.controller.auth.spec.ts`, `notifications.controller.auth.spec.ts`, and `tasks.controller.recovery.auth-integration.spec.ts`.
+
+The complete API regression command was:
+
+```text
+npm test --workspace=apps/api -- --runInBand
+```
+
+All 33 suites passed, with 422 tests passed and no snapshots. Intentional error-path logs remained visible for simulated database and Redis failures, reminder partial/failure paths, push failures, and recovery failure paths.
+
+The remaining automated checks passed with these exact commands:
+
+```text
+npm run build:api
+npm run prisma:generate --workspace=apps/api
+DATABASE_URL='postgresql://placeholder:placeholder@localhost:5432/focus_validation' npx prisma validate --schema apps/api/prisma/schema.prisma
+git diff --check
+rg -n "jwt-secrets" apps/api/src --glob '!*.spec.ts'
+rg -n "process\.env\.(JWT_SECRET|JWT_REFRESH_SECRET)" apps/api/src --glob '!*.spec.ts'
+rg -n "REDIS_HOST|REDIS_PORT" apps/api/src --glob '!*.spec.ts'
+git status --porcelain
+```
+
+The API build completed, Prisma Client 5.16.2 was generated, and Prisma reported the schema valid using the non-secret placeholder database URL. `git diff --check` produced no errors. Each of the three production-source searches produced no matches. Final `git status --porcelain` was empty after the follow-up commit.
+
+The npm commands emitted the existing `Unknown env config "http-proxy"` warning. Dependency installation also reported the existing deprecation notices for `supertest@6.3.4` and `superagent@8.1.2`, plus 74 audit findings (6 low, 35 moderate, 32 high, and 1 critical).
+
+These automated tests, build, client generation, and schema validation are **validation, not runtime evidence**. They do not change the live API, PostgreSQL, Redis, deployment, OAuth provider, Android emulator, or physical-device runtime-evidence limitations recorded above.

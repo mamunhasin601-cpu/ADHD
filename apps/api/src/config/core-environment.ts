@@ -1,3 +1,5 @@
+import { decodeRedisCredential } from './redis-connection';
+
 export const CORE_ENVIRONMENT_KEYS = [
   'NODE_ENV',
   'DATABASE_URL',
@@ -58,7 +60,10 @@ function requireUrl(value: string, key: 'DATABASE_URL' | 'REDIS_URL', protocols:
 }
 
 function requireValidRedisDatabasePath(value: string): void {
-  const pathname = new URL(value).pathname;
+  const url = new URL(value);
+  decodeRedisCredential(url.username);
+  decodeRedisCredential(url.password);
+  const pathname = url.pathname;
   if (pathname === '' || pathname === '/') return;
 
   if (!/^\/\d+$/.test(pathname)) {

@@ -39,4 +39,19 @@ describe('redisConnectionFromUrl', () => {
   ])('never returns an invalid database option for %p', (url) => {
     expect(() => redisConnectionFromUrl(url)).toThrow('REDIS_URL');
   });
+
+  it.each([
+    'redis://%E0%A4%A:password@localhost/0',
+    'redis://user:%E0%A4%A@localhost/0',
+  ])('converts malformed credential decoding into a safe REDIS_URL error for %p', (url) => {
+    let message = '';
+    try {
+      redisConnectionFromUrl(url);
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain('REDIS_URL');
+    expect(message).not.toContain(url);
+    expect(message).not.toContain('%E0%A4%A');
+  });
 });
