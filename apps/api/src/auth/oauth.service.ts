@@ -2,7 +2,12 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from './auth.service';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
 import type { AuthTokens } from '@focus/shared-types';
+import {
+  BCRYPT_ROUNDS,
+  OAUTH_BOOTSTRAP_SECRET_BYTES,
+} from './auth.constants';
 
 export interface OAuthProfile {
   provider: 'yandex' | 'vk' | 'mailru';
@@ -77,9 +82,12 @@ export class OAuthService {
       );
     }
 
-    // Генерируем случайный пароль (пользователь не будет его знать)
-    const randomPassword = Math.random().toString(36).slice(-16);
-    const passwordHash = await bcrypt.hash(randomPassword, 10);
+    // Prisma currently requires a hash even though the OAuth user never receives
+    // this opaque secret. Generate it only after all existing-account paths end.
+    const bootstrapSecret = randomBytes(
+      OAUTH_BOOTSTRAP_SECRET_BYTES,
+    ).toString('base64url');
+    const passwordHash = await bcrypt.hash(bootstrapSecret, BCRYPT_ROUNDS);
 
     const createData: any = {
       email: profile.email || null,

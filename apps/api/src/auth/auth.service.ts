@@ -12,8 +12,7 @@ import { LoginDto } from './dto/login.dto';
 import { JWT_SECRET, JWT_REFRESH_SECRET } from './jwt-secrets';
 import type { AuthTokens, JwtPayload } from '@focus/shared-types';
 import type { User } from '@prisma/client';
-
-const BCRYPT_ROUNDS = 12;
+import { BCRYPT_ROUNDS } from './auth.constants';
 
 @Injectable()
 export class AuthService {
