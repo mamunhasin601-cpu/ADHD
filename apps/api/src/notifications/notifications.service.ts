@@ -276,7 +276,9 @@ export class NotificationsService {
       return { status: 'error', message: 'invalid-response' };
     } catch (err) {
       const failureClass = err instanceof ExternalHttpError ? err.failureClass : 'network';
-      this.logger.error(`Push delivery failed: failureClass=${failureClass}`);
+      if (!(err instanceof ExternalHttpError)) {
+        this.logger.error(`Push delivery failed: failureClass=${failureClass}`);
+      }
       return { status: 'error', message: failureClass };
     }
   }

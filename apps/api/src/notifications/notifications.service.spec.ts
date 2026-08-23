@@ -297,6 +297,19 @@ describe('NotificationsService', () => {
       },
     );
 
+    it('maps a known transport failure without a duplicate NotificationsService error log', async () => {
+      prisma.deviceToken.findMany.mockResolvedValue([{ id: 'dev-1', token: 'ExponentPushToken[secret]' }]);
+      prisma.notificationLog.findFirst.mockResolvedValue(null);
+      externalHttp.requestJson.mockRejectedValueOnce(new ExternalHttpError('timeout', 'expo.push'));
+      const error = jest.spyOn((service as any).logger, 'error');
+
+      const result = await service.sendPushNotification('user-1', 'task-1');
+
+      expect(result).toEqual({ status: 'all-failed', devices: [{ tokenId: 'dev-1', outcome: 'error', errorMessage: 'timeout' }] });
+      expect(error).not.toHaveBeenCalled();
+      expect(JSON.stringify(result)).not.toMatch(/secret|provider|URL|cause|stack/i);
+    });
+
     it('partial fan-out: одно устройство успешно, другое с retryable ошибкой — возвращает sent', async () => {
       prisma.deviceToken.findMany.mockResolvedValue([
         { id: 'dev-ok', token: 'ExponentPushToken[ok]' },

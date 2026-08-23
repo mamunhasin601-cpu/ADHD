@@ -32,6 +32,7 @@ export class ExternalHttpService {
         const attemptBudget = retry === 'safe-transient'
           ? Math.min(EXTERNAL_HTTP_SAFE_ATTEMPT_MS, remaining)
           : remaining;
+        const attemptDeadline = Date.now() + attemptBudget;
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), attemptBudget);
         let failure: ExternalHttpError;
@@ -39,7 +40,7 @@ export class ExternalHttpService {
         try {
           const response = await fetch(url, { ...options, signal: controller.signal });
           if (!response.ok) {
-            await this.cancelBody(response);
+            await this.cancelBody(response, Math.min(attemptDeadline, deadline));
             throw new ExternalHttpError('http', operation, response.status, attempts);
           }
 
@@ -115,11 +116,23 @@ export class ExternalHttpService {
       && RETRYABLE_HTTP_STATUSES.has(failure.status);
   }
 
-  private async cancelBody(response: Response): Promise<void> {
+  private async cancelBody(response: Response, cleanupDeadline: number): Promise<void> {
+    const body = response.body;
+    const remaining = Math.max(0, cleanupDeadline - Date.now());
+    if (!body || remaining <= 0) return;
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      await response.body?.cancel();
+      await Promise.race([
+        Promise.resolve(body.cancel()).catch(() => undefined),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, remaining);
+        }),
+      ]);
     } catch {
       // Cleanup is best-effort and must not replace the safe transport failure.
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
     }
   }
 

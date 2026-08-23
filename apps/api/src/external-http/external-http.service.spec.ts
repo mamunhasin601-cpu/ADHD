@@ -32,6 +32,24 @@ describe('ExternalHttpService', () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
+  it('bounds never-settling retryable response cleanup and performs the permitted retry', async () => {
+    jest.useFakeTimers();
+    const cancel = jest.fn(() => new Promise<void>(() => undefined));
+    const warn = jest.spyOn((service as any).logger, 'warn');
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce({ ok: false, status: 503, body: { cancel } })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ recovered: true }) }) as any;
+
+    const request = service.requestJson({ operation: 'vk.profile', url: 'https://provider.invalid', retry: 'safe-transient' });
+    await jest.advanceTimersByTimeAsync(2_400);
+    await jest.advanceTimersByTimeAsync(100);
+
+    await expect(request).resolves.toEqual({ recovered: true });
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it('releases a terminal non-retryable response body and logs one redacted failure', async () => {
     const cancel = jest.fn().mockResolvedValue(undefined);
     const warn = jest.spyOn((service as any).logger, 'warn');
@@ -46,6 +64,24 @@ describe('ExternalHttpService', () => {
     expect(logged).toContain('external-http.failure');
     expect(logged).toContain('POST');
     expect(logged).not.toMatch(/secret|invalid\.invalid|raw-body|token=/i);
+  });
+
+  it('bounds never-settling terminal response cleanup at the total deadline and logs once', async () => {
+    jest.useFakeTimers();
+    const cancel = jest.fn(() => new Promise<void>(() => undefined));
+    const warn = jest.spyOn((service as any).logger, 'warn');
+    global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 400, body: { cancel } }) as any;
+
+    const request = service.requestJson({ operation: 'expo.push', url: 'https://provider.invalid', retry: 'none' });
+    const observed = request.then(() => { throw new Error('expected request to fail'); }, (caught) => caught as ExternalHttpError);
+    await jest.advanceTimersByTimeAsync(4_999);
+    expect(warn).not.toHaveBeenCalled();
+    await jest.advanceTimersByTimeAsync(1);
+
+    await expect(observed).resolves.toMatchObject({ failureClass: 'http', status: 400, attempts: 1 });
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 
   it.each([
