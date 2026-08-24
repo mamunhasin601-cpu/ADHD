@@ -5,9 +5,10 @@ import { NotificationsService } from './notifications.service';
 import { NotificationsProcessor } from './notifications.processor';
 import { NotificationsController } from './notifications.controller';
 import { TASK_REMINDERS_QUEUE } from './notifications.constants';
+import { ExternalHttpModule } from '../external-http/external-http.module';
 
 @Module({
-  imports: [BullModule.registerQueue({ name: TASK_REMINDERS_QUEUE }), PrismaModule],
+  imports: [BullModule.registerQueue({ name: TASK_REMINDERS_QUEUE }), PrismaModule, ExternalHttpModule],
   controllers: [NotificationsController],
   providers: [NotificationsService, NotificationsProcessor],
   exports: [NotificationsService],

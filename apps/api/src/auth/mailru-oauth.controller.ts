@@ -3,6 +3,7 @@ import { Response } from 'express';
 import { OAuthService } from './oauth.service';
 import type { OAuthProfile } from './oauth.service';
 import * as crypto from 'crypto';
+import { ExternalHttpService } from '../external-http/external-http.service';
 
 /**
  * Mail.ru OAuth 2.0 flow
@@ -19,7 +20,7 @@ import * as crypto from 'crypto';
  */
 @Controller('auth/mailru')
 export class MailruOAuthController {
-  constructor(private readonly oauthService: OAuthService) {}
+  constructor(private readonly oauthService: OAuthService, private readonly externalHttp: ExternalHttpService) {}
 
   private readonly clientId = process.env.MAILRU_CLIENT_ID || 'dev-client-id';
   private readonly clientSecret = process.env.MAILRU_CLIENT_SECRET || 'dev-secret';
@@ -53,8 +54,7 @@ export class MailruOAuthController {
   ) {
     if (error) {
       return res.status(HttpStatus.BAD_REQUEST).json({
-        message: 'Mail.ru OAuth error',
-        error,
+        message: 'OAuth callback was not accepted',
       });
     }
 
@@ -66,7 +66,8 @@ export class MailruOAuthController {
 
     try {
       // 1. Обмениваем code на access_token
-      const tokenResponse = await fetch('https://oauth.mail.ru/token', {
+      const tokenData = await this.externalHttp.requestJson<any>({
+        operation: 'mailru.token', retry: 'none', url: 'https://oauth.mail.ru/token', options: {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -78,16 +79,11 @@ export class MailruOAuthController {
           client_id: this.clientId,
           client_secret: this.clientSecret,
         }),
+        },
       });
 
-      if (!tokenResponse.ok) {
-        throw new Error('Failed to exchange code for token');
-      }
-
-      const tokenData = await tokenResponse.json();
-
-      if (tokenData.error) {
-        throw new Error(`Mail.ru token error: ${tokenData.error_description}`);
+      if (tokenData.error || !tokenData.access_token) {
+        throw new Error('Mail.ru token exchange rejected');
       }
 
       const accessToken = tokenData.access_token;
@@ -117,8 +113,7 @@ export class MailruOAuthController {
         profileUrl.searchParams.set(k, v),
       );
 
-      const profileResponse = await fetch(profileUrl.toString());
-      const profileData = await profileResponse.json();
+      const profileData = await this.externalHttp.requestJson<any>({ operation: 'mailru.profile', url: profileUrl.toString(), retry: 'safe-transient' });
       const mailruUser = Array.isArray(profileData) ? profileData[0] : null;
 
       if (!mailruUser) {
@@ -143,11 +138,9 @@ export class MailruOAuthController {
       deepLink.searchParams.set('refreshToken', tokens.refreshToken);
 
       res.redirect(deepLink.toString());
-    } catch (err) {
-      console.error('Mail.ru OAuth error:', err);
+    } catch {
       return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         message: 'Failed to process Mail.ru OAuth',
-        error: err instanceof Error ? err.message : 'Unknown error',
       });
     }
   }

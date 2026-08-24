@@ -2,6 +2,7 @@ import { Controller, Get, Query, Res, HttpStatus } from '@nestjs/common';
 import { Response } from 'express';
 import { OAuthService } from './oauth.service';
 import type { OAuthProfile } from './oauth.service';
+import { ExternalHttpService } from '../external-http/external-http.service';
 
 /**
  * Yandex OAuth 2.0 flow
@@ -18,7 +19,7 @@ import type { OAuthProfile } from './oauth.service';
  */
 @Controller('auth/yandex')
 export class YandexOAuthController {
-  constructor(private readonly oauthService: OAuthService) {}
+  constructor(private readonly oauthService: OAuthService, private readonly externalHttp: ExternalHttpService) {}
 
   private readonly clientId = process.env.YANDEX_CLIENT_ID || 'dev-client-id';
   private readonly clientSecret = process.env.YANDEX_CLIENT_SECRET || 'dev-secret';
@@ -52,8 +53,7 @@ export class YandexOAuthController {
   ) {
     if (error) {
       return res.status(HttpStatus.BAD_REQUEST).json({
-        message: 'Yandex OAuth error',
-        error,
+        message: 'OAuth callback was not accepted',
       });
     }
 
@@ -65,7 +65,11 @@ export class YandexOAuthController {
 
     try {
       // 1. Обмениваем code на access_token
-      const tokenResponse = await fetch('https://oauth.yandex.ru/token', {
+      const tokenData = await this.externalHttp.requestJson<any>({
+        operation: 'yandex.token',
+        retry: 'none',
+        url: 'https://oauth.yandex.ru/token',
+        options: {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -76,27 +80,22 @@ export class YandexOAuthController {
           client_id: this.clientId,
           client_secret: this.clientSecret,
         }),
+        },
       });
-
-      if (!tokenResponse.ok) {
-        throw new Error('Failed to exchange code for token');
+      if (tokenData.error || !tokenData.access_token) {
+        throw new Error('Yandex token exchange rejected');
       }
-
-      const tokenData = await tokenResponse.json();
       const accessToken = tokenData.access_token;
 
       // 2. Получаем профиль пользователя
-      const profileResponse = await fetch('https://login.yandex.ru/info', {
-        headers: {
+      const profileData = await this.externalHttp.requestJson<any>({
+        operation: 'yandex.profile',
+        retry: 'safe-transient',
+        url: 'https://login.yandex.ru/info',
+        options: { headers: {
           Authorization: `OAuth ${accessToken}`,
-        },
+        } },
       });
-
-      if (!profileResponse.ok) {
-        throw new Error('Failed to fetch user profile');
-      }
-
-      const profileData = await profileResponse.json();
 
       // 3. Формируем профиль для нашей системы
       const profile: OAuthProfile = {
@@ -117,11 +116,9 @@ export class YandexOAuthController {
       deepLink.searchParams.set('refreshToken', tokens.refreshToken);
 
       res.redirect(deepLink.toString());
-    } catch (err) {
-      console.error('Yandex OAuth error:', err);
+    } catch {
       return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         message: 'Failed to process Yandex OAuth',
-        error: err instanceof Error ? err.message : 'Unknown error',
       });
     }
   }

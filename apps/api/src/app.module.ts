@@ -27,7 +27,7 @@ import { redisConnectionFromUrl } from './config/redis-connection';
       }),
     }),
 
-        PrismaModule,
+    PrismaModule,
     AuthModule,
     UsersModule,
     TasksModule,

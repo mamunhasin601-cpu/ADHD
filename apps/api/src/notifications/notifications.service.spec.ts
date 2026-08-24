@@ -1,11 +1,13 @@
 import { NotificationsService } from './notifications.service';
 import { ConflictException } from '@nestjs/common';
 import type { Task } from '@prisma/client';
+import { ExternalHttpError } from '../external-http/external-http.error';
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
   let queue: { add: jest.Mock; getJob: jest.Mock };
   let prisma: any;
+  let externalHttp: { requestJson: jest.Mock };
 
   const baseTask: Task = {
     id: 'task-1',
@@ -37,7 +39,13 @@ describe('NotificationsService', () => {
       },
       notificationLog: { findFirst: jest.fn(), create: jest.fn() },
     };
-    service = new NotificationsService(queue as any, prisma as any);
+    externalHttp = {
+      requestJson: jest.fn(async (request) => {
+        const response = await global.fetch(request.url, request.options);
+        return response.json();
+      }),
+    };
+    service = new NotificationsService(queue as any, prisma as any, externalHttp as any);
     jest.useFakeTimers().setSystemTime(new Date('2026-07-25T10:00:00.000Z'));
   });
 
@@ -184,6 +192,7 @@ describe('NotificationsService', () => {
       const result = await service.sendPushNotification('user-1', 'task-1');
       expect(result.status).toBe('sent');
       expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(externalHttp.requestJson).toHaveBeenCalledWith(expect.objectContaining({ operation: 'expo.push', retry: 'none' }));
     });
 
     it('возвращает sent при успешной отправке через legacy token', async () => {
@@ -256,6 +265,11 @@ describe('NotificationsService', () => {
       // data must not expose sensitive fields
       expect(fetchBody.data).not.toHaveProperty('taskTitle');
       expect(fetchBody.data).not.toHaveProperty('userId');
+      expect(externalHttp.requestJson).toHaveBeenCalledWith(expect.objectContaining({
+        operation: 'expo.push',
+        retry: 'none',
+        options: expect.objectContaining({ body: expect.any(String) }),
+      }));
     });
 
     it('возвращает all-failed при сетевой ошибке', async () => {
@@ -267,6 +281,33 @@ describe('NotificationsService', () => {
 
       const result = await service.sendPushNotification('user-1', 'task-1');
       expect(result.status).toBe('all-failed');
+    });
+
+    it.each(['timeout', 'network', 'http', 'invalid-response', 'invalid-request'] as const)(
+      'returns a stable safe outcome for transport %s without exposing the device token',
+      async (failureClass) => {
+        prisma.deviceToken.findMany.mockResolvedValue([{ id: 'dev-1', token: 'ExponentPushToken[secret]' }]);
+        prisma.notificationLog.findFirst.mockResolvedValue(null);
+        externalHttp.requestJson.mockRejectedValueOnce(new ExternalHttpError(failureClass, 'expo.push'));
+
+        const result = await service.sendPushNotification('user-1', 'task-1');
+
+        expect(result).toEqual({ status: 'all-failed', devices: [{ tokenId: 'dev-1', outcome: 'error', errorMessage: failureClass }] });
+        expect(JSON.stringify(result)).not.toMatch(/provider|secret|URL/i);
+      },
+    );
+
+    it('maps a known transport failure without a duplicate NotificationsService error log', async () => {
+      prisma.deviceToken.findMany.mockResolvedValue([{ id: 'dev-1', token: 'ExponentPushToken[secret]' }]);
+      prisma.notificationLog.findFirst.mockResolvedValue(null);
+      externalHttp.requestJson.mockRejectedValueOnce(new ExternalHttpError('timeout', 'expo.push'));
+      const error = jest.spyOn((service as any).logger, 'error');
+
+      const result = await service.sendPushNotification('user-1', 'task-1');
+
+      expect(result).toEqual({ status: 'all-failed', devices: [{ tokenId: 'dev-1', outcome: 'error', errorMessage: 'timeout' }] });
+      expect(error).not.toHaveBeenCalled();
+      expect(JSON.stringify(result)).not.toMatch(/secret|provider|URL|cause|stack/i);
     });
 
     it('partial fan-out: одно устройство успешно, другое с retryable ошибкой — возвращает sent', async () => {

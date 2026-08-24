@@ -2,6 +2,7 @@ import { Controller, Get, Query, Res, HttpStatus } from '@nestjs/common';
 import { Response } from 'express';
 import { OAuthService } from './oauth.service';
 import type { OAuthProfile } from './oauth.service';
+import { ExternalHttpService } from '../external-http/external-http.service';
 
 /**
  * VK OAuth 2.0 flow
@@ -18,7 +19,7 @@ import type { OAuthProfile } from './oauth.service';
  */
 @Controller('auth/vk')
 export class VkOAuthController {
-  constructor(private readonly oauthService: OAuthService) {}
+  constructor(private readonly oauthService: OAuthService, private readonly externalHttp: ExternalHttpService) {}
 
   private readonly clientId = process.env.VK_CLIENT_ID || 'dev-client-id';
   private readonly clientSecret = process.env.VK_CLIENT_SECRET || 'dev-secret';
@@ -54,9 +55,7 @@ export class VkOAuthController {
   ) {
     if (error) {
       return res.status(HttpStatus.BAD_REQUEST).json({
-        message: 'VK OAuth error',
-        error,
-        description: errorDescription,
+        message: 'OAuth callback was not accepted',
       });
     }
 
@@ -75,16 +74,10 @@ export class VkOAuthController {
       tokenUrl.searchParams.set('redirect_uri', this.redirectUri);
       tokenUrl.searchParams.set('code', code);
 
-      const tokenResponse = await fetch(tokenUrl.toString());
+      const tokenData = await this.externalHttp.requestJson<any>({ operation: 'vk.token', url: tokenUrl.toString(), retry: 'none' });
 
-      if (!tokenResponse.ok) {
-        throw new Error('Failed to exchange code for token');
-      }
-
-      const tokenData = await tokenResponse.json();
-
-      if (tokenData.error) {
-        throw new Error(`VK token error: ${tokenData.error_description}`);
+      if (tokenData.error || !tokenData.access_token || tokenData.user_id == null) {
+        throw new Error('VK token exchange rejected');
       }
 
       const accessToken = tokenData.access_token;
@@ -99,8 +92,7 @@ export class VkOAuthController {
       profileUrl.searchParams.set('access_token', accessToken);
       profileUrl.searchParams.set('v', '5.131');
 
-      const profileResponse = await fetch(profileUrl.toString());
-      const profileData = await profileResponse.json();
+      const profileData = await this.externalHttp.requestJson<any>({ operation: 'vk.profile', url: profileUrl.toString(), retry: 'safe-transient' });
       const vkUser = profileData.response?.[0];
 
       // 3. Формируем профиль для нашей системы
@@ -121,11 +113,9 @@ export class VkOAuthController {
       deepLink.searchParams.set('refreshToken', tokens.refreshToken);
 
       res.redirect(deepLink.toString());
-    } catch (err) {
-      console.error('VK OAuth error:', err);
+    } catch {
       return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         message: 'Failed to process VK OAuth',
-        error: err instanceof Error ? err.message : 'Unknown error',
       });
     }
   }

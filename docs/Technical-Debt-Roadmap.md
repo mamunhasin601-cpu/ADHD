@@ -51,9 +51,9 @@ Task 0029 satisfies this fail-closed boundary and test requirement. It does **no
 | ID | Проблема | Файл(ы) | Сложность | Риск | Влияние | Зависимости | Порядок |
 |---|---|---|---|---|---|---|---:|
 | S-01 | **Частично выполнено:** новые OAuth users получают неизвестный им CSPRNG bootstrap secret (32 bytes, bcrypt cost 12), без `Math.random()`. Исторические OAuth-created hashes не ротированы; passwordless/auth-method policy и required `passwordHash` остаются нерешёнными. | `apps/api/src/auth/oauth.service.ts`, `apps/api/src/auth/auth.constants.ts`, Prisma schema | S/M | High | High | New-account boundary complete; historical/account policy requires a separate decision | 3 |
-| S-02 | OAuth controllers и push service используют прямой `fetch` без timeout, ограниченного retry и redaction policy. | `apps/api/src/auth/yandex-oauth.controller.ts`, `vk-oauth.controller.ts`, `mailru-oauth.controller.ts`, `apps/api/src/notifications/notifications.service.ts` | L | High | High | S-01; observability из S-04 желательно после transport | 4 |
+| S-02 (complete for identified calls) | OAuth and Expo calls use one bounded transport with explicit retry and redaction policy. | `apps/api/src/external-http/`, OAuth controllers, notifications service | L | High | High | Provider adapters and broader observability remain separate | 4 |
 | S-03 | Account linking по email/phone не оформлен как явная подтверждаемая security policy; возможны race/ambiguous identity cases. | `apps/api/src/auth/oauth.service.ts`, `apps/api/src/auth/auth.service.ts`, auth DTOs | L | High | High | S-01; repository transaction из A-03 | 5 |
-| S-04 (partially complete) | Единая fail-fast валидация core `NODE_ENV`, PostgreSQL, Redis, JWT и port завершена. OAuth provider configuration, безопасный внешний HTTP transport, production deployment/runtime verification и более широкая observability остаются нерешёнными. | `apps/api/src/main.ts`, `apps/api/src/app.module.ts`, `apps/api/src/config/`, `.env.example` | M | Medium | High | Core boundary complete; S-02, OAuth/operations work remain | 6 |
+| S-04 (partially complete) | Core validation and bounded external transport are complete. OAuth provider configuration, production deployment/runtime verification, and broader observability remain unresolved. | `apps/api/src/main.ts`, `apps/api/src/app.module.ts`, `apps/api/src/config/`, `apps/api/src/external-http/`, `.env.example` | M | Medium | High | Provider configuration and operations work remain | 6 |
 | S-05 | Push payload может расшириться до названий задач/notes и отправить PII внешнему провайдеру. | `apps/api/src/notifications/notifications.service.ts`, `notifications.constants.ts` | M | Medium | Medium/High | S-02 | 7 |
 
 **Definition of Done:** security-sensitive randomness устранена; OAuth-only accounts не имеют usable password либо получают CSPRNG secret; timeout покрыт тестами; payload имеет typed allowlist snapshot; secrets валидируются fail-fast и не логируются.
@@ -93,7 +93,7 @@ Task 0029 satisfies this fail-closed boundary and test requirement. It does **no
 |---|---|---|---|---|---|---|---:|
 | P-01 | Timeline через `ScrollView` рендерит все часы/tasks; auto-scroll effect имеет риск неполных dependencies. | `apps/mobile/components/timeline/Timeline.tsx` | L | Medium | High при росте данных | A-01 | 20 |
 | P-02 | Task blocks и layout calculations не имеют измерений/профиля и могут повторно вычисляться. | `apps/mobile/components/timeline/`, `apps/mobile/lib/timeline-layout.ts` | M | Low | Medium | Q-02, P-01 | 21 |
-| P-03 | Внешние HTTP вызовы могут удерживать backend resources без deadline. | OAuth controllers, notifications service | M | High | High | S-02 | 22 |
+| P-03 (complete) | Current OAuth and Expo external calls share one tested 5,000 ms total deadline. | External HTTP transport, OAuth controllers, notifications service | M | High | High | S-02 | 22 |
 
 ### Developer Experience Improvements
 
