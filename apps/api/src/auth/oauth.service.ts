@@ -12,7 +12,7 @@ import { OAuthAccountLinkingRequiredError } from './oauth-account-linking.error'
 
 export interface OAuthProfile {
   provider: 'yandex' | 'vk' | 'mailru';
-  providerId: string;
+  providerId: unknown;
   email?: string;
   phone?: string;
   firstName?: string;
@@ -27,12 +27,17 @@ export class OAuthService {
   ) {}
 
   async handleOAuthCallback(profile: OAuthProfile): Promise<AuthTokens> {
+    const providerId = profile.providerId;
+    if (typeof providerId !== 'string' || providerId.trim().length === 0) {
+      throw new BadRequestException('OAuth profile is invalid');
+    }
+
     const whereClause =
       profile.provider === 'yandex'
-        ? { yandexId: profile.providerId }
+        ? { yandexId: providerId }
         : profile.provider === 'vk'
-        ? { vkId: profile.providerId }
-        : { mailruId: profile.providerId };
+        ? { vkId: providerId }
+        : { mailruId: providerId };
 
     const linkedUser = await this.prisma.user.findFirst({ where: whereClause });
 
@@ -74,9 +79,9 @@ export class OAuthService {
       timezone: 'Europe/Moscow', // default для РФ рынка
     };
 
-    if (profile.provider === 'yandex') createData.yandexId = profile.providerId;
-    else if (profile.provider === 'vk') createData.vkId = profile.providerId;
-    else createData.mailruId = profile.providerId;
+    if (profile.provider === 'yandex') createData.yandexId = providerId;
+    else if (profile.provider === 'vk') createData.vkId = providerId;
+    else createData.mailruId = providerId;
 
     try {
       const user = await this.prisma.user.create({ data: createData });

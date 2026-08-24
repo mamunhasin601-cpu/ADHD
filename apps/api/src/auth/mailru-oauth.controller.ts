@@ -131,10 +131,19 @@ export class MailruOAuthController {
         throw new Error('Failed to fetch Mail.ru user profile');
       }
 
+      const rawMailruUserId = mailruUser.uid;
+      if (
+        (typeof rawMailruUserId !== 'string' &&
+          typeof rawMailruUserId !== 'number') ||
+        String(rawMailruUserId).trim().length === 0
+      ) {
+        throw new Error('Mail.ru profile is invalid');
+      }
+
       // 3. Формируем профиль для нашей системы
       const profile: OAuthProfile = {
         provider: 'mailru',
-        providerId: String(mailruUser.uid),
+        providerId: String(rawMailruUserId),
         email: mailruUser.email || undefined,
         firstName: mailruUser.first_name,
         lastName: mailruUser.last_name,

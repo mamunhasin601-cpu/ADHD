@@ -109,6 +109,12 @@ export class YandexOAuthController {
       });
 
       // 3. Формируем профиль для нашей системы
+      if (
+        typeof profileData.id !== 'string' ||
+        profileData.id.trim().length === 0
+      ) {
+        throw new Error('Yandex profile is invalid');
+      }
       const profile: OAuthProfile = {
         provider: 'yandex',
         providerId: profileData.id,

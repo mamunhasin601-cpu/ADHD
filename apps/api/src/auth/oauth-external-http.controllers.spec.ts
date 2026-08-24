@@ -121,4 +121,36 @@ describe('OAuth controllers external transport', () => {
     const serialized = JSON.stringify(res.json.mock.calls[0][0]);
     expect(serialized).not.toMatch(/existing@example|sensitive-code|provider-access|accessToken|refreshToken/);
   });
+
+  it.each([
+    ['missing', undefined],
+    ['empty', ''],
+    ['whitespace-only', '   '],
+  ])(
+    'rejects a %s Yandex profile ID with a generic failure and no issuance',
+    async (_name, providerId) => {
+      transport.requestJson
+        .mockResolvedValueOnce({ access_token: 'provider-access' })
+        .mockResolvedValueOnce({
+          id: providerId,
+          default_email: 'provider-content@example.test',
+        });
+      const res = response();
+
+      await invoke(
+        YandexOAuthController,
+        new YandexOAuthController(oauth as any, transport as any),
+        'sensitive-code',
+        res,
+      );
+
+      expect(oauth.handleOAuthCallback).not.toHaveBeenCalled();
+      expect(res.redirect).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(500);
+      const serialized = JSON.stringify(res.json.mock.calls[0][0]);
+      expect(serialized).not.toMatch(
+        /provider-content|sensitive-code|provider-access|accessToken|refreshToken|undefined|null|object/i,
+      );
+    },
+  );
 });

@@ -97,6 +97,43 @@ describe('OAuthService', () => {
   );
 
   it.each([
+    ['yandex', undefined],
+    ['yandex', null],
+    ['yandex', ''],
+    ['yandex', '   '],
+    ['yandex', { id: 'not-a-string' }],
+    ['vk', undefined],
+    ['vk', null],
+    ['vk', ''],
+    ['vk', '\t\r\n'],
+    ['vk', 42],
+    ['mailru', undefined],
+    ['mailru', null],
+    ['mailru', ''],
+    ['mailru', '  '],
+    ['mailru', ['not-a-string']],
+  ] as const)(
+    'rejects an unusable %s provider ID before any persistence or issuance (%p)',
+    async (provider, providerId) => {
+      await expect(
+        service.handleOAuthCallback({
+          provider,
+          providerId,
+          email: 'must-not-be-looked-up@example.test',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(prisma.user.findFirst).not.toHaveBeenCalled();
+      expect(prisma.user.create).not.toHaveBeenCalled();
+      expect(prisma.user).not.toHaveProperty('update');
+      expect(randomBytesMock).not.toHaveBeenCalled();
+      expect(hashMock).not.toHaveBeenCalled();
+      expect(authService.generateTokens).not.toHaveBeenCalled();
+      logSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    },
+  );
+
+  it.each([
     ['yandex', 'yandexId'],
     ['vk', 'vkId'],
     ['mailru', 'mailruId'],
