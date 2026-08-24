@@ -1,9 +1,20 @@
-import { Controller, Get, Query, Res, HttpStatus } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Query,
+  Res,
+  HttpStatus,
+} from '@nestjs/common';
 import { Response } from 'express';
 import { OAuthService } from './oauth.service';
 import type { OAuthProfile } from './oauth.service';
 import * as crypto from 'crypto';
 import { ExternalHttpService } from '../external-http/external-http.service';
+import {
+  OAuthAccountLinkingRequiredError,
+  OAUTH_ACCOUNT_LINKING_REQUIRED_RESPONSE,
+} from './oauth-account-linking.error';
 
 /**
  * Mail.ru OAuth 2.0 flow
@@ -138,7 +149,17 @@ export class MailruOAuthController {
       deepLink.searchParams.set('refreshToken', tokens.refreshToken);
 
       res.redirect(deepLink.toString());
-    } catch {
+    } catch (error) {
+      if (error instanceof OAuthAccountLinkingRequiredError) {
+        return res
+          .status(HttpStatus.CONFLICT)
+          .json(OAUTH_ACCOUNT_LINKING_REQUIRED_RESPONSE);
+      }
+      if (error instanceof BadRequestException) {
+        return res.status(HttpStatus.BAD_REQUEST).json({
+          message: 'OAuth profile did not include a usable identity',
+        });
+      }
       return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         message: 'Failed to process Mail.ru OAuth',
       });

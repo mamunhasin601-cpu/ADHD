@@ -8,6 +8,7 @@ import {
   BCRYPT_ROUNDS,
   OAUTH_BOOTSTRAP_SECRET_BYTES,
 } from './auth.constants';
+import { OAuthAccountLinkingRequiredError } from './oauth-account-linking.error';
 
 export interface OAuthProfile {
   provider: 'yandex' | 'vk' | 'mailru';
@@ -25,15 +26,7 @@ export class OAuthService {
     private readonly authService: AuthService,
   ) {}
 
-  /**
-   * Обрабатывает OAuth callback:
-   * 1. Ищет существующего пользователя по providerId
-   * 2. Если нет — ищет по email/phone
-   * 3. Если нет — создаёт нового пользователя
-   * 4. Возвращает JWT токены
-   */
   async handleOAuthCallback(profile: OAuthProfile): Promise<AuthTokens> {
-    // 1. Ищем пользователя по OAuth provider ID
     const whereClause =
       profile.provider === 'yandex'
         ? { yandexId: profile.providerId }
@@ -41,41 +34,26 @@ export class OAuthService {
         ? { vkId: profile.providerId }
         : { mailruId: profile.providerId };
 
-    let user = await this.prisma.user.findFirst({ where: whereClause });
+    const linkedUser = await this.prisma.user.findFirst({ where: whereClause });
 
-    if (user) {
-      // Пользователь уже привязан к этому OAuth провайдеру
-      return this.authService.generateTokens(user);
+    if (linkedUser) {
+      return this.authService.generateTokens(linkedUser);
     }
 
-    // 2. Ищем по email или phone (account linking)
     if (profile.email || profile.phone) {
       const identityConditions: Array<{ email: string } | { phone: string }> = [];
       if (profile.email) identityConditions.push({ email: profile.email });
       if (profile.phone) identityConditions.push({ phone: profile.phone });
 
-      user = await this.prisma.user.findFirst({
+      const identityMatch = await this.prisma.user.findFirst({
         where: { OR: identityConditions },
       });
 
-      if (user) {
-        // Найден существующий аккаунт — привязываем OAuth провайдер
-        const updateData =
-          profile.provider === 'yandex'
-            ? { yandexId: profile.providerId }
-            : profile.provider === 'vk'
-            ? { vkId: profile.providerId }
-            : { mailruId: profile.providerId };
-
-        user = await this.prisma.user.update({
-          where: { id: user.id },
-          data: updateData,
-        });
-        return this.authService.generateTokens(user);
+      if (identityMatch) {
+        throw new OAuthAccountLinkingRequiredError();
       }
     }
 
-    // 3. Создаём нового пользователя
     if (!profile.email && !profile.phone) {
       throw new BadRequestException(
         'OAuth провайдер не предоставил email или телефон',
@@ -100,8 +78,33 @@ export class OAuthService {
     else if (profile.provider === 'vk') createData.vkId = profile.providerId;
     else createData.mailruId = profile.providerId;
 
-    user = await this.prisma.user.create({ data: createData });
+    try {
+      const user = await this.prisma.user.create({ data: createData });
+      return this.authService.generateTokens(user);
+    } catch (error) {
+      if (!this.isUniqueConflict(error)) {
+        throw error;
+      }
 
-    return this.authService.generateTokens(user);
+      // Unique constraints are authoritative. Only this exact provider identity
+      // can make a concurrent creation an idempotent replay.
+      const concurrentlyLinkedUser = await this.prisma.user.findFirst({
+        where: whereClause,
+      });
+      if (concurrentlyLinkedUser) {
+        return this.authService.generateTokens(concurrentlyLinkedUser);
+      }
+
+      throw new OAuthAccountLinkingRequiredError();
+    }
+  }
+
+  private isUniqueConflict(error: unknown): error is { code: 'P2002' } {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'P2002'
+    );
   }
 }
