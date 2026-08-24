@@ -1,6 +1,10 @@
 import { YandexOAuthController } from './yandex-oauth.controller';
 import { VkOAuthController } from './vk-oauth.controller';
 import { MailruOAuthController } from './mailru-oauth.controller';
+import {
+  OAuthAccountLinkingRequiredError,
+  OAUTH_ACCOUNT_LINKING_REQUIRED_RESPONSE,
+} from './oauth-account-linking.error';
 
 const tokens = { accessToken: 'access', refreshToken: 'refresh' };
 const response = () => {
@@ -95,4 +99,58 @@ describe('OAuth controllers external transport', () => {
     expect(res.status).toHaveBeenCalledWith(500);
     expect(JSON.stringify(res.json.mock.calls[0][0])).not.toMatch(/provider|response|URL|token|secret|code|error|description/i);
   });
+
+  it.each([
+    ['Yandex', YandexOAuthController, { access_token: 'provider-access' }, { id: 'y-1', default_email: 'existing@example.test' }],
+    ['VK', VkOAuthController, { access_token: 'provider-access', user_id: 42, email: 'existing@example.test' }, { response: [{}] }],
+    ['Mail.ru', MailruOAuthController, { access_token: 'provider-access' }, [{ uid: 'm-1', email: 'existing@example.test' }]],
+  ] as const)('%s maps linking-required to the shared safe 409 without redirect', async (_name, Controller, tokenReply, profileReply) => {
+    transport.requestJson.mockResolvedValueOnce(tokenReply).mockResolvedValueOnce(profileReply);
+    oauth.handleOAuthCallback.mockRejectedValueOnce(
+      new OAuthAccountLinkingRequiredError(),
+    );
+    const res = response();
+
+    await invoke(Controller, new Controller(oauth as any, transport as any), 'sensitive-code', res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(
+      OAUTH_ACCOUNT_LINKING_REQUIRED_RESPONSE,
+    );
+    expect(res.redirect).not.toHaveBeenCalled();
+    const serialized = JSON.stringify(res.json.mock.calls[0][0]);
+    expect(serialized).not.toMatch(/existing@example|sensitive-code|provider-access|accessToken|refreshToken/);
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['empty', ''],
+    ['whitespace-only', '   '],
+  ])(
+    'rejects a %s Yandex profile ID with a generic failure and no issuance',
+    async (_name, providerId) => {
+      transport.requestJson
+        .mockResolvedValueOnce({ access_token: 'provider-access' })
+        .mockResolvedValueOnce({
+          id: providerId,
+          default_email: 'provider-content@example.test',
+        });
+      const res = response();
+
+      await invoke(
+        YandexOAuthController,
+        new YandexOAuthController(oauth as any, transport as any),
+        'sensitive-code',
+        res,
+      );
+
+      expect(oauth.handleOAuthCallback).not.toHaveBeenCalled();
+      expect(res.redirect).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(500);
+      const serialized = JSON.stringify(res.json.mock.calls[0][0]);
+      expect(serialized).not.toMatch(
+        /provider-content|sensitive-code|provider-access|accessToken|refreshToken|undefined|null|object/i,
+      );
+    },
+  );
 });

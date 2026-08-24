@@ -1,8 +1,19 @@
-import { Controller, Get, Query, Res, HttpStatus } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Query,
+  Res,
+  HttpStatus,
+} from '@nestjs/common';
 import { Response } from 'express';
 import { OAuthService } from './oauth.service';
 import type { OAuthProfile } from './oauth.service';
 import { ExternalHttpService } from '../external-http/external-http.service';
+import {
+  OAuthAccountLinkingRequiredError,
+  OAUTH_ACCOUNT_LINKING_REQUIRED_RESPONSE,
+} from './oauth-account-linking.error';
 
 /**
  * VK OAuth 2.0 flow
@@ -81,13 +92,21 @@ export class VkOAuthController {
       }
 
       const accessToken = tokenData.access_token;
-      const vkUserId = String(tokenData.user_id);
+      const rawVkUserId = tokenData.user_id;
+      if (
+        (typeof rawVkUserId !== 'string' &&
+          typeof rawVkUserId !== 'number') ||
+        String(rawVkUserId).trim().length === 0
+      ) {
+        throw new Error('VK profile is invalid');
+      }
+      const vkUserId = String(rawVkUserId);
       // VK возвращает email в ответе на token, если был запрошен scope email
       const email = tokenData.email || null;
 
       // 2. Получаем профиль пользователя (имя, фамилия)
       const profileUrl = new URL('https://api.vk.com/method/users.get');
-      profileUrl.searchParams.set('user_ids', vkUserId);
+      profileUrl.searchParams.set('user_ids', String(vkUserId));
       profileUrl.searchParams.set('fields', 'first_name,last_name');
       profileUrl.searchParams.set('access_token', accessToken);
       profileUrl.searchParams.set('v', '5.131');
@@ -113,7 +132,17 @@ export class VkOAuthController {
       deepLink.searchParams.set('refreshToken', tokens.refreshToken);
 
       res.redirect(deepLink.toString());
-    } catch {
+    } catch (error) {
+      if (error instanceof OAuthAccountLinkingRequiredError) {
+        return res
+          .status(HttpStatus.CONFLICT)
+          .json(OAUTH_ACCOUNT_LINKING_REQUIRED_RESPONSE);
+      }
+      if (error instanceof BadRequestException) {
+        return res.status(HttpStatus.BAD_REQUEST).json({
+          message: 'OAuth profile did not include a usable identity',
+        });
+      }
       return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         message: 'Failed to process VK OAuth',
       });

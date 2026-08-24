@@ -3,6 +3,10 @@ import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
 import { BCRYPT_ROUNDS, OAUTH_BOOTSTRAP_SECRET_BYTES } from './auth.constants';
 import { OAuthProfile, OAuthService } from './oauth.service';
+import {
+  OAuthAccountLinkingRequiredError,
+  OAUTH_ACCOUNT_LINKING_REQUIRED_MESSAGE,
+} from './oauth-account-linking.error';
 
 jest.mock('crypto', () => ({
   ...jest.requireActual<typeof import('crypto')>('crypto'),
@@ -32,7 +36,6 @@ describe('OAuthService', () => {
     prisma = {
       user: {
         findFirst: jest.fn(),
-        update: jest.fn(),
         create: jest.fn(),
       },
     };
@@ -93,51 +96,129 @@ describe('OAuthService', () => {
     },
   );
 
-  it('returns tokens for an existing provider identity without mutation', async () => {
-    const existing = { id: 'existing', passwordHash: 'preserved' };
-    prisma.user.findFirst.mockResolvedValueOnce(existing);
+  it.each([
+    ['yandex', undefined],
+    ['yandex', null],
+    ['yandex', ''],
+    ['yandex', '   '],
+    ['yandex', { id: 'not-a-string' }],
+    ['vk', undefined],
+    ['vk', null],
+    ['vk', ''],
+    ['vk', '\t\r\n'],
+    ['vk', 42],
+    ['mailru', undefined],
+    ['mailru', null],
+    ['mailru', ''],
+    ['mailru', '  '],
+    ['mailru', ['not-a-string']],
+  ] as const)(
+    'rejects an unusable %s provider ID before any persistence or issuance (%p)',
+    async (provider, providerId) => {
+      await expect(
+        service.handleOAuthCallback({
+          provider,
+          providerId,
+          email: 'must-not-be-looked-up@example.test',
+        }),
+      ).rejects.toThrow(BadRequestException);
 
-    await expect(
-      service.handleOAuthCallback({ provider: 'vk', providerId: 'vk-1' }),
-    ).resolves.toEqual(tokens);
-
-    expect(authService.generateTokens).toHaveBeenCalledWith(existing);
-    expect(prisma.user.update).not.toHaveBeenCalled();
-    expect(prisma.user.create).not.toHaveBeenCalled();
-    expect(randomBytesMock).not.toHaveBeenCalled();
-    expect(hashMock).not.toHaveBeenCalled();
-  });
+      expect(prisma.user.findFirst).not.toHaveBeenCalled();
+      expect(prisma.user.create).not.toHaveBeenCalled();
+      expect(prisma.user).not.toHaveProperty('update');
+      expect(randomBytesMock).not.toHaveBeenCalled();
+      expect(hashMock).not.toHaveBeenCalled();
+      expect(authService.generateTokens).not.toHaveBeenCalled();
+      logSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+    },
+  );
 
   it.each([
-    ['email', { email: 'linked@example.test' }],
-    ['phone', { phone: '+79990000000' }],
-  ] as const)('links by %s without replacing the password hash', async (_, identity) => {
-    const existing = { id: 'linked', passwordHash: 'existing-password-hash', ...identity };
-    const linked = { ...existing, yandexId: 'ya-1' };
+    ['yandex', 'yandexId'],
+    ['vk', 'vkId'],
+    ['mailru', 'mailruId'],
+  ] as const)(
+    'returns tokens for an existing %s provider identity without mutation',
+    async (provider, providerIdField) => {
+      const existing = { id: 'existing', passwordHash: 'preserved' };
+      prisma.user.findFirst.mockResolvedValueOnce(existing);
+
+      await expect(
+        service.handleOAuthCallback({
+          provider,
+          providerId: `${provider}-1`,
+          email: 'belongs-to-someone-else@example.test',
+          phone: '+79999999999',
+        }),
+      ).resolves.toEqual(tokens);
+
+      expect(prisma.user.findFirst).toHaveBeenCalledTimes(1);
+      expect(prisma.user.findFirst).toHaveBeenCalledWith({
+        where: { [providerIdField]: `${provider}-1` },
+      });
+      expect(authService.generateTokens).toHaveBeenCalledWith(existing);
+      expect(prisma.user.create).not.toHaveBeenCalled();
+      expect(randomBytesMock).not.toHaveBeenCalled();
+      expect(hashMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['email only', { email: 'existing@example.test' }],
+    ['phone only', { phone: '+79990000000' }],
+    [
+      'email and phone matching the same user',
+      { email: 'same@example.test', phone: '+79990000001' },
+    ],
+    [
+      'email and phone matching different users',
+      { email: 'first@example.test', phone: '+79990000002' },
+    ],
+  ] as const)('fails closed for an unlinked %s match', async (_, identity) => {
     prisma.user.findFirst
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(existing);
-    prisma.user.update.mockResolvedValue(linked);
+      .mockResolvedValueOnce({ id: 'identity-match' });
 
-    await expect(
-      service.handleOAuthCallback({
+    const error = await service
+      .handleOAuthCallback({
         provider: 'yandex',
-        providerId: 'ya-1',
+        providerId: 'unlinked-provider-id',
         ...identity,
-      }),
-    ).resolves.toEqual(tokens);
+      })
+      .catch((caught) => caught);
 
-    expect(prisma.user.update).toHaveBeenCalledWith({
-      where: { id: existing.id },
-      data: { yandexId: 'ya-1' },
-    });
-    expect(prisma.user.update.mock.calls[0][0].data).not.toHaveProperty(
-      'passwordHash',
-    );
-    expect(linked.passwordHash).toBe(existing.passwordHash);
+    expect(error).toBeInstanceOf(OAuthAccountLinkingRequiredError);
+    expect(error.message).toBe(OAUTH_ACCOUNT_LINKING_REQUIRED_MESSAGE);
+
+    expect(prisma.user).not.toHaveProperty('update');
     expect(randomBytesMock).not.toHaveBeenCalled();
     expect(hashMock).not.toHaveBeenCalled();
     expect(prisma.user.create).not.toHaveBeenCalled();
+    expect(authService.generateTokens).not.toHaveBeenCalled();
+    logSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  it('keeps repeated denied callbacks free of mutations and token issuance', async () => {
+    prisma.user.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'existing' })
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'existing' });
+    const profile: OAuthProfile = {
+      provider: 'vk',
+      providerId: 'unlinked-vk',
+      email: 'existing@example.test',
+    };
+
+    await expect(service.handleOAuthCallback(profile)).rejects.toBeInstanceOf(
+      OAuthAccountLinkingRequiredError,
+    );
+    await expect(service.handleOAuthCallback(profile)).rejects.toBeInstanceOf(
+      OAuthAccountLinkingRequiredError,
+    );
+
+    expect(prisma.user.create).not.toHaveBeenCalled();
+    expect(authService.generateTokens).not.toHaveBeenCalled();
   });
 
   it('keeps the calm 400 boundary when the provider supplies no identity', async () => {
@@ -172,7 +253,6 @@ describe('OAuthService', () => {
 
     expect(hashMock).not.toHaveBeenCalled();
     expect(prisma.user.create).not.toHaveBeenCalled();
-    expect(prisma.user.update).not.toHaveBeenCalled();
     expect(authService.generateTokens).not.toHaveBeenCalled();
   });
 
@@ -189,7 +269,67 @@ describe('OAuthService', () => {
     ).rejects.toThrow('bcrypt unavailable');
 
     expect(prisma.user.create).not.toHaveBeenCalled();
-    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(authService.generateTokens).not.toHaveBeenCalled();
+  });
+
+  it('recovers a same-provider P2002 replay only by exact provider ID', async () => {
+    const concurrentUser = { id: 'concurrent-provider-user' };
+    prisma.user.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(concurrentUser);
+    prisma.user.create.mockRejectedValue({ code: 'P2002', meta: { target: ['email'] } });
+
+    await expect(
+      service.handleOAuthCallback({
+        provider: 'mailru',
+        providerId: 'mail-concurrent',
+        email: 'new@example.test',
+      }),
+    ).resolves.toEqual(tokens);
+
+    expect(prisma.user.findFirst).toHaveBeenLastCalledWith({
+      where: { mailruId: 'mail-concurrent' },
+    });
+    expect(authService.generateTokens).toHaveBeenCalledTimes(1);
+    expect(authService.generateTokens).toHaveBeenCalledWith(concurrentUser);
+  });
+
+  it('fails closed after P2002 when the exact provider ID is absent', async () => {
+    prisma.user.findFirst.mockResolvedValue(null);
+    prisma.user.create.mockRejectedValue({
+      code: 'P2002',
+      meta: { target: ['phone'], sensitive: 'must-not-escape' },
+    });
+
+    await expect(
+      service.handleOAuthCallback({
+        provider: 'vk',
+        providerId: 'vk-conflict',
+        phone: '+79992222222',
+      }),
+    ).rejects.toEqual(new OAuthAccountLinkingRequiredError());
+
+    expect(prisma.user.findFirst).toHaveBeenLastCalledWith({
+      where: { vkId: 'vk-conflict' },
+    });
+    expect(authService.generateTokens).not.toHaveBeenCalled();
+    logSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+  });
+
+  it('issues no token for an unexpected persistence failure', async () => {
+    const persistenceError = new Error('database unavailable');
+    prisma.user.findFirst.mockResolvedValue(null);
+    prisma.user.create.mockRejectedValue(persistenceError);
+
+    await expect(
+      service.handleOAuthCallback({
+        provider: 'yandex',
+        providerId: 'ya-persistence-failure',
+        email: 'new@example.test',
+      }),
+    ).rejects.toBe(persistenceError);
+
     expect(authService.generateTokens).not.toHaveBeenCalled();
   });
 });
