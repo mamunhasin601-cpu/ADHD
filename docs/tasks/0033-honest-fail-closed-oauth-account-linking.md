@@ -17,6 +17,12 @@ All three controllers map the typed condition to HTTP `409 Conflict` with exactl
 
 No application-token redirect occurs, and the response discloses no matched identifier, user/provider record, payload, token, secret, URL, query, caught message, cause, or stack.
 
+## Provider-ID boundary
+
+A usable provider ID is required before any Prisma lookup. The service accepts only a string containing at least one non-whitespace character and uses the validated exact value for provider lookup, new-user creation, and `P2002` recovery. Missing, null, empty, whitespace-only, or non-string IDs fail closed before persistence, CSPRNG, bcrypt, or token issuance. The Yandex, VK, and Mail.ru controllers also validate provider profile IDs before calling the service as defense in depth.
+
+An unusable provider ID produces only a generic OAuth failure. It is not treated as an account-linking-required condition, does not redirect with application tokens, and does not reflect provider payload or caught details.
+
 ## Creation and race boundary
 
 When no exact provider link or existing email/phone match exists and at least one identity field is present, new-account behavior remains unchanged: exactly 32 CSPRNG bytes are base64url encoded, bcrypt hashed at cost 12, persisted with the correct provider ID, and followed by token issuance. Missing identity remains a calm 400 with no persistence or tokens.
@@ -31,6 +37,10 @@ Existing exact provider-ID links remain accepted for compatibility, but their hi
 
 ## Validation evidence and limitations
 
-Focused auth validation passes with `npm test --workspace=apps/api -- --runInBand src/auth/oauth.service.spec.ts src/auth/oauth-external-http.controllers.spec.ts src/auth/auth.service.spec.ts`: 3 suites / 39 tests. The complete API suite passes with `npm test --workspace=apps/api -- --runInBand`: 35 suites / 468 tests. API TypeScript validation and the API production build pass. The first Prisma Client generation attempt hit the documented Windows `EPERM` while unlinking `node_modules/.prisma/client/index.js`; a controlled retry then generated Prisma Client v5.16.2 successfully with exit code 0. No process was terminated, and `node_modules` and database data were not manually deleted or changed. Prisma schema validation with a process-local, non-secret placeholder `DATABASE_URL` passes without changing `.env`. `git diff --check` passes. Production-source audits confirm that OAuthService has no `user.update()` path, identity matches do not issue tokens, all three callback controllers use the shared safe linking-required contract, and raw provider or caught-error content is not returned or logged.
+Focused auth validation passes with `npm test --workspace=apps/api -- --runInBand src/auth/oauth.service.spec.ts src/auth/oauth-external-http.controllers.spec.ts src/auth/auth.service.spec.ts`: 3 suites / 57 tests. The complete API suite passes with `npm test --workspace=apps/api -- --runInBand`: 35 suites / 486 tests. API TypeScript validation and the API production build pass.
+
+Prisma Client v5.16.2 generation succeeded on controlled retries after transient Windows `EPERM` errors while unlinking `node_modules/.prisma/client/index.js` during both implementation validation phases. No process was terminated, and `node_modules` and database data were not manually deleted or changed. Prisma schema validation with a process-local, non-secret placeholder `DATABASE_URL` passes without changing `.env`.
+
+`git diff --check` passes. Production-source audits confirm that OAuthService validates provider IDs before Prisma access, has no `user.update()` path, issues no tokens for unusable IDs or email/phone matches, uses the exact validated provider ID for lookup/create/recovery, and does not return or log raw provider or caught-error content.
 
 Automated tests and builds are validation, not runtime evidence. Live API, PostgreSQL, real Yandex/VK/Mail.ru providers, production deployment, Android emulator, and physical-device verification remain NOT VERIFIED.
