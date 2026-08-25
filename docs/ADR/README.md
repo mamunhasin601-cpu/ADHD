@@ -14,6 +14,7 @@
 | [ADR-006](ADR-006-bullmq-redis-expo-push-notifications.md) | BullMQ, Redis and Expo Push Notifications | active |
 | [ADR-007](ADR-007-npm-workspaces-monorepo.md) | npm Workspaces Monorepo | active |
 | [ADR-008](ADR-008-overdue-task-recovery.md) | Overdue-Task Recovery Semantics | accepted — pre-implementation |
+| [ADR-010](ADR-010-russian-production-infrastructure-and-data-residency.md) | Russian Production Infrastructure and Data Residency | accepted |
 
 ## Процесс
 

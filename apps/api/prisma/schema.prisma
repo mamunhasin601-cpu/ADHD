@@ -31,6 +31,11 @@ enum TaskKind {
   BUFFER
 }
 
+enum ContactVerificationChannel {
+  EMAIL
+  PHONE
+}
+
 // ──────────────────────────────────────────────
 // User
 // ──────────────────────────────────────────────
@@ -51,6 +56,8 @@ model User {
   yandexId                String?  @unique
   vkId                    String?  @unique
   mailruId                String?  @unique
+  emailVerifiedAt         DateTime?
+  phoneVerifiedAt         DateTime?
   
   createdAt               DateTime @default(now())
 
@@ -64,6 +71,27 @@ model User {
   recoveryUndos        RecoveryUndo[]
 
   @@map("users")
+}
+
+model ContactVerificationChallenge {
+  id                         String                     @id @default(uuid()) @db.Uuid
+  channel                    ContactVerificationChannel
+  destination                String
+  activeKey                  String?                    @unique
+  pinDigest                  String
+  expiresAt                  DateTime
+  attemptsRemaining          Int
+  resendAvailableAt          DateTime
+  verifiedAt                 DateTime?
+  verificationTokenDigest    String?                    @unique
+  verificationTokenExpiresAt DateTime?
+  consumedAt                 DateTime?
+  createdAt                  DateTime                   @default(now())
+  updatedAt                  DateTime                   @updatedAt
+
+  @@index([channel, destination, createdAt])
+  @@index([createdAt])
+  @@map("contact_verification_challenges")
 }
 
 model RecoveryUndo {
