@@ -10,6 +10,17 @@ const validEnvironment = () => ({
 });
 
 describe('validateCoreEnvironment', () => {
+  const verificationEnvironment = {
+    CONTACT_VERIFICATION_ENABLED: 'true',
+    CONTACT_VERIFICATION_SECRET: 'verification-secret-abcdefghijklmnopqrstuvwxyz-0123456789',
+    SMSAERO_EMAIL: 'api@example.ru',
+    SMSAERO_API_KEY: 'smsaero-secret',
+    SMSAERO_SIGN: 'Focus',
+    TIMEWEB_SMTP_USER: 'smtp-user',
+    TIMEWEB_SMTP_PASSWORD: 'smtp-password',
+    TIMEWEB_SMTP_FROM_EMAIL: 'no-reply@example.ru',
+    TIMEWEB_SMTP_FROM_NAME: 'Focus',
+  };
   it.each(['development', 'test', 'production'])('accepts a complete %s configuration', (NODE_ENV) => {
     expect(validateCoreEnvironment({ ...validEnvironment(), NODE_ENV })).toMatchObject({
       NODE_ENV,
@@ -124,5 +135,39 @@ describe('validateCoreEnvironment', () => {
     expect(() => validateCoreEnvironment({
       ...validEnvironment(), DATABASE_URL: `mysql://user:${password}@db.example.test/focus`,
     })).toThrow(expect.not.stringContaining(password));
+  });
+
+  it.each([undefined, 'false', 'TRUE', '1', ' true '])(
+    'keeps contact verification disabled unless the value is exact lowercase true (%p)',
+    (CONTACT_VERIFICATION_ENABLED) => {
+      const result = validateCoreEnvironment({ ...validEnvironment(), CONTACT_VERIFICATION_ENABLED });
+      expect(result.CONTACT_VERIFICATION_ENABLED).toBe(false);
+    },
+  );
+
+  it('accepts a complete enabled contact verification configuration', () => {
+    expect(validateCoreEnvironment({ ...validEnvironment(), ...verificationEnvironment }).CONTACT_VERIFICATION_ENABLED).toBe(true);
+  });
+
+  it.each([
+    'CONTACT_VERIFICATION_SECRET', 'SMSAERO_EMAIL', 'SMSAERO_API_KEY', 'SMSAERO_SIGN',
+    'TIMEWEB_SMTP_USER', 'TIMEWEB_SMTP_PASSWORD', 'TIMEWEB_SMTP_FROM_EMAIL', 'TIMEWEB_SMTP_FROM_NAME',
+  ])('fails startup when enabled %s is missing without disclosing values', (key) => {
+    const environment: Record<string, unknown> = { ...validEnvironment(), ...verificationEnvironment };
+    delete environment[key];
+    expect(() => validateCoreEnvironment(environment)).toThrow(key);
+  });
+
+  it.each(['short', 'change-me', ' verification-secret-abcdefghijklmnopqrstuvwxyz-0123456789 '])(
+    'rejects weak, placeholder, or padded verification secret %p',
+    (CONTACT_VERIFICATION_SECRET) => expect(() => validateCoreEnvironment({
+      ...validEnvironment(), ...verificationEnvironment, CONTACT_VERIFICATION_SECRET,
+    })).toThrow('CONTACT_VERIFICATION_SECRET'),
+  );
+
+  it.each(['JWT_SECRET', 'JWT_REFRESH_SECRET'])('rejects verification secret reuse with %s', (key) => {
+    const environment: Record<string, string> = { ...validEnvironment(), ...verificationEnvironment };
+    environment.CONTACT_VERIFICATION_SECRET = environment[key];
+    expect(() => validateCoreEnvironment(environment)).toThrow('dedicated');
   });
 });

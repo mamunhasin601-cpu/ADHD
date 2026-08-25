@@ -1,4 +1,5 @@
 import { decodeRedisCredential } from './redis-connection';
+import { validateContactVerificationEnvironment } from './contact-verification-environment';
 
 export const CORE_ENVIRONMENT_KEYS = [
   'NODE_ENV',
@@ -22,6 +23,7 @@ export interface CoreEnvironment extends Record<string, unknown> {
   JWT_SECRET: string;
   JWT_REFRESH_SECRET: string;
   PORT: number;
+  CONTACT_VERIFICATION_ENABLED: boolean;
 }
 
 const EXAMPLE_JWT_SECRETS = new Set([
@@ -118,7 +120,7 @@ export function validateCoreEnvironment(
     }
   }
 
-  return {
+  return validateContactVerificationEnvironment({
     ...environment,
     NODE_ENV: nodeEnv as NodeEnvironment,
     DATABASE_URL: databaseUrl,
@@ -126,5 +128,5 @@ export function validateCoreEnvironment(
     JWT_SECRET: jwtSecret,
     JWT_REFRESH_SECRET: jwtRefreshSecret,
     PORT: port,
-  };
+  }, [jwtSecret, jwtRefreshSecret]) as CoreEnvironment;
 }
