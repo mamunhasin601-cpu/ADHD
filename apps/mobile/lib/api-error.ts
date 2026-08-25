@@ -46,3 +46,28 @@ export function extractErrorMessage(err: unknown): string {
   // Запрос вообще не дошёл до сервера — сеть/адрес/фаервол
   return `Не удалось подключиться к серверу: ${axiosErr.message ?? 'неизвестная сетевая ошибка'}. Проверьте адрес API (EXPO_PUBLIC_API_URL) и что телефон и компьютер в одной сети.`;
 }
+
+export function contactVerificationErrorMessage(err: unknown): string {
+  const axiosErr = err as { response?: { data?: { code?: string } } };
+  switch (axiosErr.response?.data?.code) {
+    case 'CONTACT_VERIFICATION_INVALID_OR_EXPIRED':
+      return 'Код неверный или истёк. Проверьте код или запросите новый.';
+    case 'CONTACT_VERIFICATION_RATE_LIMITED':
+      return 'Новый код пока нельзя отправить. Немного подождите и попробуйте снова.';
+    case 'CONTACT_VERIFICATION_UNAVAILABLE':
+      return 'Не удалось отправить или проверить код. Попробуйте позже.';
+    default:
+      return 'Не удалось отправить или проверить код. Попробуйте позже.';
+  }
+}
+
+export function registrationErrorMessage(err: unknown): string {
+  const axiosErr = err as { response?: { data?: { code?: string } } };
+  if (
+    axiosErr.response?.data?.code === 'CONTACT_VERIFICATION_INVALID_OR_EXPIRED' ||
+    axiosErr.response?.data?.code === 'CONTACT_VERIFICATION_UNAVAILABLE'
+  ) {
+    return contactVerificationErrorMessage(err);
+  }
+  return 'Не удалось создать аккаунт. Проверьте данные и попробуйте позже.';
+}

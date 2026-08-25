@@ -18,7 +18,6 @@ describe('AuthService password compatibility', () => {
       user: {
         findFirst: jest
           .fn()
-          .mockResolvedValueOnce(null)
           .mockImplementation(() => Promise.resolve(storedUser)),
         create: jest.fn().mockImplementation(({ data }) => {
           storedUser = { id: 'password-user', ...data };
@@ -26,6 +25,9 @@ describe('AuthService password compatibility', () => {
         }),
       },
     };
+    prisma.$transaction = jest.fn(async (callback: (transaction: any) => Promise<any>) => callback({
+      user: { create: prisma.user.create },
+    }));
     const jwtService: any = {
       sign: jest.fn((payload, options) => `${payload.sub}:${options.secret}`),
     };
@@ -33,10 +35,16 @@ describe('AuthService password compatibility', () => {
       getOrThrow: (key: string) => key === 'JWT_SECRET' ? 'test-access-secret' : 'test-refresh-secret',
       get: jest.fn(),
     };
-    const service = new AuthService(prisma, jwtService, config);
+    const verification: any = {
+      canonicalize: (_channel: string, destination: string) => destination.toLowerCase(),
+      isVerificationTicketUsable: jest.fn().mockResolvedValue(true),
+      consumeVerificationTicket: jest.fn().mockResolvedValue(true),
+    };
+    const service = new AuthService(prisma, jwtService, config, verification);
     const registration = await service.register({
       email: 'password@example.test',
       password: 'correct horse battery staple',
+      emailVerificationToken: 'A'.repeat(43),
     });
     const login = await service.login({
       email: 'password@example.test',

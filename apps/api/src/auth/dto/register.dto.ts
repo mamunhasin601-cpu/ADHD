@@ -9,6 +9,14 @@ export class RegisterDto {
   @IsString()
   phone?: string;
 
+  @IsOptional()
+  @IsString()
+  emailVerificationToken?: string;
+
+  @IsOptional()
+  @IsString()
+  phoneVerificationToken?: string;
+
   @IsString()
   @MinLength(8, { message: 'Пароль должен содержать минимум 8 символов' })
   password: string;
