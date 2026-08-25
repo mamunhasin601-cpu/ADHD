@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac, randomBytes, randomInt, randomUUID, timingSafeEqual } from 'crypto';
 import { isEmail } from 'class-validator';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ContactDeliveryService } from './contact-delivery.service';
 import {
@@ -25,6 +26,8 @@ export interface VerificationTicketInput {
   destination: string;
   verificationToken: string;
 }
+
+type TicketClient = PrismaService | Prisma.TransactionClient;
 
 @Injectable()
 export class ContactVerificationService {
@@ -164,8 +167,9 @@ export class ContactVerificationService {
     return { verificationToken: outcome.verificationToken, expiresInSeconds: 900 };
   }
 
-  async consumeVerificationTicket(input: VerificationTicketInput): Promise<boolean> {
-    if (!this.isEnabled() || typeof input.verificationToken !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(input.verificationToken)) {
+  async isVerificationTicketUsable(input: VerificationTicketInput): Promise<boolean> {
+    this.requireEnabled();
+    if (typeof input.verificationToken !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(input.verificationToken)) {
       return false;
     }
     let destination: string;
@@ -176,7 +180,33 @@ export class ContactVerificationService {
     }
     const now = new Date();
     const digest = this.digest('ticket', input.channel, destination, input.verificationToken);
-    const changed = await this.prisma.contactVerificationChallenge.updateMany({
+    const challenge = await this.prisma.contactVerificationChallenge.findFirst({
+      where: {
+        channel: input.channel,
+        destination,
+        verificationTokenDigest: digest,
+        verifiedAt: { not: null },
+        verificationTokenExpiresAt: { gt: now },
+        consumedAt: null,
+      },
+    });
+    return Boolean(challenge);
+  }
+
+  async consumeVerificationTicket(input: VerificationTicketInput, client: TicketClient = this.prisma): Promise<boolean> {
+    this.requireEnabled();
+    if (typeof input.verificationToken !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(input.verificationToken)) {
+      return false;
+    }
+    let destination: string;
+    try {
+      destination = this.canonicalize(input.channel, input.destination);
+    } catch {
+      return false;
+    }
+    const now = new Date();
+    const digest = this.digest('ticket', input.channel, destination, input.verificationToken);
+    const changed = await client.contactVerificationChallenge.updateMany({
       where: {
         channel: input.channel,
         destination,
@@ -205,7 +235,7 @@ export class ContactVerificationService {
     return result.count;
   }
 
-  private canonicalize(channel: ContactVerificationChannelDto, rawDestination: string): string {
+  canonicalize(channel: ContactVerificationChannelDto, rawDestination: string): string {
     if (typeof rawDestination !== 'string') throw invalidContactVerification();
     const destination = rawDestination.trim();
     if (channel === 'EMAIL') {

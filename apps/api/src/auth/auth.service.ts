@@ -13,6 +13,9 @@ import { LoginDto } from './dto/login.dto';
 import type { AuthTokens, JwtPayload } from '@focus/shared-types';
 import type { User } from '@prisma/client';
 import { BCRYPT_ROUNDS } from './auth.constants';
+import { ContactVerificationService } from './contact-verification.service';
+import { ContactVerificationChannelDto } from './dto/contact-verification.dto';
+import { invalidContactVerification, unavailableContactVerification } from './contact-verification.errors';
 
 @Injectable()
 export class AuthService {
@@ -20,6 +23,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
+    private readonly contactVerification: ContactVerificationService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthTokens> {
@@ -27,32 +31,71 @@ export class AuthService {
       throw new BadRequestException('Нужен email или номер телефона');
     }
 
-    // Проверяем, не занят ли email/телефон
-    const existing = await this.prisma.user.findFirst({
-      where: {
-        OR: [
-          dto.email ? { email: dto.email } : {},
-          dto.phone ? { phone: dto.phone } : {},
-        ],
-      },
+    const contacts = this.registrationContacts(dto);
+    const tickets = contacts.map((contact) => {
+      const verificationToken = contact.channel === ContactVerificationChannelDto.EMAIL
+        ? dto.emailVerificationToken
+        : dto.phoneVerificationToken;
+      if (typeof verificationToken !== 'string') throw invalidContactVerification();
+      return { ...contact, verificationToken };
     });
 
-    if (existing) {
-      throw new ConflictException('Email или телефон уже зарегистрирован');
+    try {
+      for (const ticket of tickets) {
+        if (!await this.contactVerification.isVerificationTicketUsable(ticket)) {
+          throw invalidContactVerification();
+        }
+      }
+    } catch (error) {
+      if (error instanceof Error && 'getStatus' in error) throw error;
+      throw unavailableContactVerification();
     }
 
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
 
-    const user = await this.prisma.user.create({
-      data: {
-        email: dto.email ?? null,
-        phone: dto.phone ?? null,
-        passwordHash,
-        timezone: dto.timezone ?? 'Europe/Moscow',
-      },
-    });
+    let user: User;
+    try {
+      user = await this.prisma.$transaction(async (transaction) => {
+        const consumed: Record<string, boolean> = {};
+        for (const ticket of tickets) {
+          consumed[ticket.channel] = await this.contactVerification.consumeVerificationTicket(ticket, transaction);
+          if (!consumed[ticket.channel]) throw invalidContactVerification();
+        }
+        return transaction.user.create({
+          data: {
+            email: contacts.find((contact) => contact.channel === ContactVerificationChannelDto.EMAIL)?.destination ?? null,
+            phone: contacts.find((contact) => contact.channel === ContactVerificationChannelDto.PHONE)?.destination ?? null,
+            passwordHash,
+            timezone: dto.timezone ?? 'Europe/Moscow',
+            emailVerifiedAt: consumed.EMAIL ? new Date() : null,
+            phoneVerifiedAt: consumed.PHONE ? new Date() : null,
+          },
+        });
+      });
+    } catch (error) {
+      if (error instanceof Error && 'getStatus' in error) throw error;
+      if (this.isPrismaUniqueConflict(error)) throw new ConflictException('Не удалось создать аккаунт');
+      throw unavailableContactVerification();
+    }
 
     return this.generateTokens(user);
+  }
+
+  private registrationContacts(dto: RegisterDto) {
+    const contacts: Array<{ channel: ContactVerificationChannelDto; destination: string }> = [];
+    if (dto.email !== undefined) {
+      contacts.push({ channel: ContactVerificationChannelDto.EMAIL, destination: this.contactVerification.canonicalize(ContactVerificationChannelDto.EMAIL, dto.email) });
+    }
+    if (dto.phone !== undefined) {
+      contacts.push({ channel: ContactVerificationChannelDto.PHONE, destination: this.contactVerification.canonicalize(ContactVerificationChannelDto.PHONE, dto.phone) });
+    }
+    if (dto.emailVerificationToken !== undefined && dto.email === undefined) throw invalidContactVerification();
+    if (dto.phoneVerificationToken !== undefined && dto.phone === undefined) throw invalidContactVerification();
+    return contacts;
+  }
+
+  private isPrismaUniqueConflict(error: unknown): boolean {
+    return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
   }
 
   async login(dto: LoginDto): Promise<AuthTokens> {
@@ -60,14 +103,18 @@ export class AuthService {
       throw new BadRequestException('Нужен email или номер телефона');
     }
 
-    const user = await this.prisma.user.findFirst({
-      where: {
-        OR: [
-          dto.email ? { email: dto.email } : {},
-          dto.phone ? { phone: dto.phone } : {},
-        ],
-      },
-    });
+    const identifiers = [];
+    if (dto.email) {
+      identifiers.push({ email: { equals: dto.email, mode: 'insensitive' as const } });
+    }
+    if (dto.phone) {
+      identifiers.push({ phone: dto.phone });
+    }
+    if (identifiers.length === 0) {
+      throw new BadRequestException('Нужен email или номер телефона');
+    }
+    const where = identifiers.length === 1 ? identifiers[0] : { OR: identifiers };
+    const user = await this.prisma.user.findFirst({ where });
 
     if (!user) {
       throw new UnauthorizedException('Неверные учётные данные');
