@@ -12,9 +12,11 @@ No Prisma schema or migration changed in Task 0035, and no migration was applied
 
 ## Validation record
 
-Focused API validation passed 3 suites / 38 tests. Focused mobile validation passed 3 suites / 13 tests. The full API suite passed 40 suites / 560 tests. API and mobile TypeScript validation, API production build, Prisma schema validation with a process-local placeholder, and `git diff --check` passed.
+Focused API validation passed 2 suites / 18 tests for the corrected authentication and verified-registration paths. Focused mobile validation passed 3 suites / 19 tests. The full API suite passed 40 suites / 564 tests. API and mobile TypeScript validation, API production build, Prisma schema validation with a process-local placeholder, and `git diff --check` passed.
 
-The full mobile suite passed 46 suites / 574 tests with process-local `TZ=UTC`, matching the suite's UTC instant expectations without changing `.env`. An initial invocation under the host timezone exposed unrelated timezone-sensitive expectations; no production or test files outside Task 0035 were changed.
+The full mobile suite passed 46 suites / 580 tests with process-local `TZ=UTC`, matching the suite's UTC instant expectations without changing `.env`. An initial invocation under the host timezone exposed unrelated timezone-sensitive expectations; no production or test files outside Task 0035 were changed.
+
+Follow-up compatibility guarantees: email login uses Prisma case-insensitive matching while preserving mixed-case historical rows; phone login remains exact and login query branches contain no empty OR clauses. Mobile registration now distinguishes confirmation, registration, and authentication phases. A registration network failure is reported as uncertain because the account may already exist; a post-commit authentication failure explicitly says the account was created and directs the user to login. State-changing controls are disabled during active requests and no registration retry is automatic.
 
 The successful Task 0034 Prisma Client v5.16.2 generation remains authoritative because the schema is unchanged; Task 0035 did not rerun generation. Automated tests are not live provider, deployment, database-migration, physical-device, or legal-compliance evidence.
 

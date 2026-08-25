@@ -1,4 +1,4 @@
-import { contactVerificationErrorMessage, registrationErrorMessage } from '../lib/api-error';
+import { authenticationAfterRegistrationMessage, contactVerificationErrorMessage, registrationErrorMessage, registrationNetworkMessage } from '../lib/api-error';
 
 describe('verified registration error mapping', () => {
   it.each([
@@ -12,5 +12,11 @@ describe('verified registration error mapping', () => {
   it('uses a safe fallback for network and unknown registration failures', () => {
     expect(contactVerificationErrorMessage(new Error('socket secret'))).not.toContain('socket');
     expect(registrationErrorMessage({ response: { data: { message: 'P2002 email' } } })).toBe('Не удалось создать аккаунт. Проверьте данные и попробуйте позже.');
+  });
+
+  it('keeps ambiguous registration and post-registration authentication outcomes honest', () => {
+    expect(registrationNetworkMessage()).toContain('Аккаунт мог быть создан');
+    expect(authenticationAfterRegistrationMessage()).toContain('Аккаунт создан');
+    expect(registrationNetworkMessage()).not.toMatch(/socket|token|password|Prisma/i);
   });
 });

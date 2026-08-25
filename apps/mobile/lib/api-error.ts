@@ -71,3 +71,11 @@ export function registrationErrorMessage(err: unknown): string {
   }
   return 'Не удалось создать аккаунт. Проверьте данные и попробуйте позже.';
 }
+
+export function registrationNetworkMessage(): string {
+  return 'Не удалось получить подтверждение от сервера. Аккаунт мог быть создан. Попробуйте войти с указанными данными.';
+}
+
+export function authenticationAfterRegistrationMessage(): string {
+  return 'Аккаунт создан, но автоматически войти не удалось. Перейдите на экран входа и войдите с указанными данными.';
+}

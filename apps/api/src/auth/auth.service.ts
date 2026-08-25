@@ -103,14 +103,18 @@ export class AuthService {
       throw new BadRequestException('Нужен email или номер телефона');
     }
 
-    const user = await this.prisma.user.findFirst({
-      where: {
-        OR: [
-          dto.email ? { email: dto.email } : {},
-          dto.phone ? { phone: dto.phone } : {},
-        ],
-      },
-    });
+    const identifiers = [];
+    if (dto.email) {
+      identifiers.push({ email: { equals: dto.email, mode: 'insensitive' as const } });
+    }
+    if (dto.phone) {
+      identifiers.push({ phone: dto.phone });
+    }
+    if (identifiers.length === 0) {
+      throw new BadRequestException('Нужен email или номер телефона');
+    }
+    const where = identifiers.length === 1 ? identifiers[0] : { OR: identifiers };
+    const user = await this.prisma.user.findFirst({ where });
 
     if (!user) {
       throw new UnauthorizedException('Неверные учётные данные');
