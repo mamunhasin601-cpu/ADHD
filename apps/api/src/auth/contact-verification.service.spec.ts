@@ -1,4 +1,4 @@
-import { createHmac } from 'crypto';
+import { createHmac, randomBytes } from 'crypto';
 import { ContactVerificationService } from './contact-verification.service';
 import { CONTACT_VERIFICATION_ERROR_CODES } from './contact-verification.errors';
 import { ContactVerificationChannelDto } from './dto/contact-verification.dto';
@@ -38,6 +38,7 @@ function harness() {
     $executeRaw: jest.fn().mockResolvedValue(1),
     contactVerificationChallenge: {
       findFirst: jest.fn().mockResolvedValue(null),
+      findUnique: jest.fn(),
       count: jest.fn().mockResolvedValue(0),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       create: jest.fn(({ data }) => { created = data; return Promise.resolve(data); }),
@@ -72,7 +73,35 @@ function digest(...values: string[]): string {
   return hmac.digest('hex');
 }
 
+function serializeTransactions(h: ReturnType<typeof harness>): void {
+  let tail = Promise.resolve<unknown>(undefined);
+  h.prisma.$transaction.mockImplementation((callback: (transaction: any) => Promise<unknown>) => {
+    const current = tail.then(() => callback(h.tx));
+    tail = current.then(() => undefined, () => undefined);
+    return current;
+  });
+}
+
+function installAuthoritativeChallenge(h: ReturnType<typeof harness>, initial: ReturnType<typeof challenge>) {
+  let state: any = { ...initial };
+  const reads: number[] = [];
+  h.tx.contactVerificationChallenge.findUnique.mockImplementation(async () => {
+    reads.push(state.attemptsRemaining);
+    return { ...state };
+  });
+  h.tx.contactVerificationChallenge.updateMany.mockImplementation(async ({ data }: any) => {
+    if (!state.activeKey || state.verifiedAt || state.attemptsRemaining <= 0) return { count: 0 };
+    if (data.attemptsRemaining?.decrement === 1) state.attemptsRemaining -= 1;
+    if (typeof data.attemptsRemaining === 'number') state.attemptsRemaining = data.attemptsRemaining;
+    if ('activeKey' in data) state.activeKey = data.activeKey;
+    if (data.verifiedAt) state.verifiedAt = data.verifiedAt;
+    return { count: 1 };
+  });
+  return { reads, get state() { return state; } };
+}
+
 describe('ContactVerificationService', () => {
+  beforeEach(() => jest.clearAllMocks());
   afterEach(() => jest.restoreAllMocks());
 
   it('creates a six-digit CSPRNG PIN challenge without persisting plaintext', async () => {
@@ -116,7 +145,7 @@ describe('ContactVerificationService', () => {
       challenge({ attemptsRemaining: 0 }),
     ]) {
       const h = harness();
-      h.prisma.contactVerificationChallenge.findUnique.mockResolvedValue(record);
+      h.tx.contactVerificationChallenge.findUnique.mockResolvedValue(record);
       await expect(h.service.confirm(record.id, '123456')).rejects.toMatchObject({ response: { code: CONTACT_VERIFICATION_ERROR_CODES.INVALID } });
     }
   });
@@ -124,24 +153,96 @@ describe('ContactVerificationService', () => {
   it('atomically decrements a wrong attempt and exhausts the fifth attempt', async () => {
     const h = harness();
     const record = challenge({ attemptsRemaining: 1, pinDigest: digest('pin', challenge().id, 'EMAIL', 'user@example.ru', '654321') });
-    h.prisma.contactVerificationChallenge.findUnique.mockResolvedValue(record);
+    h.tx.contactVerificationChallenge.findUnique.mockResolvedValue(record);
     await expect(h.service.confirm(record.id, '123456')).rejects.toMatchObject({ status: 400 });
-    expect(h.prisma.contactVerificationChallenge.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+    expect(h.tx.contactVerificationChallenge.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ attemptsRemaining: 1 }),
       data: { attemptsRemaining: 0, activeKey: null },
     }));
   });
 
+  it('reads authoritative challenge state only after acquiring the transaction lock', async () => {
+    const h = harness();
+    const record = challenge({ pinDigest: digest('pin', challenge().id, 'EMAIL', 'user@example.ru', '654321') });
+    h.tx.contactVerificationChallenge.findUnique.mockResolvedValue(record);
+    await expect(h.service.confirm(record.id, '123456')).rejects.toMatchObject({ status: 400 });
+    const lockOrder = h.tx.$executeRaw.mock.invocationCallOrder[0];
+    const readOrder = h.tx.contactVerificationChallenge.findUnique.mock.invocationCallOrder[0];
+    expect(lockOrder).toBeLessThan(readOrder);
+    expect(h.prisma.contactVerificationChallenge.findUnique).not.toHaveBeenCalled();
+  });
+
   it('returns one 32-byte ticket, stores only its bound digest, and uses a 15-minute expiry', async () => {
     const h = harness();
     const record = challenge({ pinDigest: digest('pin', challenge().id, 'EMAIL', 'user@example.ru', '123456') });
-    h.prisma.contactVerificationChallenge.findUnique.mockResolvedValue(record);
+    h.tx.contactVerificationChallenge.findUnique.mockResolvedValue(record);
     const result = await h.service.confirm(record.id, '123456');
     expect(Buffer.from(result.verificationToken, 'base64url')).toHaveLength(32);
-    const update = h.prisma.contactVerificationChallenge.updateMany.mock.calls[0][0].data;
+    const update = h.tx.contactVerificationChallenge.updateMany.mock.calls[0][0].data;
     expect(update.verificationTokenDigest).toBe(digest('ticket', 'EMAIL', 'user@example.ru', result.verificationToken));
     expect(JSON.stringify(update)).not.toContain(result.verificationToken);
     expect(update.verificationTokenExpiresAt.getTime() - update.verifiedAt.getTime()).toBe(900_000);
+  });
+
+  it('serializes parallel guesses, exhausts exactly five wrong attempts, and rejects a correct code queued after exhaustion', async () => {
+    const h = harness();
+    serializeTransactions(h);
+    const record = challenge({ pinDigest: digest('pin', challenge().id, 'EMAIL', 'user@example.ru', '123456') });
+    const authoritative = installAuthoritativeChallenge(h, record);
+    const compare = jest.spyOn(h.service as any, 'equalDigests');
+
+    const guesses = ['000001', '000002', '000003', '000004', '000005', '000006', '000007', '000008', '123456'];
+    const results = await Promise.allSettled(guesses.map((guess) => h.service.confirm(record.id, guess)));
+
+    expect(results).toHaveLength(9);
+    expect(results.every((result) => result.status === 'rejected'
+      && (result.reason as any).response.code === CONTACT_VERIFICATION_ERROR_CODES.INVALID)).toBe(true);
+    expect(authoritative.reads).toEqual([5, 4, 3, 2, 1, 0, 0, 0, 0]);
+    expect(authoritative.state).toMatchObject({ attemptsRemaining: 0, activeKey: null });
+    expect(compare).toHaveBeenCalledTimes(5);
+    expect(h.tx.contactVerificationChallenge.updateMany).toHaveBeenCalledTimes(5);
+    expect(randomBytes).not.toHaveBeenCalled();
+  });
+
+  it('issues at most one ticket for concurrent correct confirmations', async () => {
+    const h = harness();
+    serializeTransactions(h);
+    const record = challenge({ pinDigest: digest('pin', challenge().id, 'EMAIL', 'user@example.ru', '123456') });
+    const authoritative = installAuthoritativeChallenge(h, record);
+
+    const results = await Promise.allSettled([
+      h.service.confirm(record.id, '123456'),
+      h.service.confirm(record.id, '123456'),
+    ]);
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+    expect(authoritative.reads).toEqual([5, 5]);
+    expect(authoritative.state).toMatchObject({ activeKey: null, verifiedAt: expect.any(Date) });
+    expect(h.tx.contactVerificationChallenge.updateMany).toHaveBeenCalledTimes(1);
+    expect(randomBytes).toHaveBeenCalledTimes(1);
+  });
+
+  it('maps an unexpected confirmation database failure to the exact safe 503 without logging details', async () => {
+    const h = harness();
+    const errorLog = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const warnLog = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    h.prisma.$transaction.mockRejectedValue({
+      code: 'P2028',
+      meta: { destination: 'private@example.ru', pin: '123456' },
+      cause: new Error('database-internal-detail'),
+    });
+
+    const failure = await h.service.confirm(challenge().id, '123456').catch((error) => error);
+
+    expect(failure.getStatus()).toBe(503);
+    expect(failure.getResponse()).toEqual({
+      code: CONTACT_VERIFICATION_ERROR_CODES.UNAVAILABLE,
+      message: 'Contact verification request was not accepted',
+    });
+    expect(JSON.stringify(failure.getResponse())).not.toMatch(/private|123456|P2028|database|cause|stack/i);
+    expect(errorLog).not.toHaveBeenCalled();
+    expect(warnLog).not.toHaveBeenCalled();
   });
 
   it('consumes a ticket atomically once and binds it to channel and destination', async () => {

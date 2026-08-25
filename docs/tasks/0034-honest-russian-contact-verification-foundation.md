@@ -16,6 +16,7 @@ This foundation proves access to a mailbox or phone at that moment; it does not 
 - A successful PIN returns one 32-byte base64url ticket. Only its channel/destination-bound HMAC digest is persisted; the ticket expires after 15 minutes and is consumed atomically once.
 - Existing destinations receive the same accepted shape with an opaque unusable synthetic challenge and no delivery. API error bodies are generic: `CONTACT_VERIFICATION_INVALID_OR_EXPIRED` (400), `CONTACT_VERIFICATION_RATE_LIMITED` (429), and `CONTACT_VERIFICATION_UNAVAILABLE` (503).
 - Challenge rows are superseded transactionally, use conditional atomic updates for final race boundaries, and are cleaned only after a maximum 24-hour retention boundary.
+- PIN confirmation is serialized per challenge inside a transaction-scoped PostgreSQL advisory lock. The authoritative read, expiry/state checks, constant-time PIN comparison, attempt decrement/exhaustion, and one-ticket transition all occur inside that lock; stale pre-lock state cannot authorize a PIN, five wrong attempts exhaust the challenge, and concurrent correct confirmations can issue at most one ticket.
 
 ## Delivery and Russian boundary
 
@@ -35,4 +36,4 @@ Persistent cooldown/hourly cap, attempt exhaustion, replay prevention, one activ
 
 Focused repository tests cover challenge policy, controllers/DTOs, configuration, SMS Aero and Timeweb adapters, OAuth compatibility, and bounded external HTTP. Automated tests/builds are not runtime evidence. The following remain **NOT VERIFIED** without configured accounts and deployment: Timeweb Russian-region placement, live API/PostgreSQL/Redis, real SMTP delivery, real SMS Aero delivery, provider account contracts, production 152-FZ compliance, Android emulator, and physical device.
 
-Final automated validation: focused auth/external-HTTP/config coverage passed with 9 suites and 171 tests; the full API suite passed with 39 suites and 543 tests; TypeScript validation and the API production build passed; Prisma Client generation passed on the controlled manual invocation (`npm run prisma:generate --workspace=apps/api`, Prisma 5.16.2, 185 ms); Prisma schema validation passed with a process-local non-secret placeholder; and `git diff --check` passed.
+Final automated validation: focused auth/external-HTTP/config coverage passed with 9 suites and 175 tests; the full API suite passed with 39 suites and 547 tests; TypeScript validation and the API production build passed; Prisma Client generation passed on the controlled manual invocation (`npm run prisma:generate --workspace=apps/api`, Prisma 5.16.2, 185 ms); Prisma schema validation passed with a process-local non-secret placeholder; and `git diff --check` passed.

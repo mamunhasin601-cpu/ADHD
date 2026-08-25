@@ -105,51 +105,63 @@ export class ContactVerificationService {
 
   async confirm(challengeId: string, code: string) {
     this.requireEnabled();
-    const now = new Date();
-    const challenge = await this.prisma.contactVerificationChallenge.findUnique({ where: { id: challengeId } });
-    if (!challenge || !challenge.activeKey || challenge.verifiedAt || challenge.expiresAt <= now || challenge.attemptsRemaining <= 0) {
-      throw invalidContactVerification();
-    }
+    let outcome: { kind: 'invalid' } | { kind: 'verified'; verificationToken: string };
 
-    const suppliedDigest = this.digest('pin', challenge.id, challenge.channel, challenge.destination, code);
-    if (!this.equalDigests(challenge.pinDigest, suppliedDigest)) {
-      const terminal = challenge.attemptsRemaining === 1;
-      const changed = await this.prisma.contactVerificationChallenge.updateMany({
-        where: {
-          id: challenge.id,
-          activeKey: challenge.activeKey,
-          verifiedAt: null,
-          expiresAt: { gt: now },
-          attemptsRemaining: challenge.attemptsRemaining,
-        },
-        data: terminal
-          ? { attemptsRemaining: 0, activeKey: null }
-          : { attemptsRemaining: { decrement: 1 } },
+    try {
+      outcome = await this.prisma.$transaction(async (transaction) => {
+        await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${challengeId}, 0))`;
+        const now = new Date();
+        const challenge = await transaction.contactVerificationChallenge.findUnique({ where: { id: challengeId } });
+        if (!challenge || !challenge.activeKey || challenge.verifiedAt || challenge.expiresAt <= now || challenge.attemptsRemaining <= 0) {
+          return { kind: 'invalid' as const };
+        }
+
+        const suppliedDigest = this.digest('pin', challenge.id, challenge.channel, challenge.destination, code);
+        if (!this.equalDigests(challenge.pinDigest, suppliedDigest)) {
+          const terminal = challenge.attemptsRemaining === 1;
+          const changed = await transaction.contactVerificationChallenge.updateMany({
+            where: {
+              id: challenge.id,
+              activeKey: challenge.activeKey,
+              verifiedAt: null,
+              expiresAt: { gt: now },
+              attemptsRemaining: challenge.attemptsRemaining,
+            },
+            data: terminal
+              ? { attemptsRemaining: 0, activeKey: null }
+              : { attemptsRemaining: { decrement: 1 } },
+          });
+          return { kind: 'invalid' as const };
+        }
+
+        const verificationToken = randomBytes(32).toString('base64url');
+        const verificationTokenDigest = this.digest('ticket', challenge.channel, challenge.destination, verificationToken);
+        const changed = await transaction.contactVerificationChallenge.updateMany({
+          where: {
+            id: challenge.id,
+            activeKey: challenge.activeKey,
+            pinDigest: challenge.pinDigest,
+            verifiedAt: null,
+            expiresAt: { gt: now },
+            attemptsRemaining: { gt: 0 },
+          },
+          data: {
+            activeKey: null,
+            verifiedAt: now,
+            verificationTokenDigest,
+            verificationTokenExpiresAt: new Date(now.getTime() + CONTACT_VERIFICATION_TICKET_TTL_MS),
+          },
+        });
+        return changed.count === 1
+          ? { kind: 'verified' as const, verificationToken }
+          : { kind: 'invalid' as const };
       });
-      if (changed.count !== 1) throw invalidContactVerification();
-      throw invalidContactVerification();
+    } catch {
+      throw unavailableContactVerification();
     }
 
-    const verificationToken = randomBytes(32).toString('base64url');
-    const verificationTokenDigest = this.digest('ticket', challenge.channel, challenge.destination, verificationToken);
-    const changed = await this.prisma.contactVerificationChallenge.updateMany({
-      where: {
-        id: challenge.id,
-        activeKey: challenge.activeKey,
-        pinDigest: challenge.pinDigest,
-        verifiedAt: null,
-        expiresAt: { gt: now },
-        attemptsRemaining: { gt: 0 },
-      },
-      data: {
-        activeKey: null,
-        verifiedAt: now,
-        verificationTokenDigest,
-        verificationTokenExpiresAt: new Date(now.getTime() + CONTACT_VERIFICATION_TICKET_TTL_MS),
-      },
-    });
-    if (changed.count !== 1) throw invalidContactVerification();
-    return { verificationToken, expiresInSeconds: 900 };
+    if (outcome.kind === 'invalid') throw invalidContactVerification();
+    return { verificationToken: outcome.verificationToken, expiresInSeconds: 900 };
   }
 
   async consumeVerificationTicket(input: VerificationTicketInput): Promise<boolean> {
