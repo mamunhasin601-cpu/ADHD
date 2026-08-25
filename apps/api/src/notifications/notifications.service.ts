@@ -6,6 +6,7 @@ import { TASK_REMINDERS_QUEUE, JOBS } from './notifications.constants';
 import type { Task } from '@prisma/client';
 import { ExternalHttpService } from '../external-http/external-http.service';
 import { ExternalHttpError } from '../external-http/external-http.error';
+import { buildTaskReminderExpoPayload } from './notifications.payload';
 
 /**
  * Compact job payload (ADR-009): only task/user IDs needed for worker lookup.
@@ -257,15 +258,7 @@ export class NotificationsService {
             ? { 'Authorization': `Bearer ${process.env.EXPO_ACCESS_TOKEN}` }
             : {}),
         },
-        body: JSON.stringify({
-          to: token,
-          // Generic, non-sensitive content (ADR-009 §5, Package 0001 §7):
-          // No task title, notes, IDs, or user content in push payloads.
-          title: 'Focus',
-          body: 'Пора начинать',
-          sound: 'default',
-          data: { type: 'task-reminder' },
-        }),
+        body: JSON.stringify(buildTaskReminderExpoPayload(token)),
         },
       });
       const ticket = result.data;

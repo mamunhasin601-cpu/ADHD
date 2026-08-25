@@ -148,5 +148,6 @@ describe('NotificationsProcessor', () => {
     expect((job.data as any).taskTitle).toBeUndefined();
     expect(job.data.taskId).toBeDefined();
     expect(job.data.userId).toBeDefined();
+    expect(Object.keys(job.data).sort()).toEqual(['scheduledFor', 'taskId', 'userId']);
   });
 });
