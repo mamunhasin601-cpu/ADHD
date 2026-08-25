@@ -2,6 +2,7 @@ import { NotificationsService } from './notifications.service';
 import { ConflictException } from '@nestjs/common';
 import type { Task } from '@prisma/client';
 import { ExternalHttpError } from '../external-http/external-http.error';
+import { buildTaskReminderExpoPayload } from './notifications.payload';
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
@@ -99,6 +100,7 @@ describe('NotificationsService', () => {
         expect.objectContaining({ taskId: 'task-1', userId: 'user-1' }),
         expect.anything(),
       );
+      expect(Object.keys(queue.add.mock.calls[0][1]).sort()).toEqual(['scheduledFor', 'taskId', 'userId']);
     });
 
     it('не включает taskTitle в job payload (ADR-009 конфиденциальность)', async () => {
@@ -169,6 +171,22 @@ describe('NotificationsService', () => {
   // ── sendPushNotification (multi-device fan-out) ───────────────────────────
 
   describe('sendPushNotification', () => {
+    const expectedPayload = (token: string) => ({
+      to: token,
+      title: 'Focus',
+      body: 'Пора начинать',
+      sound: 'default',
+      data: { type: 'task-reminder' },
+    });
+
+    it('builds the exact allowlisted Expo payload and accepts only a token', () => {
+      const payload = buildTaskReminderExpoPayload('ExponentPushToken[test]');
+      expect(payload).toEqual(expectedPayload('ExponentPushToken[test]'));
+      expect(Object.keys(payload).sort()).toEqual(['body', 'data', 'sound', 'title', 'to']);
+      expect(Object.keys(payload.data)).toEqual(['type']);
+      expect(payload.data.type).toBe('task-reminder');
+    });
+
     it('возвращает no-tokens, если нет ни DeviceToken записей, ни legacy expoPushToken', async () => {
       prisma.deviceToken.findMany.mockResolvedValue([]);
       prisma.user.findUnique.mockResolvedValue({ expoPushToken: null });
@@ -244,7 +262,7 @@ describe('NotificationsService', () => {
       });
     });
 
-    it('push body не содержит task title или user content (конфиденциальность)', async () => {
+    it('serializes the exact generic payload and excludes task/user/contact content', async () => {
       prisma.deviceToken.findMany.mockResolvedValue([
         { id: 'dev-1', token: 'ExponentPushToken[tok1]' },
       ]);
@@ -256,20 +274,74 @@ describe('NotificationsService', () => {
       await service.sendPushNotification('user-1', 'task-1');
 
       const fetchBody = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
-      expect(fetchBody).not.toHaveProperty('taskTitle');
-      expect(fetchBody).not.toHaveProperty('userId');
-      expect(fetchBody).not.toHaveProperty('taskId');
-      // title and body must be generic strings
-      expect(typeof fetchBody.title).toBe('string');
-      expect(fetchBody.body).not.toMatch(/задача|task|title/i);
-      // data must not expose sensitive fields
-      expect(fetchBody.data).not.toHaveProperty('taskTitle');
-      expect(fetchBody.data).not.toHaveProperty('userId');
+      expect(fetchBody).toEqual(expectedPayload('ExponentPushToken[tok1]'));
+      expect(Object.keys(fetchBody).sort()).toEqual(['body', 'data', 'sound', 'title', 'to']);
+      expect(Object.keys(fetchBody.data)).toEqual(['type']);
+      expect(JSON.stringify(fetchBody)).not.toMatch(/task-1|user-1|Тестовая задача|notes|email|phone|123456|ticket/i);
       expect(externalHttp.requestJson).toHaveBeenCalledWith(expect.objectContaining({
         operation: 'expo.push',
         retry: 'none',
         options: expect.objectContaining({ body: expect.any(String) }),
       }));
+    });
+
+    it('cannot forward a sensitive-looking task fixture into the Expo body', async () => {
+      const sensitiveTask = {
+        ...baseTask,
+        id: 'task-private-identifier',
+        userId: 'user-private-identifier',
+        title: 'Врач и диагноз',
+        notes: 'private notes',
+        email: 'private@example.ru',
+        phone: '+79990000000',
+        verificationPin: '654321',
+        verificationTicket: 'verification-ticket-secret',
+        startTime: new Date('2026-07-25T10:30:00.000Z'),
+      } as Task;
+      await service.scheduleTaskReminder(sensitiveTask);
+      prisma.deviceToken.findMany.mockResolvedValue([
+        { id: 'dev-1', token: 'ExponentPushToken[fixture]' },
+      ]);
+      prisma.notificationLog.findFirst.mockResolvedValue(null);
+      global.fetch = jest.fn().mockResolvedValue({ json: async () => ({ data: { status: 'ok' } }) }) as any;
+
+      await service.sendPushNotification(sensitiveTask.userId, sensitiveTask.id);
+
+      const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+      expect(body).toEqual(expectedPayload('ExponentPushToken[fixture]'));
+      expect(JSON.stringify(body)).not.toMatch(
+        /task-private-identifier|user-private-identifier|Врач и диагноз|private notes|private@example\.ru|79990000000|654321|verification-ticket-secret/,
+      );
+    });
+
+    it('changes only the to field for different device tokens', async () => {
+      prisma.deviceToken.findMany.mockResolvedValue([
+        { id: 'dev-1', token: 'ExponentPushToken[first]' },
+        { id: 'dev-2', token: 'ExponentPushToken[second]' },
+      ]);
+      prisma.notificationLog.findFirst.mockResolvedValue(null);
+      global.fetch = jest.fn().mockResolvedValue({ json: async () => ({ data: { status: 'ok' } }) }) as any;
+
+      await service.sendPushNotification('user-1', 'sensitive-task-id');
+
+      const bodies = (global.fetch as jest.Mock).mock.calls.map(([, options]) => JSON.parse(options.body));
+      expect(bodies).toEqual([
+        expectedPayload('ExponentPushToken[first]'),
+        expectedPayload('ExponentPushToken[second]'),
+      ]);
+      expect(bodies[0]).toEqual({ ...bodies[1], to: 'ExponentPushToken[first]' });
+    });
+
+    it('uses the same exact allowlist for legacy-token delivery', async () => {
+      prisma.deviceToken.findMany.mockResolvedValue([]);
+      prisma.user.findUnique.mockResolvedValue({ expoPushToken: 'ExponentPushToken[legacy]' });
+      prisma.notificationLog.findFirst.mockResolvedValue(null);
+      global.fetch = jest.fn().mockResolvedValue({ json: async () => ({ data: { status: 'ok' } }) }) as any;
+
+      await service.sendPushNotification('user-1', 'task-1');
+
+      const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+      expect(body).toEqual(expectedPayload('ExponentPushToken[legacy]'));
     });
 
     it('возвращает all-failed при сетевой ошибке', async () => {
@@ -308,6 +380,25 @@ describe('NotificationsService', () => {
       expect(result).toEqual({ status: 'all-failed', devices: [{ tokenId: 'dev-1', outcome: 'error', errorMessage: 'timeout' }] });
       expect(error).not.toHaveBeenCalled();
       expect(JSON.stringify(result)).not.toMatch(/secret|provider|URL|cause|stack/i);
+    });
+
+    it('does not log a token or caught sensitive transport details', async () => {
+      const token = 'ExponentPushToken[do-not-log]';
+      prisma.deviceToken.findMany.mockResolvedValue([{ id: 'dev-1', token }]);
+      prisma.notificationLog.findFirst.mockResolvedValue(null);
+      externalHttp.requestJson.mockRejectedValueOnce(
+        new Error('private@example.ru +79990000000 PIN=654321 ticket=secret provider-body'),
+      );
+      const logger = (service as any).logger;
+      const spies = ['log', 'warn', 'error', 'debug'].map((method) =>
+        jest.spyOn(logger, method),
+      );
+
+      await service.sendPushNotification('user-private', 'task-private');
+
+      const logged = JSON.stringify(spies.flatMap((spy) => spy.mock.calls));
+      expect(logged).not.toContain(token);
+      expect(logged).not.toMatch(/user-private|task-private|private@example\.ru|79990000000|654321|ticket=secret|provider-body|cause|stack/i);
     });
 
     it('partial fan-out: одно устройство успешно, другое с retryable ошибкой — возвращает sent', async () => {
