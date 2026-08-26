@@ -5,6 +5,7 @@ import {
   OAuthAccountLinkingRequiredError,
   OAUTH_ACCOUNT_LINKING_REQUIRED_RESPONSE,
 } from './oauth-account-linking.error';
+import { OAUTH_PROVIDER_UNAVAILABLE_RESPONSE } from './oauth-provider-unavailable';
 
 const tokens = { accessToken: 'access', refreshToken: 'refresh' };
 const response = () => {
@@ -29,8 +30,55 @@ async function invoke(
 describe('OAuth controllers external transport', () => {
   const oauth = { handleOAuthCallback: jest.fn().mockResolvedValue(tokens) };
   const transport = { requestJson: jest.fn() };
+  const enabledConfig = {
+    get: jest.fn((key: string) => key.endsWith('_OAUTH_ENABLED')),
+    getOrThrow: jest.fn((key: string) => ({
+      YANDEX_CLIENT_ID: 'yandex-client', YANDEX_CLIENT_SECRET: 'yandex-secret', YANDEX_REDIRECT_URI: 'https://oauth.example.ru/auth/yandex/callback',
+      VK_CLIENT_ID: 'vk-client', VK_CLIENT_SECRET: 'vk-secret', VK_REDIRECT_URI: 'https://oauth.example.ru/auth/vk/callback',
+      MAILRU_CLIENT_ID: 'mailru-client', MAILRU_CLIENT_SECRET: 'mailru-secret', MAILRU_REDIRECT_URI: 'https://oauth.example.ru/auth/mailru/callback',
+    } as Record<string, string>)[key]),
+  };
 
   beforeEach(() => jest.clearAllMocks());
+
+  it.each([
+    ['Yandex', YandexOAuthController, 'YANDEX'],
+    ['VK', VkOAuthController, 'VK'],
+    ['Mail.ru', MailruOAuthController, 'MAILRU'],
+  ] as const)('%s disabled initiation and callback share an exact fail-closed 503', async (_name, Controller, prefix) => {
+    const disabledConfig = {
+      get: jest.fn((key: string) => key === `${prefix}_OAUTH_ENABLED` ? false : undefined),
+      getOrThrow: jest.fn(),
+    };
+    const controller = new Controller(oauth as any, transport as any, disabledConfig as any);
+    const initiationResponse = response();
+    controller.initiateOAuth(initiationResponse as any);
+    expect(initiationResponse.status).toHaveBeenCalledWith(503);
+    expect(initiationResponse.json).toHaveBeenCalledWith(OAUTH_PROVIDER_UNAVAILABLE_RESPONSE);
+    expect(initiationResponse.redirect).not.toHaveBeenCalled();
+
+    const callbackResponse = response();
+    await invoke(Controller, controller, 'sensitive-code', callbackResponse, 'sensitive-provider-error');
+    expect(callbackResponse.status).toHaveBeenCalledWith(503);
+    expect(callbackResponse.json).toHaveBeenCalledWith(OAUTH_PROVIDER_UNAVAILABLE_RESPONSE);
+    expect(callbackResponse.redirect).not.toHaveBeenCalled();
+    expect(disabledConfig.getOrThrow).not.toHaveBeenCalled();
+    expect(transport.requestJson).not.toHaveBeenCalled();
+    expect(oauth.handleOAuthCallback).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['Yandex', YandexOAuthController, 'yandex-client', 'https://oauth.example.ru/auth/yandex/callback'],
+    ['VK', VkOAuthController, 'vk-client', 'https://oauth.example.ru/auth/vk/callback'],
+    ['Mail.ru', MailruOAuthController, 'mailru-client', 'https://oauth.example.ru/auth/mailru/callback'],
+  ] as const)('%s enabled initiation uses only configured values', (_name, Controller, clientId, redirectUri) => {
+    const res = response();
+    new Controller(oauth as any, transport as any, enabledConfig as any).initiateOAuth(res as any);
+    const location = new URL(res.redirect.mock.calls[0][0]);
+    expect(location.searchParams.get('client_id')).toBe(clientId);
+    expect(location.searchParams.get('redirect_uri')).toBe(redirectUri);
+    expect(location.toString()).not.toMatch(/dev-client-id|localhost/);
+  });
 
   it.each([
     ['Yandex', YandexOAuthController, { access_token: 'provider-access' }, { id: 'y-1', default_email: 'y@example.test', first_name: 'Y' }, ['yandex.token', 'none', 'yandex.profile', 'safe-transient'], { provider: 'yandex', providerId: 'y-1', email: 'y@example.test', firstName: 'Y', lastName: undefined }],
@@ -39,7 +87,7 @@ describe('OAuth controllers external transport', () => {
   ] as const)('%s selects explicit operations, maps a profile, and preserves deep-link tokens', async (_name, Controller, tokenReply, profileReply, expected, profile) => {
     transport.requestJson.mockResolvedValueOnce(tokenReply).mockResolvedValueOnce(profileReply);
     const res = response();
-    await invoke(Controller, new Controller(oauth as any, transport as any), 'code', res);
+    await invoke(Controller, new Controller(oauth as any, transport as any, enabledConfig as any), 'code', res);
     expect(transport.requestJson).toHaveBeenNthCalledWith(1, expect.objectContaining({ operation: expected[0], retry: expected[1] }));
     expect(transport.requestJson).toHaveBeenNthCalledWith(2, expect.objectContaining({ operation: expected[2], retry: expected[3] }));
     expect(oauth.handleOAuthCallback).toHaveBeenCalledWith(profile);
@@ -47,18 +95,24 @@ describe('OAuth controllers external transport', () => {
     expect(deepLink).toContain('focus://auth/callback');
     expect(deepLink).toContain('accessToken=access');
     expect(deepLink).toContain('refreshToken=refresh');
+    const tokenRequest = transport.requestJson.mock.calls[0][0];
+    const serializedRequest = tokenRequest.options?.body?.toString?.() ?? tokenRequest.url;
+    expect(serializedRequest).toContain(`${profile.provider === 'mailru' ? 'mailru' : profile.provider}-client`);
+    expect(serializedRequest).toContain(`${profile.provider === 'mailru' ? 'mailru' : profile.provider}-secret`);
+    if (profile.provider !== 'yandex') expect(serializedRequest).toContain(encodeURIComponent(`https://oauth.example.ru/auth/${profile.provider}/callback`));
+    expect(serializedRequest).not.toMatch(/dev-client-id|dev-secret|localhost/);
   });
 
   it.each([YandexOAuthController, VkOAuthController, MailruOAuthController])('keeps missing code at 400 without transport (%p)', async (Controller) => {
     const res = response();
-    await invoke(Controller, new Controller(oauth as any, transport as any), undefined, res);
+    await invoke(Controller, new Controller(oauth as any, transport as any, enabledConfig as any), undefined, res);
     expect(transport.requestJson).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(400);
   });
 
   it.each([YandexOAuthController, VkOAuthController, MailruOAuthController])('redacts provider callback errors at 400 without transport (%p)', async (Controller) => {
     const res = response();
-    await invoke(Controller, new Controller(oauth as any, transport as any), 'code', res, 'provider-error-secret');
+    await invoke(Controller, new Controller(oauth as any, transport as any, enabledConfig as any), 'code', res, 'provider-error-secret');
     expect(transport.requestJson).not.toHaveBeenCalled();
     expect(oauth.handleOAuthCallback).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(400);
@@ -68,7 +122,7 @@ describe('OAuth controllers external transport', () => {
   it.each([YandexOAuthController, VkOAuthController, MailruOAuthController])('redacts transport failure and prevents issuance (%p)', async (Controller) => {
     transport.requestJson.mockRejectedValueOnce(new Error('provider secret and code'));
     const res = response();
-    await invoke(Controller, new Controller(oauth as any, transport as any), 'code', res);
+    await invoke(Controller, new Controller(oauth as any, transport as any, enabledConfig as any), 'code', res);
     expect(oauth.handleOAuthCallback).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith(expect.not.objectContaining({ error: expect.anything(), description: expect.anything() }));
@@ -81,7 +135,7 @@ describe('OAuth controllers external transport', () => {
   ] as const)('%s rejects an HTTP-200 token payload without profile lookup or disclosure', async (_name, Controller, tokenReply) => {
     transport.requestJson.mockResolvedValueOnce(tokenReply);
     const res = response();
-    await invoke(Controller, new Controller(oauth as any, transport as any), 'callback-code-secret', res);
+    await invoke(Controller, new Controller(oauth as any, transport as any, enabledConfig as any), 'callback-code-secret', res);
     expect(transport.requestJson).toHaveBeenCalledTimes(1);
     expect(oauth.handleOAuthCallback).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(500);
@@ -93,7 +147,7 @@ describe('OAuth controllers external transport', () => {
       .mockResolvedValueOnce(Controller === VkOAuthController ? { access_token: 'provider', user_id: 1 } : { access_token: 'provider' })
       .mockRejectedValueOnce(new Error('provider response URL token secret'));
     const res = response();
-    await invoke(Controller, new Controller(oauth as any, transport as any), 'callback-code-secret', res);
+    await invoke(Controller, new Controller(oauth as any, transport as any, enabledConfig as any), 'callback-code-secret', res);
     expect(transport.requestJson).toHaveBeenCalledTimes(2);
     expect(oauth.handleOAuthCallback).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(500);
@@ -111,7 +165,7 @@ describe('OAuth controllers external transport', () => {
     );
     const res = response();
 
-    await invoke(Controller, new Controller(oauth as any, transport as any), 'sensitive-code', res);
+    await invoke(Controller, new Controller(oauth as any, transport as any, enabledConfig as any), 'sensitive-code', res);
 
     expect(res.status).toHaveBeenCalledWith(409);
     expect(res.json).toHaveBeenCalledWith(
@@ -139,7 +193,7 @@ describe('OAuth controllers external transport', () => {
 
       await invoke(
         YandexOAuthController,
-        new YandexOAuthController(oauth as any, transport as any),
+        new YandexOAuthController(oauth as any, transport as any, enabledConfig as any),
         'sensitive-code',
         res,
       );

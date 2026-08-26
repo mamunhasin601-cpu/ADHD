@@ -1,5 +1,6 @@
 import { decodeRedisCredential } from './redis-connection';
 import { validateContactVerificationEnvironment } from './contact-verification-environment';
+import { validateOAuthEnvironment, type OAuthEnvironment } from './oauth-environment';
 
 export const CORE_ENVIRONMENT_KEYS = [
   'NODE_ENV',
@@ -16,7 +17,7 @@ export const REQUIRED_CORE_ENVIRONMENT_KEYS = CORE_ENVIRONMENT_KEYS.filter(
 
 export type NodeEnvironment = 'development' | 'test' | 'production';
 
-export interface CoreEnvironment extends Record<string, unknown> {
+export interface CoreEnvironment extends Record<string, unknown>, OAuthEnvironment {
   NODE_ENV: NodeEnvironment;
   DATABASE_URL: string;
   REDIS_URL: string;
@@ -120,7 +121,7 @@ export function validateCoreEnvironment(
     }
   }
 
-  return validateContactVerificationEnvironment({
+  const contactEnvironment = validateContactVerificationEnvironment({
     ...environment,
     NODE_ENV: nodeEnv as NodeEnvironment,
     DATABASE_URL: databaseUrl,
@@ -128,5 +129,9 @@ export function validateCoreEnvironment(
     JWT_SECRET: jwtSecret,
     JWT_REFRESH_SECRET: jwtRefreshSecret,
     PORT: port,
-  }, [jwtSecret, jwtRefreshSecret]) as CoreEnvironment;
+  }, [jwtSecret, jwtRefreshSecret]);
+  return validateOAuthEnvironment(
+    contactEnvironment,
+    nodeEnv as NodeEnvironment,
+  ) as CoreEnvironment;
 }

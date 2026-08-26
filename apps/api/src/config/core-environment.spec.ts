@@ -9,6 +9,11 @@ const validEnvironment = () => ({
   PORT: '3000',
 });
 
+const oauthEnvironment = (overrides: Record<string, unknown> = {}) => ({
+  ...validEnvironment(),
+  ...overrides,
+});
+
 describe('validateCoreEnvironment', () => {
   const verificationEnvironment = {
     CONTACT_VERIFICATION_ENABLED: 'true',
@@ -123,6 +128,55 @@ describe('validateCoreEnvironment', () => {
     } catch (error) {
       expect((error as Error).message).not.toContain(secret);
     }
+  });
+
+  it('disables all OAuth providers when flags are absent', () => {
+    expect(validateCoreEnvironment(oauthEnvironment())).toMatchObject({
+      YANDEX_OAUTH_ENABLED: false,
+      VK_OAUTH_ENABLED: false,
+      MAILRU_OAUTH_ENABLED: false,
+    });
+  });
+
+  it('accepts exact false and independently enables configured providers', () => {
+    const result = validateCoreEnvironment(oauthEnvironment({
+      YANDEX_OAUTH_ENABLED: 'false',
+      VK_OAUTH_ENABLED: 'true',
+      VK_CLIENT_ID: 'vk-client', VK_CLIENT_SECRET: 'vk-secret', VK_REDIRECT_URI: 'https://oauth.example.ru/auth/vk/callback',
+    }));
+    expect(result.YANDEX_OAUTH_ENABLED).toBe(false);
+    expect(result.VK_OAUTH_ENABLED).toBe(true);
+    expect(result.MAILRU_OAUTH_ENABLED).toBe(false);
+    expect(result.VK_CLIENT_ID).toBe('vk-client');
+  });
+
+  it.each(['TRUE', 'False', '1', ' true ', 1, true, {}, []])('rejects invalid OAuth flag %p', (value) => {
+    expect(() => validateCoreEnvironment(oauthEnvironment({ YANDEX_OAUTH_ENABLED: value }))).toThrow('YANDEX_OAUTH_ENABLED');
+  });
+
+  it.each(['YANDEX_CLIENT_ID', 'YANDEX_CLIENT_SECRET', 'YANDEX_REDIRECT_URI'])('requires enabled Yandex variable %s', (key) => {
+    expect(() => validateCoreEnvironment(oauthEnvironment({ YANDEX_OAUTH_ENABLED: 'true', YANDEX_CLIENT_ID: 'id', YANDEX_CLIENT_SECRET: 'secret', YANDEX_REDIRECT_URI: 'https://oauth.example.ru/auth/yandex/callback', [key]: undefined }))).toThrow(key);
+  });
+
+  it.each(['', ' ', ' dev-secret', 'change-me', 'replace-me', 'your-client-id', 'your-client-secret', 'your-secret-here'])('rejects unsafe OAuth credential %p without disclosure', (value) => {
+    const environment = oauthEnvironment({ YANDEX_OAUTH_ENABLED: 'true', YANDEX_CLIENT_ID: value, YANDEX_CLIENT_SECRET: 'secret', YANDEX_REDIRECT_URI: 'https://oauth.example.ru/auth/yandex/callback' });
+    let message = '';
+    try { validateCoreEnvironment(environment); } catch (error) { message = (error as Error).message; }
+    expect(message).toContain('YANDEX_CLIENT_ID');
+    if (value.trim().length > 1) expect(message).not.toContain(value.trim());
+  });
+
+  it('accepts production HTTPS and development localhost HTTP redirects', () => {
+    expect(validateCoreEnvironment(oauthEnvironment({ YANDEX_OAUTH_ENABLED: 'true', YANDEX_CLIENT_ID: 'id', YANDEX_CLIENT_SECRET: 'secret', YANDEX_REDIRECT_URI: 'https://oauth.focus.ru/auth/yandex/callback' })).YANDEX_OAUTH_ENABLED).toBe(true);
+    expect(validateCoreEnvironment(oauthEnvironment({ NODE_ENV: 'development', YANDEX_OAUTH_ENABLED: 'true', YANDEX_CLIENT_ID: 'id', YANDEX_CLIENT_SECRET: 'secret', YANDEX_REDIRECT_URI: 'http://localhost:3000/auth/yandex/callback' })).YANDEX_REDIRECT_URI).toBe('http://localhost:3000/auth/yandex/callback');
+  });
+
+  it.each(['http://oauth.focus.ru/auth/yandex/callback', 'https://localhost/auth/yandex/callback', 'https://oauth.focus.test/auth/yandex/callback', 'https://oauth.focus.ru/auth/yandex/callback?x=secret', 'https://oauth.focus.ru/auth/yandex/callback#secret'])('rejects invalid production redirect %s without disclosure', (redirect) => {
+    expect(() => validateCoreEnvironment(oauthEnvironment({ YANDEX_OAUTH_ENABLED: 'true', YANDEX_CLIENT_ID: 'id', YANDEX_CLIENT_SECRET: 'secret', YANDEX_REDIRECT_URI: redirect }))).toThrow('YANDEX_REDIRECT_URI');
+  });
+
+  it('rejects arbitrary remote HTTP redirects outside production', () => {
+    expect(() => validateCoreEnvironment(oauthEnvironment({ NODE_ENV: 'test', YANDEX_OAUTH_ENABLED: 'true', YANDEX_CLIENT_ID: 'id', YANDEX_CLIENT_SECRET: 'secret', YANDEX_REDIRECT_URI: 'http://oauth.focus.ru/auth/yandex/callback' }))).toThrow('YANDEX_REDIRECT_URI');
   });
 
   it.each(['', ' ', '0', '65536', '3.5', '3000 ', 'abc', '-1'])(

@@ -7,6 +7,8 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Response } from 'express';
+import { ConfigService } from '@nestjs/config';
+import type { CoreEnvironment } from '../config/core-environment';
 import { OAuthService } from './oauth.service';
 import type { OAuthProfile } from './oauth.service';
 import { ExternalHttpService } from '../external-http/external-http.service';
@@ -14,6 +16,7 @@ import {
   OAuthAccountLinkingRequiredError,
   OAUTH_ACCOUNT_LINKING_REQUIRED_RESPONSE,
 } from './oauth-account-linking.error';
+import { OAUTH_PROVIDER_UNAVAILABLE_RESPONSE } from './oauth-provider-unavailable';
 
 /**
  * Yandex OAuth 2.0 flow
@@ -30,12 +33,17 @@ import {
  */
 @Controller('auth/yandex')
 export class YandexOAuthController {
-  constructor(private readonly oauthService: OAuthService, private readonly externalHttp: ExternalHttpService) {}
+  constructor(
+    private readonly oauthService: OAuthService,
+    private readonly externalHttp: ExternalHttpService,
+    private readonly config: ConfigService<CoreEnvironment, true>,
+  ) {}
 
-  private readonly clientId = process.env.YANDEX_CLIENT_ID || 'dev-client-id';
-  private readonly clientSecret = process.env.YANDEX_CLIENT_SECRET || 'dev-secret';
-  private readonly redirectUri =
-    process.env.YANDEX_REDIRECT_URI || 'http://localhost:3000/auth/yandex/callback';
+  private unavailable(res: Response) {
+    return res
+      .status(HttpStatus.SERVICE_UNAVAILABLE)
+      .json(OAUTH_PROVIDER_UNAVAILABLE_RESPONSE);
+  }
 
   /**
    * GET /auth/yandex
@@ -43,10 +51,13 @@ export class YandexOAuthController {
    */
   @Get()
   initiateOAuth(@Res() res: Response) {
+    if (!this.config.get('YANDEX_OAUTH_ENABLED')) return this.unavailable(res);
+    const clientId = this.config.getOrThrow('YANDEX_CLIENT_ID');
+    const redirectUri = this.config.getOrThrow('YANDEX_REDIRECT_URI');
     const authUrl = new URL('https://oauth.yandex.ru/authorize');
     authUrl.searchParams.set('response_type', 'code');
-    authUrl.searchParams.set('client_id', this.clientId);
-    authUrl.searchParams.set('redirect_uri', this.redirectUri);
+    authUrl.searchParams.set('client_id', clientId);
+    authUrl.searchParams.set('redirect_uri', redirectUri);
     authUrl.searchParams.set('scope', 'login:email login:info');
 
     res.redirect(authUrl.toString());
@@ -62,6 +73,9 @@ export class YandexOAuthController {
     @Query('error') error: string,
     @Res() res: Response,
   ) {
+    if (!this.config.get('YANDEX_OAUTH_ENABLED')) return this.unavailable(res);
+    const clientId = this.config.getOrThrow('YANDEX_CLIENT_ID');
+    const clientSecret = this.config.getOrThrow('YANDEX_CLIENT_SECRET');
     if (error) {
       return res.status(HttpStatus.BAD_REQUEST).json({
         message: 'OAuth callback was not accepted',
@@ -88,8 +102,8 @@ export class YandexOAuthController {
         body: new URLSearchParams({
           grant_type: 'authorization_code',
           code,
-          client_id: this.clientId,
-          client_secret: this.clientSecret,
+          client_id: clientId,
+          client_secret: clientSecret,
         }),
         },
       });

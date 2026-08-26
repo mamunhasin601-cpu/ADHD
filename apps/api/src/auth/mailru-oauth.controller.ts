@@ -7,6 +7,8 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Response } from 'express';
+import { ConfigService } from '@nestjs/config';
+import type { CoreEnvironment } from '../config/core-environment';
 import { OAuthService } from './oauth.service';
 import type { OAuthProfile } from './oauth.service';
 import * as crypto from 'crypto';
@@ -15,6 +17,7 @@ import {
   OAuthAccountLinkingRequiredError,
   OAUTH_ACCOUNT_LINKING_REQUIRED_RESPONSE,
 } from './oauth-account-linking.error';
+import { OAUTH_PROVIDER_UNAVAILABLE_RESPONSE } from './oauth-provider-unavailable';
 
 /**
  * Mail.ru OAuth 2.0 flow
@@ -31,12 +34,17 @@ import {
  */
 @Controller('auth/mailru')
 export class MailruOAuthController {
-  constructor(private readonly oauthService: OAuthService, private readonly externalHttp: ExternalHttpService) {}
+  constructor(
+    private readonly oauthService: OAuthService,
+    private readonly externalHttp: ExternalHttpService,
+    private readonly config: ConfigService<CoreEnvironment, true>,
+  ) {}
 
-  private readonly clientId = process.env.MAILRU_CLIENT_ID || 'dev-client-id';
-  private readonly clientSecret = process.env.MAILRU_CLIENT_SECRET || 'dev-secret';
-  private readonly redirectUri =
-    process.env.MAILRU_REDIRECT_URI || 'http://localhost:3000/auth/mailru/callback';
+  private unavailable(res: Response) {
+    return res
+      .status(HttpStatus.SERVICE_UNAVAILABLE)
+      .json(OAUTH_PROVIDER_UNAVAILABLE_RESPONSE);
+  }
 
   /**
    * GET /auth/mailru
@@ -44,9 +52,12 @@ export class MailruOAuthController {
    */
   @Get()
   initiateOAuth(@Res() res: Response) {
+    if (!this.config.get('MAILRU_OAUTH_ENABLED')) return this.unavailable(res);
+    const clientId = this.config.getOrThrow('MAILRU_CLIENT_ID');
+    const redirectUri = this.config.getOrThrow('MAILRU_REDIRECT_URI');
     const authUrl = new URL('https://oauth.mail.ru/login');
-    authUrl.searchParams.set('client_id', this.clientId);
-    authUrl.searchParams.set('redirect_uri', this.redirectUri);
+    authUrl.searchParams.set('client_id', clientId);
+    authUrl.searchParams.set('redirect_uri', redirectUri);
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('scope', 'userinfo');
 
@@ -63,6 +74,10 @@ export class MailruOAuthController {
     @Query('error') error: string,
     @Res() res: Response,
   ) {
+    if (!this.config.get('MAILRU_OAUTH_ENABLED')) return this.unavailable(res);
+    const clientId = this.config.getOrThrow('MAILRU_CLIENT_ID');
+    const clientSecret = this.config.getOrThrow('MAILRU_CLIENT_SECRET');
+    const redirectUri = this.config.getOrThrow('MAILRU_REDIRECT_URI');
     if (error) {
       return res.status(HttpStatus.BAD_REQUEST).json({
         message: 'OAuth callback was not accepted',
@@ -86,9 +101,9 @@ export class MailruOAuthController {
         body: new URLSearchParams({
           grant_type: 'authorization_code',
           code,
-          redirect_uri: this.redirectUri,
-          client_id: this.clientId,
-          client_secret: this.clientSecret,
+          redirect_uri: redirectUri,
+          client_id: clientId,
+          client_secret: clientSecret,
         }),
         },
       });
@@ -103,7 +118,7 @@ export class MailruOAuthController {
       // Mail.ru требует подпись запроса через sig параметр
       const params: Record<string, string> = {
         access_token: accessToken,
-        app_id: this.clientId,
+        app_id: clientId,
         method: 'users.getInfo',
         secure: '1',
         session_key: accessToken,
@@ -116,7 +131,7 @@ export class MailruOAuthController {
         .join('');
       const sig = crypto
         .createHash('md5')
-        .update(sortedParams + this.clientSecret)
+        .update(sortedParams + clientSecret)
         .digest('hex');
 
       const profileUrl = new URL('https://www.appsmail.ru/platform/api');
