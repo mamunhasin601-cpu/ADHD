@@ -1,6 +1,36 @@
 import { apiClient } from '../api-client';
 import type { AuthTokens, User } from '@focus/shared-types';
 
+export interface OAuthProviderAvailability {
+  yandex: boolean;
+  vk: boolean;
+  mailru: boolean;
+}
+
+export function parseOAuthProviderAvailability(value: unknown): OAuthProviderAvailability {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('Invalid OAuth provider availability');
+  }
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  if (keys.join(',') !== 'mailru,vk,yandex' ||
+      typeof record.yandex !== 'boolean' ||
+      typeof record.vk !== 'boolean' ||
+      typeof record.mailru !== 'boolean') {
+    throw new Error('Invalid OAuth provider availability');
+  }
+  return {
+    yandex: record.yandex,
+    vk: record.vk,
+    mailru: record.mailru,
+  };
+}
+
+export async function getOAuthProviderAvailability(): Promise<OAuthProviderAvailability> {
+  const { data } = await apiClient.get<unknown>('/auth/oauth/providers');
+  return parseOAuthProviderAvailability(data);
+}
+
 export interface LoginPayload {
   email?: string;
   phone?: string;
