@@ -77,3 +77,28 @@ Manifesto, User Bible, Product Vision и Constitution. Точная визуал
 Минимальное таймлайн-ядро закреплено в Phase 1. Расширенный помощник, энергия,
 AI-декомпозиция и body doubling поставляются последовательно и не блокируют
 проверку основного опыта.
+
+## 2026-08-26 — Focus visual identity and personalization foundation
+
+### Change summary
+
+- добавлен [Task 0039](../../docs/tasks/0039-visual-identity-foundation.md);
+- Theme System переведён в policy для направления **Focus is calm but alive**;
+- UX, ADHD, Today Screen Map, Monetization и Feature Roadmap получили связанные
+  правила для Orbits, будущих Sparks/Focusiki и первого reference screen Today.
+
+### Reason and evidence
+
+Это согласование продуктового направления, а не evidence готового UI. Mockup,
+accessibility-проверки и approval должны предшествовать implementation.
+
+### User impact
+
+Будущий Focus получает тёплую, взрослую и живую визуальную опору без перегрузки,
+стыда или функционального paywall. Core path и recovery остаются бесплатными.
+
+### Roadmap impact
+
+Task 0039 идёт через Phase A (spec), Phase B (Today-first implementation) и
+отдельную Phase C (packs/monetization). Коммерческая модель visual packs остаётся
+открытой.

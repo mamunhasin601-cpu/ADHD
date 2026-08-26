@@ -1,6 +1,7 @@
 # Monetization Philosophy
 
-> Статус: структура и оглавление.
+> Статус: active product policy for the visual-personalization direction;
+> pricing, billing and entitlement implementation are not present here.
 >
 > Инженерная модель entitlement, billing и платежных интеграций находится в [Engineering Handbook v5](../../docs/Engineering-Handbook-v5.md), [System Bible](../../docs/System-Bible.md) и [Developer Bible](../../docs/Developer-Bible.md).
 
@@ -20,6 +21,10 @@
 
 #### 2.2 Базовая ценность без оплаты
 
+Free включает Orbits, основной путь «увидеть → начать → вернуться», базовую
+поддержку Focus character, recovery и undo. Бесплатный опыт не должен ощущаться
+обрезанным или стыдящим.
+
 #### 2.3 Ограничения, которые не ломают доверие
 
 #### 2.4 Правила пересмотра free tier
@@ -30,11 +35,22 @@
 
 #### 3.2 Персонализация и дополнительные режимы
 
+Focus Sparks и Focusiki — будущие coherent visual packs. Они добавляют
+эмоциональную персонализацию, но не блокируют задачи, данные, recovery или
+доступный следующий шаг.
+
 #### 3.3 Smart Planner и AI capabilities
 
 #### 3.4 Themes и дополнительные пакеты
 
+Orbits — free/default. Sparks и Focusiki могут стать paid alternatives после
+отдельного approval и проверки ценности. Pack должен быть целостным, а не
+набором случайных платных иконок.
+
 #### 3.5 Что не должно быть искусственно заблокировано
+
+Нельзя блокировать core planning, completion, перенос, уменьшение, undo,
+recovery-critical actions или доступность контента ради продажи темы.
 
 ### 4. Paywall experience
 
@@ -45,6 +61,9 @@
 #### 4.3 Реальный прогресс и прозрачные лимиты
 
 #### 4.4 Продолжение работы на Free
+
+При истечении entitlement, ошибке загрузки или отсутствии asset пользователь
+продолжает работу на Orbits. Данные и выбранные действия не повреждаются.
 
 #### 4.5 Отказ без наказания
 
@@ -72,6 +91,10 @@
 
 #### 6.5 Уважение к финансовой уязвимости
 
+Коммерческая модель visual packs пока открыта: one-time purchase, subscription
+или включение в более широкий premium tier. До отдельного решения нет цен,
+store, billing и entitlement runtime.
+
 ### 7. Trust and privacy
 
 #### 7.1 Прозрачная цена
@@ -93,4 +116,3 @@
 #### 8.4 Complaints, refunds, and harm signals
 
 #### 8.5 Stop conditions
-

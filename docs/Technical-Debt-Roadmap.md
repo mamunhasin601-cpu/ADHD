@@ -72,6 +72,17 @@ Task 0033 completes only the fail-closed automatic-linking boundary; see [`tasks
 
 **Definition of Done:** артефакт не попадает в git; casts/dead code уменьшены без изменения поведения; новые UI constants проходят через tokens; auth screens используют общие primitives.
 
+### Product and experience foundations
+
+| ID | Проблема | Файл(ы) | Сложность | Риск | Влияние | Зависимости | Порядок |
+|---|---|---|---|---|---|---|---:|
+| V-01 (Task 0039) | Нет единого visual identity contract: Today, semantic color, accessibility/sensory safety, future pack architecture и Free/Pro boundary могут расходиться. | `Product-Bible/10-Theme-System/`, `Product-Bible/05-Experience/Future-Screen-Map.md`, `docs/tasks/0039-visual-identity-foundation.md` | M | Medium | High | Product/design approval; Q-03 token boundary | 11.5 |
+
+V-01 требует Today как first reference implementation после Phase A approval,
+обязательные contrast/text scaling/screen-reader/reduced-motion/haptic checks и
+fallback на Orbits. Monetization/entitlement остаются будущей работой; выбор
+one-time purchase, subscription или premium tier не решён.
+
 ### High Impact Changes
 
 | ID | Проблема | Файл(ы) | Сложность | Риск | Влияние | Зависимости | Порядок |
@@ -144,6 +155,7 @@ Task 0033 completes only the fail-closed automatic-linking boundary; see [`tasks
 | A-02 | `useTaskForm`, typed field components и изолированная validation | XL | High | High | shared policy |
 | Q-03 | Theme tokens и shared business policies | M | Low | Medium | — |
 | Q-04 | Shared auth shell/form/submit hook | M | Medium | Medium | H-01 |
+| V-01 (Task 0039, Phase A) | Visual identity spec и Today mockup approved; implementation и paid packs не входят в этот sprint. | M | Medium | High | Product/design review |
 | A-05 (часть 1) | `TaskResponse` ISO mapper; сокращение casts | L | Medium | High | API contract inventory |
 
 **Exit criteria:** крупные экраны — composition-only; form/view-model pure logic имеет unit tests; mobile/backend defaults не расходятся; даты парсятся на boundary.
