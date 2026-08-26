@@ -7,6 +7,8 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Response } from 'express';
+import { ConfigService } from '@nestjs/config';
+import type { CoreEnvironment } from '../config/core-environment';
 import { OAuthService } from './oauth.service';
 import type { OAuthProfile } from './oauth.service';
 import { ExternalHttpService } from '../external-http/external-http.service';
@@ -14,6 +16,7 @@ import {
   OAuthAccountLinkingRequiredError,
   OAUTH_ACCOUNT_LINKING_REQUIRED_RESPONSE,
 } from './oauth-account-linking.error';
+import { OAUTH_PROVIDER_UNAVAILABLE_RESPONSE } from './oauth-provider-unavailable';
 
 /**
  * VK OAuth 2.0 flow
@@ -30,12 +33,17 @@ import {
  */
 @Controller('auth/vk')
 export class VkOAuthController {
-  constructor(private readonly oauthService: OAuthService, private readonly externalHttp: ExternalHttpService) {}
+  constructor(
+    private readonly oauthService: OAuthService,
+    private readonly externalHttp: ExternalHttpService,
+    private readonly config: ConfigService<CoreEnvironment, true>,
+  ) {}
 
-  private readonly clientId = process.env.VK_CLIENT_ID || 'dev-client-id';
-  private readonly clientSecret = process.env.VK_CLIENT_SECRET || 'dev-secret';
-  private readonly redirectUri =
-    process.env.VK_REDIRECT_URI || 'http://localhost:3000/auth/vk/callback';
+  private unavailable(res: Response) {
+    return res
+      .status(HttpStatus.SERVICE_UNAVAILABLE)
+      .json(OAUTH_PROVIDER_UNAVAILABLE_RESPONSE);
+  }
 
   /**
    * GET /auth/vk
@@ -43,9 +51,12 @@ export class VkOAuthController {
    */
   @Get()
   initiateOAuth(@Res() res: Response) {
+    if (!this.config.get('VK_OAUTH_ENABLED')) return this.unavailable(res);
+    const clientId = this.config.getOrThrow('VK_CLIENT_ID');
+    const redirectUri = this.config.getOrThrow('VK_REDIRECT_URI');
     const authUrl = new URL('https://oauth.vk.com/authorize');
-    authUrl.searchParams.set('client_id', this.clientId);
-    authUrl.searchParams.set('redirect_uri', this.redirectUri);
+    authUrl.searchParams.set('client_id', clientId);
+    authUrl.searchParams.set('redirect_uri', redirectUri);
     authUrl.searchParams.set('scope', 'email');
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('v', '5.131');
@@ -64,6 +75,10 @@ export class VkOAuthController {
     @Query('error_description') errorDescription: string,
     @Res() res: Response,
   ) {
+    if (!this.config.get('VK_OAUTH_ENABLED')) return this.unavailable(res);
+    const clientId = this.config.getOrThrow('VK_CLIENT_ID');
+    const clientSecret = this.config.getOrThrow('VK_CLIENT_SECRET');
+    const redirectUri = this.config.getOrThrow('VK_REDIRECT_URI');
     if (error) {
       return res.status(HttpStatus.BAD_REQUEST).json({
         message: 'OAuth callback was not accepted',
@@ -80,9 +95,9 @@ export class VkOAuthController {
       //1. Обмениваем code на access_token
       // VK возвращает email вответе на token запрос (не в profile)
       const tokenUrl = new URL('https://oauth.vk.com/access_token');
-      tokenUrl.searchParams.set('client_id', this.clientId);
-      tokenUrl.searchParams.set('client_secret', this.clientSecret);
-      tokenUrl.searchParams.set('redirect_uri', this.redirectUri);
+      tokenUrl.searchParams.set('client_id', clientId);
+      tokenUrl.searchParams.set('client_secret', clientSecret);
+      tokenUrl.searchParams.set('redirect_uri', redirectUri);
       tokenUrl.searchParams.set('code', code);
 
       const tokenData = await this.externalHttp.requestJson<any>({ operation: 'vk.token', url: tokenUrl.toString(), retry: 'none' });
