@@ -1,6 +1,7 @@
 # Focus Product Bible
 
-> Статус: структура и оглавления. Полный продуктовый текст будет добавляться отдельными итерациями.
+> Статус: карта канонических продуктовых документов. Активные разделы помечают
+> принятые направления, планируемые slices и открытые решения отдельно.
 
 ## 0. Как читать Product Bible
 
@@ -39,6 +40,12 @@ Product Bible отвечает на вопросы «зачем», «для ко
 ### 1.9 [Feature roadmap](09-Roadmap/Feature-Roadmap.md)
 
 ### 1.10 [Theme system](10-Theme-System/Theme-System.md)
+
+Visual identity foundation [Task 0039](../docs/tasks/0039-visual-identity-foundation.md)
+живёт здесь и в связанных UX, ADHD,
+Experience, Monetization и Roadmap разделах. Направление утверждено как
+продуктовое; реализация, финальные tokens/assets и коммерческая модель пока
+планируются или остаются открытыми.
 
 ### 1.11 [Product measurement and learning](11-Measurement/Product-Measurement.md)
 

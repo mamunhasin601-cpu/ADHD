@@ -92,3 +92,14 @@
 - Точная визуальная композиция Today и карточки «Сейчас».
 - Финальная модель постоянной нижней навигации после проверки прототипа.
 - Граница Free/Pro для расширенного помощника без ограничения базового recovery.
+- Коммерческая модель visual packs: one-time purchase, subscription или часть
+  более широкого premium tier.
+- Финальные color/spacing/type tokens, assets и approval criteria для Orbits,
+  Focus Sparks и Focusiki после Today mockup.
+
+#### 6.4 Approved direction with planned implementation
+
+Task 0039 утверждает направление **Focus is calm but alive**: тёплый светлый
+фон, семантическая палитра, Orbits как free/default и Today как первый reference
+screen. Это не PDR о runtime-реализации; rollout, packs, billing и entitlement
+требуют отдельных evidence gates.

@@ -170,6 +170,24 @@ explainable rescheduling не блокируют проверку минимал
 [PDR-002](../12-Decisions/PDR-002-User-Controlled-Time-Format.md), но не становится
 автоматически Task 0015 и не ставится впереди approximate duration.
 
+### 3.6 Task 0039 — Visual Identity Foundation (planned)
+
+Task 0039 фиксирует approved product direction **Focus is calm but alive** и
+делится на независимые evidence gates:
+
+1. **Phase A — documentation/spec:** semantic palette, surfaces, typography,
+   motion, accessibility/sensory rules и Today mockup; требуется product/design
+   approval.
+2. **Phase B — first implementation:** shared tokens и Orbits, затем только Today
+   как первый reference screen; обязательны contrast, text scaling, screen reader,
+   reduced motion, haptic/sound opt-out и recovery/undo checks.
+3. **Phase C — future personalization/monetization:** архитектура pack/fallback,
+   Sparks и Focusiki после отдельного approval. One-time/subscription/premium-tier
+   choice остаётся открытым.
+
+Это план, а не утверждение о готовых assets, runtime rollout, billing или
+entitlement.
+
 ### 4. Phase 2: focus and body doubling
 
 #### 4.1 Focus session experience
