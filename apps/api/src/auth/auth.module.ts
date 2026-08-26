@@ -13,6 +13,7 @@ import { ContactVerificationController } from './contact-verification.controller
 import { ContactVerificationService } from './contact-verification.service';
 import { ContactDeliveryService } from './contact-delivery.service';
 import { TimewebEmailDeliveryService } from './timeweb-email-delivery.service';
+import { OAuthProviderAvailabilityController } from './oauth-provider-availability.controller';
 
 @Module({
   imports: [
@@ -20,7 +21,7 @@ import { TimewebEmailDeliveryService } from './timeweb-email-delivery.service';
     JwtModule.register({}), // секреты передаём динамически в AuthService.generateTokens
     ExternalHttpModule,
   ],
-  controllers: [AuthController, YandexOAuthController, VkOAuthController, MailruOAuthController, ContactVerificationController],
+  controllers: [AuthController, OAuthProviderAvailabilityController, YandexOAuthController, VkOAuthController, MailruOAuthController, ContactVerificationController],
   providers: [AuthService, OAuthService, JwtStrategy, ContactVerificationService, ContactDeliveryService, TimewebEmailDeliveryService],
   exports: [AuthService, ContactVerificationService],
 })

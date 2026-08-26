@@ -3,7 +3,11 @@ import type { AuthTokens } from '@focus/shared-types';
 
 // В dev-режиме: ваш локальный IP или ngrok-адрес
 // На реальном устройстве localhost не работает — нужен IP машины в сети
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:3000'; // 10.0.2.2 — Android Emulator host
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:3000'; // 10.0.2.2 — Android Emulator host
+
+export function apiUrl(path: string): string {
+  return `${API_BASE_URL}${path}`;
+}
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -49,7 +53,7 @@ async function refreshAccessToken(): Promise<string> {
     const refreshToken = currentTokens?.refreshToken;
     if (!refreshToken) throw new Error('Нет refresh-токена');
 
-    const { data } = await axios.post<AuthTokens>(`${API_BASE_URL}/auth/refresh`, {
+    const { data } = await axios.post<AuthTokens>(apiUrl('/auth/refresh'), {
       refreshToken,
     });
     await getAuthStore().getState().setTokens(data);
