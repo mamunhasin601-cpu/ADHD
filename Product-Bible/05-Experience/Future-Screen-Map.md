@@ -103,9 +103,10 @@ Today — первый reference screen для будущей visual identity, �
 раскатать стиль на все поверхности. Он должен содержать:
 
 - короткое спокойное приветствие, дату, процент выполнения и progress ring;
-- читаемые timeline cards с категорией, названием, приблизительным временем,
-  semantic accent и completion/importance; категории могут обозначаться как
-  work, health, home и rest;
+- colored task cards на читаемом timeline: спокойные поверхности используют
+  restrained category/semantic color, название, приблизительное время и
+  completion/importance; категории могут обозначаться как work, health, home и
+  rest, а цвет никогда не является единственным носителем состояния;
 - coral только как сигнал важности/срочности, дополненный текстом, формой или
   иконкой; насыщенные surfaces и одновременная конкуренция акцентов запрещены;
 - мягкое подтверждение completion (turquoise, optional animation/haptic),
@@ -114,8 +115,9 @@ Today — первый reference screen для будущей visual identity, �
   timeline и не конкурирует с главным CTA;
 - supportive empty state с одной следующей action и необязательной иллюстрацией
   или Focus character, без pressure;
-- понятную нижнюю навигацию с active state, который не различается только
-  цветом.
+- понятную нижнюю навигацию с clear colored icons из текущего active visual pack;
+  выбранная вкладка дополнительно обозначается формой, фоном, label treatment
+  или другим доступным non-color cue.
 
 Это будущая продуктовая спецификация; текущая реализация и runtime-coverage
 здесь не утверждаются.
