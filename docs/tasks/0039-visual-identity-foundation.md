@@ -93,6 +93,24 @@ Focus уже описан как спокойный взрослый напар�
 - Нет финальных asset-файлов, лицензированных логотипов, цен, paywall flow,
   database/schema/migration или production deployment claims.
 
+## Phase A checkpoint — 2026-08-27
+
+- Concept board архивирован в `docs/design/visual-references/orbits/` как
+  visual-language inspiration; четыре supplied PNG сохранены без изменений.
+- `orbits-navigation-approved-direction-02.png` утверждён как navigation
+  direction; `orbits-navigation-approved-direction-01.png` сохранён как
+  superseded design history.
+- `today/today-orbits-approved-direction-01.png` утверждён как Today visual
+  direction.
+- Добавлены reference index и implementation-neutral спецификация:
+  `docs/design/visual-references/orbits/README.md` и
+  `docs/design/orbits-visual-spec.md`.
+- Production SVG, app code, shared runtime tokens, provider marks и
+  accessibility runtime evidence не добавлялись.
+- Exact semantic colors, contrast pairs, typography/spacing values, SVG/icon
+  sources и runtime/device checks остаются открытыми для Phase B evidence gate.
+- Phase B не начата; статус задачи остаётся «Запланировано».
+
 ## Honesty boundary
 
 Эта задача не означает, что:
