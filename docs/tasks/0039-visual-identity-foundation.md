@@ -111,6 +111,19 @@ Focus уже описан как спокойный взрослый напар�
   sources и runtime/device checks остаются открытыми для Phase B evidence gate.
 - Phase B не начата; статус задачи остаётся «Запланировано».
 
+## Phase A.2 checkpoint — 2026-08-27
+
+- Созданы пять SVG navigation prototypes Orbits: Today, Plan, Add, Progress и
+  Profile; добавлены active/inactive preview и inspection на 24/28/32 px.
+- `Добавить` остаётся отдельным raised action, а не selected destination.
+- В preview labels остаются реальным UI text; SVG используют `currentColor` и
+  candidate accents, без production integration.
+- Application code, `apps/mobile/assets` и runtime navigation не изменялись.
+- Production asset approval не заявляется; visual approval пользователем для
+  финальной vector geometry остаётся обязательным.
+- Contrast, screen-reader/text-scaling/device evidence и другие accessibility
+  проверки остаются открытыми; Phase B не начата, статус задачи не изменён.
+
 ## Honesty boundary
 
 Эта задача не означает, что:

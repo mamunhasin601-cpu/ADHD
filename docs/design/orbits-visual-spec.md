@@ -17,6 +17,21 @@ or runtime-verified, and physical Android-device evidence does not exist yet.
 The concept board is inspiration only; navigation direction 01 is superseded.
 This checkpoint does not claim completion of Task 0039 or start Phase B.
 
+## Phase A.2 — navigation vector prototypes
+
+Five separate documentation-only SVG prototypes now exist under
+`docs/design/vector-source/orbits/navigation/`, with a local preview and
+README. Labels remain real UI text in the preview; one SVG geometry is reused
+between active and inactive states, while state is applied through the
+navigation container, token-driven color, label treatment and accessibility
+selected state. `Добавить` remains a distinct raised action rather than a
+selected destination.
+
+The prototypes use `currentColor` for primary geometry plus candidate turquoise
+`#0FA9A8` and yellow `#F4B72A` accents. Final React Native conversion remains
+pending, and final SVG geometry is not production-approved until user visual
+review. Contrast, text scaling and physical-device validation remain pending.
+
 ## 2. Core principle
 
 **Focus is calm but alive.** Warmth should feel adult rather than childish;

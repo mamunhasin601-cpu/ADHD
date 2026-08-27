@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none" role="img" aria-labelledby="title">
+  <title id="title">Профиль</title>
+  <circle id="head" cx="14" cy="9.5" r="3.75" stroke="currentColor" stroke-width="2.25"/>
+  <path id="shoulders" d="M6.5 22c.8-4.15 3.45-6.25 7.5-6.25s6.7 2.1 7.5 6.25" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
+  <path id="orbit-arc" d="M4.75 22.8c2.8 3.05 8.7 4.1 14.5 2.35 3.35-1 5.85-2.7 7-4.7" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle id="orbit-dot" cx="26.1" cy="19.5" r="1.55" fill="#0FA9A8"/>
+</svg>

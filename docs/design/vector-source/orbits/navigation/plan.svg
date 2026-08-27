@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none" role="img" aria-labelledby="title">
+  <title id="title">План</title>
+  <rect id="calendar" x="7" y="8.5" width="16" height="15" rx="2.25" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
+  <path id="binding-marks" d="M11 6.5v4M19 6.5v4M7.5 13h15" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
+  <path id="schedule-grid" d="M11 16.5h.01M17 16.5h.01M11 20h.01M17 20h.01" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
+  <path id="orbit-arc" d="M5.5 24.75c3.55 2.2 10.6 2.15 16.45-.15 1.7-.67 3.1-1.52 4.05-2.45" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle id="orbit-dot" cx="26.1" cy="20.3" r="1.55" fill="#0FA9A8"/>
+</svg>
