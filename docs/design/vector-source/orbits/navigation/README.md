@@ -1,8 +1,15 @@
-# Orbits navigation SVG prototypes
+# Orbits navigation SVG prototypes (superseded)
 
-Phase A.2 documentation-only prototypes for the approved Orbits navigation
-direction. These are five independent SVG design sources, not production-ready
-assets and not a claim that the React Native navigation is implemented.
+Phase A.2 documentation-only prototypes for the rejected Orbits navigation
+iteration. These five independent SVG design sources are preserved as design
+history only: they are superseded by the approved raster masters under
+`docs/design/raster-source/orbits/navigation/`, are not production-ready assets,
+and are not a claim that the React Native navigation is implemented.
+
+The vector direction was rejected after visual review for weak scale/presence
+and an external-`<img>` `currentColor` fallback problem. Do not copy these SVGs
+into `apps/mobile` or treat them as production assets. They remain in place so
+the Phase A.2 decision and rejected geometry are auditable.
 
 ## References and inventory
 
@@ -24,7 +31,8 @@ resource, script, animation, filter, blur or provider mark. `currentColor`
 represents primary geometry so the same file can render active and inactive;
 candidate accents are `#0FA9A8` turquoise and `#F4B72A` yellow reward spark.
 The existing `#6B5BFC` remains the compatibility anchor when a host supplies
-the primary color.
+the primary color. These details are historical and do not supersede the
+approved raster source.
 
 ## Behavior contract
 
@@ -46,6 +54,15 @@ touch targets must not be reduced by decorative orbit details. Validate contrast
 system text scaling, Russian-label wrapping, small screens, safe-area Add
 reachability, reduced motion and disabled haptics on supported devices. These
 checks are pending; no WCAG conformance or physical-device result is claimed.
+
+## Raster masters are the approved source
+
+The five independent transparent PNG masters are the approved navigation
+direction for Phase A.3. They are canonical raster source files, with
+deterministic 1×/2×/3× density exports documented separately. The raster
+preview is documentation-only; production application integration has not
+started. Masters must not be copied directly into `apps/mobile/assets` or
+stretched non-uniformly.
 
 ## Raster-to-production boundary
 

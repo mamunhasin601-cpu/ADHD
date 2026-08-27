@@ -19,18 +19,43 @@ This checkpoint does not claim completion of Task 0039 or start Phase B.
 
 ## Phase A.2 — navigation vector prototypes
 
-Five separate documentation-only SVG prototypes now exist under
+Five separate documentation-only SVG prototypes remain under
 `docs/design/vector-source/orbits/navigation/`, with a local preview and
-README. Labels remain real UI text in the preview; one SVG geometry is reused
-between active and inactive states, while state is applied through the
-navigation container, token-driven color, label treatment and accessibility
-selected state. `Добавить` remains a distinct raised action rather than a
-selected destination.
+README. Their visual direction was rejected after review because of weak visual
+scale/presence and an external-`<img>` `currentColor` fallback problem. They are
+preserved as historical artifacts, superseded by Phase A.3 raster masters and
+must not be treated as production assets.
 
-The prototypes use `currentColor` for primary geometry plus candidate turquoise
-`#0FA9A8` and yellow `#F4B72A` accents. Final React Native conversion remains
-pending, and final SVG geometry is not production-approved until user visual
-review. Contrast, text scaling and physical-device validation remain pending.
+## Phase A.3 — approved raster navigation direction
+
+Five independent `1254×1254` transparent PNG masters under
+`docs/design/raster-source/orbits/navigation/masters/` are now the canonical
+raster source for the approved navigation direction:
+
+- `orbits-today-master.png` → Сегодня;
+- `orbits-plan-master.png` → План;
+- `orbits-add-master.png` → Добавить;
+- `orbits-progress-master.png` → Прогресс;
+- `orbits-profile-master.png` → Профиль.
+
+Deterministic exports use 44×44, 88×88 and 132×132 pixels for Today, Plan,
+Progress and Profile, representing logical size `44` at 1×/2×/3× density. Add
+uses 64×64, 128×128 and 192×192 pixels, representing logical size `64`. Density
+selection never changes logical layout size, and masters are not used directly
+at full resolution.
+
+Visible words `Сегодня | План | Добавить | Прогресс | Профиль` remain mandatory.
+Add remains a raised central action rather than a selected destination. Active,
+pressed and disabled treatment, compact selected containers and shadows belong
+to the UI container, not the PNG. The responsive documentation preview covers
+320, 360, 390, 412 and 480 logical widths plus increased text.
+
+The three approved background directions are warm light, neutral gray and dark.
+Warm light currently uses `#FCF9F6` in documentation; gray `#8B8E96` and dark
+`#211D2E` remain preview candidates until physical-device contrast and
+accessibility review. Production application integration, platform rendering
+and runtime theme switching remain unverified; no production application asset
+claim is made by this checkpoint.
 
 ## 2. Core principle
 
@@ -140,12 +165,12 @@ system-font compatibility; custom font или лицензия не утверж
 | `space.section` | Явный вертикальный ритм между greeting, progress, timeline и quick add | Не создавать пустоту, скрывающую next action |
 | `space.card` | Внутренний padding task card для title, time и controls | Не обрезать локализованный title |
 | `size.touch` | Минимум 44 x 44 pt для actionable controls | Не уменьшать icon hit area ради плотности |
-| `size.icon` | 24–32 pt navigation/action icons; larger illustration only when non-actionable | Не брать raster pixel size как token |
+| `size.icon` | 44 logical units for normal navigation artwork | Density export pixels do not change logical layout size |
 | `radius.card` | Мягко закруглённая task/surface shape | Радиус не должен выглядеть детским или pill-only |
 | `radius.control` | Чёткая форма button/input/Add | Shape и label дополняют цвет |
 | `radius.navigation` | Спокойный radius нижнего navigation bar | Не превращать bar в декоративную капсулу |
 | `surface.activeCompact` | Компактная soft background active-tab cue | Не заливать весь bar и не полагаться только на fill |
-| `size.add` | Raised central Add с отдельной зоной и безопасной досягаемостью | Exact size requires small-screen/safe-area review |
+| `size.add` | 64 logical units for raised central Add artwork with a separate target | Safe-area and physical-device reachability require review |
 | `elevation.control` | Один restrained shadow/contrast level для raised Add | Не превращать экран в stack of floating cards |
 | `elevation.card` | Минимальная separation от warm background | Border/fill должны работать без shadow |
 
@@ -174,10 +199,11 @@ Plan — simple calendar/timeline with one orbit accent; Add — plain plus insi
 a restrained orbit circle; Progress — rising arc ending in one dot or spark;
 Profile — person silhouette with one orbit arc.
 
-Shared requirements: one stroke family, consistent optical size, restrained
-detail, no glossy 3D treatment and no decorative particles. The orbit dot must
-never carry critical meaning alone. Active and inactive treatments are separate;
-final SVG geometry requires dedicated review. SVG files не создаются в Phase A.
+The approved Phase A.3 raster masters preserve their supplied visual geometry
+without redraw, recoloring or reinterpretation. The orbit dot never carries
+critical meaning alone. Active and inactive treatments remain separate UI
+container states; historical Phase A.2 SVG files are superseded and must not be
+copied into production.
 
 ## 9. Approved bottom-navigation contract
 

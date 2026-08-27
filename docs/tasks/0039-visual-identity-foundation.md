@@ -90,7 +90,7 @@ Focus уже описан как спокойный взрослый напар�
   sound и haptics не обязательны для смысла.
 - Free/default Orbits сохраняет полный базовый путь «увидеть → начать →
   вернуться». Pack unavailable/expired не повреждает задачи и данные.
-- Нет финальных asset-файлов, лицензированных логотипов, цен, paywall flow,
+- Нет production application asset-файлов, лицензированных логотипов, цен, paywall flow,
   database/schema/migration или production deployment claims.
 
 ## Phase A checkpoint — 2026-08-27
@@ -123,6 +123,29 @@ Focus уже описан как спокойный взрослый напар�
   финальной vector geometry остаётся обязательным.
 - Contrast, screen-reader/text-scaling/device evidence и другие accessibility
   проверки остаются открытыми; Phase B не начата, статус задачи не изменён.
+
+## Phase A.3 checkpoint — 2026-08-27
+
+- Phase A.2 SVG direction отклонено после visual review из-за слабых scale и
+  visual presence, а также black fallback при external-`<img>` `currentColor`;
+  пять SVG сохранены как superseded historical artifacts и не являются
+  production assets.
+- Пять approved transparent raster masters зафиксированы для Today, Plan, Add,
+  Progress и Profile без redraw, recoloring или изменения исходных bytes.
+- Из masters детерминированно подготовлены 1×/2×/3× candidates: normal icons
+  44/88/132 px и raised Add 64/128/192 px; labels остаются реальным UI text.
+- Static preview показывает warm light `#FCF9F6`, gray candidate `#8B8E96` и
+  dark candidate `#211D2E`, active/non-color cues и Add default/pressed/disabled.
+- Source-level responsive review покрывает 320, 360, 390, 412 и 480 logical px,
+  а также increased-text example: слова не скрываются, порядок не меняется,
+  touch-target intent остаётся не меньше примерно 44×44.
+- Accessibility review проверяет visible labels, non-color active container,
+  decorative icon semantics, отсутствие animation/flash и documented contrast
+  boundary. Physical-device, screen-reader, final gray/dark token и platform
+  rendering evidence всё ещё обязательны.
+- Application code, `apps/mobile/assets`, production integration, theme/pack
+  switching и entitlement runtime не изменялись. Интеграция отложена до Phase B;
+  Task 0039 остаётся «Запланировано».
 
 ## Honesty boundary
 
