@@ -16,6 +16,7 @@
       --deep-purple: #5B4BE7;
       --soft-purple: #F3F1FF;
       --line: #E9E3F2;
+      --nav-surface: var(--warm);
     }
     * { box-sizing: border-box; }
     html { background: var(--warm); }
@@ -37,10 +38,11 @@
     .backgrounds, .state-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
     .scene { min-width: 0; padding: 72px 14px 18px; border-radius: 32px; overflow: hidden; }
     .scene.warm { background: var(--warm); }
-    .scene.gray { background: var(--gray); }
-    .scene.dark { background: var(--dark); }
+    .scene.gray { background: var(--gray); --nav-surface: var(--gray); }
+    .scene.dark { background: var(--dark); --nav-surface: var(--dark); }
     .scene-title { margin: -50px 4px 28px; font: 700 13px/1.3 Georgia, serif; }
-    .gray .scene-title, .dark .scene-title { color: #fff; }
+    .gray .scene-title { color: var(--ink); }
+    .dark .scene-title { color: #fff; }
     .navigation {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 72px minmax(0, 1fr) minmax(0, 1fr);
@@ -50,7 +52,7 @@
       padding: 20px 8px 10px;
       border: 1px solid rgba(107, 91, 252, .12);
       border-radius: 26px;
-      background: var(--surface);
+      background: var(--nav-surface);
       box-shadow: 0 14px 34px rgba(33, 29, 46, .18);
     }
     .tab {
@@ -68,7 +70,24 @@
       text-align: center;
     }
     .tab img { display: block; width: 44px; height: 44px; }
-    .tab.active { border-color: rgba(107, 91, 252, .22); background: var(--soft-purple); color: var(--deep-purple); font-weight: 800; }
+    .scene.gray .tab { color: var(--ink); }
+    .scene.dark .tab { color: #fff; }
+    .scene.dark .tab.add { color: #fff; }
+    .tab.active { position: relative; color: var(--deep-purple); font-weight: 800; }
+    .tab.active::before {
+      content: "";
+      position: absolute;
+      z-index: 0;
+      inset: 6px 3px;
+      border: 2px solid rgba(107, 91, 252, .22);
+      border-radius: 16px;
+      background: var(--soft-purple);
+    }
+    .tab.active > * { position: relative; z-index: 1; }
+    .scene.gray .tab.active { color: var(--ink); }
+    .scene.gray .tab.active::before { background: rgba(255,255,255,.34); border-color: rgba(33,29,46,.58); }
+    .scene.dark .tab.active { color: #fff; }
+    .scene.dark .tab.active::before { background: rgba(107,91,252,.32); border-color: rgba(255,255,255,.55); }
     .tab.add { align-self: start; margin-top: -34px; color: var(--ink); }
     .tab.add img { width: 64px; height: 64px; border-radius: 50%; background: #fff; box-shadow: 0 8px 18px rgba(33, 29, 46, .18); }
     .tab.add.pressed img { transform: translateY(2px); background: var(--soft-purple); box-shadow: 0 4px 10px rgba(33, 29, 46, .16); }
@@ -113,7 +132,7 @@
           <div class="tab active" aria-current="page"><img src="exports/orbits-today.png" srcset="exports/orbits-today@2x.png 2x, exports/orbits-today@3x.png 3x" alt="" aria-hidden="true"><span>Сегодня</span></div>
           <div class="tab"><img src="exports/orbits-plan.png" srcset="exports/orbits-plan@2x.png 2x, exports/orbits-plan@3x.png 3x" alt="" aria-hidden="true"><span>План</span></div>
           <div class="tab add"><img src="exports/orbits-add.png" srcset="exports/orbits-add@2x.png 2x, exports/orbits-add@3x.png 3x" alt="" aria-hidden="true"><span>Добавить</span></div>
-          <div class="tab"><img src="exports/orbits-progress.png" srcset="exports/orbits-progress@2x.png 2x, exports/orbits-progress@3x.png 3x" alt="" aria-hidden="true"><span>Прогресс</span></div>
+          <div class="tab"><img src="exports/orbits-progress.png" srcset="exports/orbits-progress@2x.png 2x, exports/orbits-progress@3x.png 3x" alt="" aria-hidden="true"><span>Успех</span></div>
           <div class="tab"><img src="exports/orbits-profile.png" srcset="exports/orbits-profile@2x.png 2x, exports/orbits-profile@3x.png 3x" alt="" aria-hidden="true"><span>Профиль</span></div>
         </nav>
       </article>
@@ -122,16 +141,16 @@
           <div class="tab"><img src="exports/orbits-today.png" srcset="exports/orbits-today@2x.png 2x, exports/orbits-today@3x.png 3x" alt="" aria-hidden="true"><span>Сегодня</span></div>
           <div class="tab active" aria-current="page"><img src="exports/orbits-plan.png" srcset="exports/orbits-plan@2x.png 2x, exports/orbits-plan@3x.png 3x" alt="" aria-hidden="true"><span>План</span></div>
           <div class="tab add"><img src="exports/orbits-add.png" srcset="exports/orbits-add@2x.png 2x, exports/orbits-add@3x.png 3x" alt="" aria-hidden="true"><span>Добавить</span></div>
-          <div class="tab"><img src="exports/orbits-progress.png" srcset="exports/orbits-progress@2x.png 2x, exports/orbits-progress@3x.png 3x" alt="" aria-hidden="true"><span>Прогресс</span></div>
+          <div class="tab"><img src="exports/orbits-progress.png" srcset="exports/orbits-progress@2x.png 2x, exports/orbits-progress@3x.png 3x" alt="" aria-hidden="true"><span>Успех</span></div>
           <div class="tab"><img src="exports/orbits-profile.png" srcset="exports/orbits-profile@2x.png 2x, exports/orbits-profile@3x.png 3x" alt="" aria-hidden="true"><span>Профиль</span></div>
         </nav>
       </article>
-      <article class="scene dark"><p class="scene-title">Тёмный кандидат · Прогресс активно</p>
-        <nav class="navigation" aria-label="Тёмная навигация, Прогресс выбрано">
+      <article class="scene dark"><p class="scene-title">Тёмный кандидат · Успех активно</p>
+        <nav class="navigation" aria-label="Тёмная навигация, Успех выбрано">
           <div class="tab"><img src="exports/orbits-today.png" srcset="exports/orbits-today@2x.png 2x, exports/orbits-today@3x.png 3x" alt="" aria-hidden="true"><span>Сегодня</span></div>
           <div class="tab"><img src="exports/orbits-plan.png" srcset="exports/orbits-plan@2x.png 2x, exports/orbits-plan@3x.png 3x" alt="" aria-hidden="true"><span>План</span></div>
           <div class="tab add"><img src="exports/orbits-add.png" srcset="exports/orbits-add@2x.png 2x, exports/orbits-add@3x.png 3x" alt="" aria-hidden="true"><span>Добавить</span></div>
-          <div class="tab active" aria-current="page"><img src="exports/orbits-progress.png" srcset="exports/orbits-progress@2x.png 2x, exports/orbits-progress@3x.png 3x" alt="" aria-hidden="true"><span>Прогресс</span></div>
+          <div class="tab active" aria-current="page"><img src="exports/orbits-progress.png" srcset="exports/orbits-progress@2x.png 2x, exports/orbits-progress@3x.png 3x" alt="" aria-hidden="true"><span>Успех</span></div>
           <div class="tab"><img src="exports/orbits-profile.png" srcset="exports/orbits-profile@2x.png 2x, exports/orbits-profile@3x.png 3x" alt="" aria-hidden="true"><span>Профиль</span></div>
         </nav>
       </article>
@@ -139,20 +158,20 @@
 
     <h2>Состояния системы</h2>
     <section class="state-grid" aria-label="Статические состояния навигации">
-      <article class="state-card"><h3>Все пункты: неактивное/default состояние</h3><nav class="navigation" aria-label="Все пункты неактивны"><div class="tab"><img src="exports/orbits-today.png" srcset="exports/orbits-today@2x.png 2x, exports/orbits-today@3x.png 3x" alt="" aria-hidden="true"><span>Сегодня</span></div><div class="tab"><img src="exports/orbits-plan.png" srcset="exports/orbits-plan@2x.png 2x, exports/orbits-plan@3x.png 3x" alt="" aria-hidden="true"><span>План</span></div><div class="tab add"><img src="exports/orbits-add.png" srcset="exports/orbits-add@2x.png 2x, exports/orbits-add@3x.png 3x" alt="" aria-hidden="true"><span>Добавить</span></div><div class="tab"><img src="exports/orbits-progress.png" srcset="exports/orbits-progress@2x.png 2x, exports/orbits-progress@3x.png 3x" alt="" aria-hidden="true"><span>Прогресс</span></div><div class="tab"><img src="exports/orbits-profile.png" srcset="exports/orbits-profile@2x.png 2x, exports/orbits-profile@3x.png 3x" alt="" aria-hidden="true"><span>Профиль</span></div></nav></article>
-      <article class="state-card"><h3>Профиль активно: цвет + фон + рамка + вес подписи</h3><nav class="navigation" aria-label="Профиль выбрано"><div class="tab"><img src="exports/orbits-today.png" alt="" aria-hidden="true"><span>Сегодня</span></div><div class="tab"><img src="exports/orbits-plan.png" alt="" aria-hidden="true"><span>План</span></div><div class="tab add"><img src="exports/orbits-add.png" alt="" aria-hidden="true"><span>Добавить</span></div><div class="tab"><img src="exports/orbits-progress.png" alt="" aria-hidden="true"><span>Прогресс</span></div><div class="tab active" aria-current="page"><img src="exports/orbits-profile.png" alt="" aria-hidden="true"><span>Профиль</span></div></nav></article>
+      <article class="state-card"><h3>Все пункты: неактивное/default состояние</h3><nav class="navigation" aria-label="Все пункты неактивны"><div class="tab"><img src="exports/orbits-today.png" srcset="exports/orbits-today@2x.png 2x, exports/orbits-today@3x.png 3x" alt="" aria-hidden="true"><span>Сегодня</span></div><div class="tab"><img src="exports/orbits-plan.png" srcset="exports/orbits-plan@2x.png 2x, exports/orbits-plan@3x.png 3x" alt="" aria-hidden="true"><span>План</span></div><div class="tab add"><img src="exports/orbits-add.png" srcset="exports/orbits-add@2x.png 2x, exports/orbits-add@3x.png 3x" alt="" aria-hidden="true"><span>Добавить</span></div><div class="tab"><img src="exports/orbits-progress.png" srcset="exports/orbits-progress@2x.png 2x, exports/orbits-progress@3x.png 3x" alt="" aria-hidden="true"><span>Успех</span></div><div class="tab"><img src="exports/orbits-profile.png" srcset="exports/orbits-profile@2x.png 2x, exports/orbits-profile@3x.png 3x" alt="" aria-hidden="true"><span>Профиль</span></div></nav></article>
+      <article class="state-card"><h3>Профиль активно: цвет + фон + рамка + вес подписи</h3><nav class="navigation" aria-label="Профиль выбрано"><div class="tab"><img src="exports/orbits-today.png" alt="" aria-hidden="true"><span>Сегодня</span></div><div class="tab"><img src="exports/orbits-plan.png" alt="" aria-hidden="true"><span>План</span></div><div class="tab add"><img src="exports/orbits-add.png" alt="" aria-hidden="true"><span>Добавить</span></div><div class="tab"><img src="exports/orbits-progress.png" alt="" aria-hidden="true"><span>Успех</span></div><div class="tab active" aria-current="page"><img src="exports/orbits-profile.png" alt="" aria-hidden="true"><span>Профиль</span></div></nav></article>
       <article class="state-card"><h3>Add: default, pressed и disabled</h3><div class="legend"><span>Default — поднятый action</span><span>Pressed — смещение и soft surface</span><span>Disabled — только иллюстрация состояния</span></div><nav class="navigation" aria-label="Примеры состояний Добавить"><div class="tab"><span>Default</span></div><div class="tab add"><img src="exports/orbits-add.png" srcset="exports/orbits-add@2x.png 2x, exports/orbits-add@3x.png 3x" alt="" aria-hidden="true"><span>Добавить</span></div><div class="tab add pressed"><img src="exports/orbits-add.png" srcset="exports/orbits-add@2x.png 2x, exports/orbits-add@3x.png 3x" alt="" aria-hidden="true"><span>Нажато</span></div><div class="tab add disabled" aria-disabled="true"><img src="exports/orbits-add.png" srcset="exports/orbits-add@2x.png 2x, exports/orbits-add@3x.png 3x" alt="" aria-hidden="true"><span>Отключено</span></div><div class="tab"><span>Пример</span></div></nav><p>Disabled — статический образец и не означает, что создание основной задачи станет недоступно.</p></article>
     </section>
 
     <h2>Responsive matrix</h2>
     <p class="note">Пять слов не скрываются. Порядок фиксирован, Add остаётся центральным raised action, а artwork имеет logical size 44 и 64. Рамки имитируют viewport, а не физическое устройство.</p>
     <section class="device-list" aria-label="Примеры ширины viewport">
-      <article class="device device-320" style="--device-width:320px"><p class="device-label">320 px</p><nav class="navigation" aria-label="Навигация при ширине 320"><div class="tab active"><img src="exports/orbits-today.png" srcset="exports/orbits-today@2x.png 2x, exports/orbits-today@3x.png 3x" alt="" aria-hidden="true"><span>Сегодня</span></div><div class="tab"><img src="exports/orbits-plan.png" alt="" aria-hidden="true"><span>План</span></div><div class="tab add"><img src="exports/orbits-add.png" srcset="exports/orbits-add@2x.png 2x, exports/orbits-add@3x.png 3x" alt="" aria-hidden="true"><span>Добавить</span></div><div class="tab"><img src="exports/orbits-progress.png" alt="" aria-hidden="true"><span>Прогресс</span></div><div class="tab"><img src="exports/orbits-profile.png" alt="" aria-hidden="true"><span>Профиль</span></div></nav></article>
-      <article class="device" style="--device-width:360px"><p class="device-label">360 px</p><nav class="navigation" aria-label="Навигация при ширине 360"><div class="tab active"><img src="exports/orbits-today.png" alt="" aria-hidden="true"><span>Сегодня</span></div><div class="tab"><img src="exports/orbits-plan.png" alt="" aria-hidden="true"><span>План</span></div><div class="tab add"><img src="exports/orbits-add.png" alt="" aria-hidden="true"><span>Добавить</span></div><div class="tab"><img src="exports/orbits-progress.png" alt="" aria-hidden="true"><span>Прогресс</span></div><div class="tab"><img src="exports/orbits-profile.png" alt="" aria-hidden="true"><span>Профиль</span></div></nav></article>
-      <article class="device" style="--device-width:390px"><p class="device-label">390 px</p><nav class="navigation" aria-label="Навигация при ширине 390"><div class="tab"><img src="exports/orbits-today.png" alt="" aria-hidden="true"><span>Сегодня</span></div><div class="tab active"><img src="exports/orbits-plan.png" alt="" aria-hidden="true"><span>План</span></div><div class="tab add"><img src="exports/orbits-add.png" alt="" aria-hidden="true"><span>Добавить</span></div><div class="tab"><img src="exports/orbits-progress.png" alt="" aria-hidden="true"><span>Прогресс</span></div><div class="tab"><img src="exports/orbits-profile.png" alt="" aria-hidden="true"><span>Профиль</span></div></nav></article>
-      <article class="device" style="--device-width:412px"><p class="device-label">412 px</p><nav class="navigation" aria-label="Навигация при ширине 412"><div class="tab"><img src="exports/orbits-today.png" alt="" aria-hidden="true"><span>Сегодня</span></div><div class="tab"><img src="exports/orbits-plan.png" alt="" aria-hidden="true"><span>План</span></div><div class="tab add"><img src="exports/orbits-add.png" alt="" aria-hidden="true"><span>Добавить</span></div><div class="tab active"><img src="exports/orbits-progress.png" alt="" aria-hidden="true"><span>Прогресс</span></div><div class="tab"><img src="exports/orbits-profile.png" alt="" aria-hidden="true"><span>Профиль</span></div></nav></article>
-      <article class="device" style="--device-width:480px"><p class="device-label">480 px</p><nav class="navigation" aria-label="Навигация при ширине 480"><div class="tab"><img src="exports/orbits-today.png" alt="" aria-hidden="true"><span>Сегодня</span></div><div class="tab"><img src="exports/orbits-plan.png" alt="" aria-hidden="true"><span>План</span></div><div class="tab add"><img src="exports/orbits-add.png" alt="" aria-hidden="true"><span>Добавить</span></div><div class="tab"><img src="exports/orbits-progress.png" alt="" aria-hidden="true"><span>Прогресс</span></div><div class="tab active"><img src="exports/orbits-profile.png" alt="" aria-hidden="true"><span>Профиль</span></div></nav></article>
-      <article class="device large-text" style="--device-width:480px"><p class="device-label">480 px · увеличенный текст</p><nav class="navigation" aria-label="Навигация с увеличенным текстом"><div class="tab active"><img src="exports/orbits-today.png" alt="" aria-hidden="true"><span>Сегодня</span></div><div class="tab"><img src="exports/orbits-plan.png" alt="" aria-hidden="true"><span>План</span></div><div class="tab add"><img src="exports/orbits-add.png" alt="" aria-hidden="true"><span>Добавить</span></div><div class="tab"><img src="exports/orbits-progress.png" alt="" aria-hidden="true"><span>Прогресс</span></div><div class="tab"><img src="exports/orbits-profile.png" alt="" aria-hidden="true"><span>Профиль</span></div></nav></article>
+      <article class="device device-320" style="--device-width:320px"><p class="device-label">320 px</p><nav class="navigation" aria-label="Навигация при ширине 320"><div class="tab active"><img src="exports/orbits-today.png" srcset="exports/orbits-today@2x.png 2x, exports/orbits-today@3x.png 3x" alt="" aria-hidden="true"><span>Сегодня</span></div><div class="tab"><img src="exports/orbits-plan.png" alt="" aria-hidden="true"><span>План</span></div><div class="tab add"><img src="exports/orbits-add.png" srcset="exports/orbits-add@2x.png 2x, exports/orbits-add@3x.png 3x" alt="" aria-hidden="true"><span>Добавить</span></div><div class="tab"><img src="exports/orbits-progress.png" alt="" aria-hidden="true"><span>Успех</span></div><div class="tab"><img src="exports/orbits-profile.png" alt="" aria-hidden="true"><span>Профиль</span></div></nav></article>
+      <article class="device" style="--device-width:360px"><p class="device-label">360 px</p><nav class="navigation" aria-label="Навигация при ширине 360"><div class="tab active"><img src="exports/orbits-today.png" alt="" aria-hidden="true"><span>Сегодня</span></div><div class="tab"><img src="exports/orbits-plan.png" alt="" aria-hidden="true"><span>План</span></div><div class="tab add"><img src="exports/orbits-add.png" alt="" aria-hidden="true"><span>Добавить</span></div><div class="tab"><img src="exports/orbits-progress.png" alt="" aria-hidden="true"><span>Успех</span></div><div class="tab"><img src="exports/orbits-profile.png" alt="" aria-hidden="true"><span>Профиль</span></div></nav></article>
+      <article class="device" style="--device-width:390px"><p class="device-label">390 px</p><nav class="navigation" aria-label="Навигация при ширине 390"><div class="tab"><img src="exports/orbits-today.png" alt="" aria-hidden="true"><span>Сегодня</span></div><div class="tab active"><img src="exports/orbits-plan.png" alt="" aria-hidden="true"><span>План</span></div><div class="tab add"><img src="exports/orbits-add.png" alt="" aria-hidden="true"><span>Добавить</span></div><div class="tab"><img src="exports/orbits-progress.png" alt="" aria-hidden="true"><span>Успех</span></div><div class="tab"><img src="exports/orbits-profile.png" alt="" aria-hidden="true"><span>Профиль</span></div></nav></article>
+      <article class="device" style="--device-width:412px"><p class="device-label">412 px</p><nav class="navigation" aria-label="Навигация при ширине 412"><div class="tab"><img src="exports/orbits-today.png" alt="" aria-hidden="true"><span>Сегодня</span></div><div class="tab"><img src="exports/orbits-plan.png" alt="" aria-hidden="true"><span>План</span></div><div class="tab add"><img src="exports/orbits-add.png" alt="" aria-hidden="true"><span>Добавить</span></div><div class="tab active"><img src="exports/orbits-progress.png" alt="" aria-hidden="true"><span>Успех</span></div><div class="tab"><img src="exports/orbits-profile.png" alt="" aria-hidden="true"><span>Профиль</span></div></nav></article>
+      <article class="device" style="--device-width:480px"><p class="device-label">480 px</p><nav class="navigation" aria-label="Навигация при ширине 480"><div class="tab"><img src="exports/orbits-today.png" alt="" aria-hidden="true"><span>Сегодня</span></div><div class="tab"><img src="exports/orbits-plan.png" alt="" aria-hidden="true"><span>План</span></div><div class="tab add"><img src="exports/orbits-add.png" alt="" aria-hidden="true"><span>Добавить</span></div><div class="tab"><img src="exports/orbits-progress.png" alt="" aria-hidden="true"><span>Успех</span></div><div class="tab active"><img src="exports/orbits-profile.png" alt="" aria-hidden="true"><span>Профиль</span></div></nav></article>
+      <article class="device large-text" style="--device-width:480px"><p class="device-label">480 px · увеличенный текст</p><nav class="navigation" aria-label="Навигация с увеличенным текстом"><div class="tab active"><img src="exports/orbits-today.png" alt="" aria-hidden="true"><span>Сегодня</span></div><div class="tab"><img src="exports/orbits-plan.png" alt="" aria-hidden="true"><span>План</span></div><div class="tab add"><img src="exports/orbits-add.png" alt="" aria-hidden="true"><span>Добавить</span></div><div class="tab"><img src="exports/orbits-progress.png" alt="" aria-hidden="true"><span>Успех</span></div><div class="tab"><img src="exports/orbits-profile.png" alt="" aria-hidden="true"><span>Профиль</span></div></nav></article>
     </section>
   </main>
 </body>

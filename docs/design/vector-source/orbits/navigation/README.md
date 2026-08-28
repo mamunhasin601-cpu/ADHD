@@ -22,7 +22,7 @@ the Phase A.2 decision and rejected geometry are auditable.
 | `today.svg` | Сегодня | Four-point spark, one restrained rising orbit arc and one dot |
 | `plan.svg` | План | Compact rounded calendar/grid, two bindings, four schedule dots, orbit arc and dot |
 | `add.svg` | Добавить | Plain plus inside a restrained gapped orbit circle with dot |
-| `progress.svg` | Прогресс | Calm rising arc, endpoint dot and small spark |
+| `progress.svg` | Успех | Calm rising arc, endpoint dot and small spark; historical internal `progress` mapping |
 | `profile.svg` | Профиль | Neutral head, shoulder curve, orbit arc and dot |
 
 Every SVG uses `viewBox="0 0 32 32"`, `width="32"`, `height="32"`, rounded
@@ -36,8 +36,9 @@ approved raster source.
 
 ## Behavior contract
 
-The preview keeps the exact labels `Сегодня | План | Добавить | Прогресс |
-Профиль` as real HTML text. Today, Plan, Progress and Profile are destinations;
+The historical preview keeps the navigation labels `Сегодня | План | Добавить |
+Успех | Профиль` as real HTML text. The permanent visible mapping is internal
+`progress` → `Успех`; Today, Plan, Progress and Profile are destinations;
 Add is a central quick action, remains raised above the bar, and is never a
 selected destination. All labels stay visible in inactive and disabled examples.
 

@@ -12,7 +12,7 @@ application already uses these assets.
 | `masters/orbits-today-master.png` | Сегодня | Purple orbit, prominent yellow spark and orbit dot |
 | `masters/orbits-plan-master.png` | План | Purple calendar/grid with turquoise orbit |
 | `masters/orbits-add-master.png` | Добавить | Purple plus inside a broken orbit with turquoise dot |
-| `masters/orbits-progress-master.png` | Прогресс | Rising purple arc, yellow spark and turquoise dot |
+| `masters/orbits-progress-master.png` | Успех | Rising purple arc, yellow spark and turquoise dot |
 | `masters/orbits-profile-master.png` | Профиль | Neutral purple person silhouette with orbit and turquoise dot |
 
 Masters are `1254×1254` RGBA source files. Preserve their bytes, transparency,
@@ -27,7 +27,7 @@ state, or treat it as a complete navigation component.
 | Сегодня | 44 | `exports/orbits-today.png` (44×44) | `exports/orbits-today@2x.png` (88×88) | `exports/orbits-today@3x.png` (132×132) |
 | План | 44 | `exports/orbits-plan.png` (44×44) | `exports/orbits-plan@2x.png` (88×88) | `exports/orbits-plan@3x.png` (132×132) |
 | Добавить | 64 | `exports/orbits-add.png` (64×64) | `exports/orbits-add@2x.png` (128×128) | `exports/orbits-add@3x.png` (192×192) |
-| Прогресс | 44 | `exports/orbits-progress.png` (44×44) | `exports/orbits-progress@2x.png` (88×88) | `exports/orbits-progress@3x.png` (132×132) |
+| Успех | 44 | `exports/orbits-progress.png` (44×44) | `exports/orbits-progress@2x.png` (88×88) | `exports/orbits-progress@3x.png` (132×132) |
 | Профиль | 44 | `exports/orbits-profile.png` (44×44) | `exports/orbits-profile@2x.png` (88×88) | `exports/orbits-profile@3x.png` (132×132) |
 
 Density selection changes pixel density, never the logical layout size. Normal
@@ -42,6 +42,19 @@ semantics and touch targets. Visual artwork may be smaller than its interactive
 container, but the touch-target intent remains at least approximately `44×44`.
 Navigation meaning must be conveyed by visible words and non-color state cues;
 visual packs must never alter navigation meaning or core functionality.
+
+The permanent visible navigation is `Сегодня | План | Добавить | Успех |
+Профиль`. The internal technical identifier remains `progress`, and the
+existing `orbits-progress*.png` filenames remain unchanged for future Phase B
+integration. This documentation decision does not claim that the mobile app
+already displays `Успех`.
+
+The full navigation surface follows `theme.background`; it must not introduce
+a hardcoded white card behind all five items. Warm uses `#FCF9F6`, while gray
+`#8B8E96` and dark `#211D2E` remain preview candidates. Dark navigation labels
+are white. A compact active background, border, shape and stronger label weight
+provide a non-color selected cue; pressed/disabled styling and the raised Add
+surface remain owned by UI containers.
 
 Orbits is the Free/default visual pack. Focus Sparks and Focusiki remain future
 paid alternatives; pack selection, payment and entitlement behavior are not

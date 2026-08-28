@@ -35,22 +35,31 @@ raster source for the approved navigation direction:
 - `orbits-today-master.png` → Сегодня;
 - `orbits-plan-master.png` → План;
 - `orbits-add-master.png` → Добавить;
-- `orbits-progress-master.png` → Прогресс;
+- `orbits-progress-master.png` → Успех;
 - `orbits-profile-master.png` → Профиль.
 
 Deterministic exports use 44×44, 88×88 and 132×132 pixels for Today, Plan,
-Progress and Profile, representing logical size `44` at 1×/2×/3× density. Add
+the internal `progress` asset and Profile, representing logical size `44` at
+1×/2×/3× density. Add
 uses 64×64, 128×128 and 192×192 pixels, representing logical size `64`. Density
 selection never changes logical layout size, and masters are not used directly
 at full resolution.
 
-Visible words `Сегодня | План | Добавить | Прогресс | Профиль` remain mandatory.
+Visible words `Сегодня | План | Добавить | Успех | Профиль` remain mandatory.
+This is a permanent product-language mapping: the internal identifier remains
+`progress`, and `orbits-progress-master.png` plus its density-export filenames
+remain unchanged. Application adoption of the `Успех` label is deferred to
+Phase B and is not claimed by this document.
 Add remains a raised central action rather than a selected destination. Active,
 pressed and disabled treatment, compact selected containers and shadows belong
 to the UI container, not the PNG. The responsive documentation preview covers
 320, 360, 390, 412 and 480 logical widths plus increased text.
 
-The three approved background directions are warm light, neutral gray and dark.
+The full navigation surface follows `theme.background` and must not use a
+hardcoded white card behind all five destinations. Dark-theme navigation labels,
+including the active label, are white. Active state remains compact and combines
+background, border, shape and label weight so selection does not depend on color
+alone. The three approved background directions are warm light, neutral gray and dark.
 Warm light currently uses `#FCF9F6` in documentation; gray `#8B8E96` and dark
 `#211D2E` remain preview candidates until physical-device contrast and
 accessibility review. Production application integration, platform rendering
@@ -207,10 +216,16 @@ copied into production.
 
 ## 9. Approved bottom-navigation contract
 
-Visual contract: `Сегодня | План | Добавить | Прогресс | Профиль`.
+Visual contract: `Сегодня | План | Добавить | Успех | Профиль`.
 
-- Все пять слов видимы в обычном состоянии; active item получает icon + label,
-  brand tint и мягкую background cue, но не огромную заливку всего bar.
+Permanent mapping: internal route/asset identifier `progress` → visible Russian
+screen label `Успех`. Routes and `orbits-progress*` filenames remain unchanged.
+
+- Все пять слов видимы в обычном состоянии; full navigation surface inherits
+  `theme.background` without a hardcoded white card. Active item получает icon
+  + label, compact background, border/shape и stronger label weight, но не
+  огромную заливку всего bar и не color-only cue. На dark background все пять
+  navigation labels остаются white.
 - Центральная `Добавить` — raised primary action; это action, а не destination,
   поэтому возврат после capture не должен терять текущий экран.
 - Иконки простые, rounded и знакомые; target каждой action — не менее 44 x 44 pt.

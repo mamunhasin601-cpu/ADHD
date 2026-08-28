@@ -113,8 +113,9 @@ Focus уже описан как спокойный взрослый напар�
 
 ## Phase A.2 checkpoint — 2026-08-27
 
-- Созданы пять SVG navigation prototypes Orbits: Today, Plan, Add, Progress и
-  Profile; добавлены active/inactive preview и inspection на 24/28/32 px.
+- Созданы пять SVG navigation prototypes Orbits: Today, Plan, Add, internal
+  Progress (`Успех` в permanent visible contract) и Profile; добавлены
+  active/inactive preview и inspection на 24/28/32 px.
 - `Добавить` остаётся отдельным raised action, а не selected destination.
 - В preview labels остаются реальным UI text; SVG используют `currentColor` и
   candidate accents, без production integration.
@@ -131,7 +132,8 @@ Focus уже описан как спокойный взрослый напар�
   пять SVG сохранены как superseded historical artifacts и не являются
   production assets.
 - Пять approved transparent raster masters зафиксированы для Today, Plan, Add,
-  Progress и Profile без redraw, recoloring или изменения исходных bytes.
+  internal Progress (`Успех` в permanent visible contract) и Profile без redraw,
+  recoloring или изменения исходных bytes.
 - Из masters детерминированно подготовлены 1×/2×/3× candidates: normal icons
   44/88/132 px и raised Add 64/128/192 px; labels остаются реальным UI text.
 - Static preview показывает warm light `#FCF9F6`, gray candidate `#8B8E96` и
@@ -146,6 +148,21 @@ Focus уже описан как спокойный взрослый напар�
 - Application code, `apps/mobile/assets`, production integration, theme/pack
   switching и entitlement runtime не изменялись. Интеграция отложена до Phase B;
   Task 0039 остаётся «Запланировано».
+
+### Phase A.3 visual correction — 2026-08-28
+
+- Постоянное user-facing имя четвёртой navigation section — `Успех`; полный
+  contract: `Сегодня | План | Добавить | Успех | Профиль`.
+- Internal technical identifier `progress`, route и filenames
+  `orbits-progress*` сохраняются без rename. Mobile application ещё не
+  интегрировало новое visible label; это остаётся работой Phase B.
+- Full navigation surface следует `theme.background`, без hardcoded white card:
+  warm `#FCF9F6`, gray candidate `#8B8E96`, dark candidate `#211D2E`.
+- На dark preview все пять navigation labels white. Compact active state
+  дополнительно использует background, border, shape и label weight, поэтому
+  selection не зависит только от цвета.
+- Exact gray/dark runtime tokens, physical-device contrast и accessibility
+  evidence остаются pending; PNG masters и density exports не изменялись.
 
 ## Honesty boundary
 
