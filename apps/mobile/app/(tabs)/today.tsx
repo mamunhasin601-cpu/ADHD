@@ -5,14 +5,12 @@ import {
   StyleSheet,
   Pressable,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { Timeline } from '../../components/timeline/Timeline';
 import { NowCard } from '../../components/NowCard';
-import { ProgressRing } from '../../components/ProgressRing';
 import { EmptyState } from '../../components/EmptyState';
 import { RecoverySection } from '../../components/RecoverySection';
 import {
@@ -32,7 +30,8 @@ import {
 import type { Task } from '@focus/shared-types';
 import { findCurrentTask } from '../../lib/current-task';
 import { NotificationInvitation } from '../../components/NotificationInvitation';
-import { WeekStrip } from '../../components/WeekStrip';
+import { TodayHeader } from '../../components/today/TodayHeader';
+import { useOrbitsTheme } from '../../theme/orbits';
 import { useNotificationLifecycle } from '../../lib/notification-lifecycle';
 import { useGlobalCapture } from '../../components/GlobalCapture';
 import { isTaskRecord } from '../../lib/task-kind';
@@ -43,6 +42,7 @@ import { isTaskRecord } from '../../lib/task-kind';
  */
 export default function TodayScreen() {
   const router = useRouter();
+  const theme = useOrbitsTheme();
   const { openTimelineCapture } = useGlobalCapture();
   const [selectedDate, setSelectedDate] = useState(new Date());
 
@@ -94,6 +94,8 @@ export default function TodayScreen() {
     data: tasks = [],
     isLoading,
     isError,
+    refetch,
+    isRefetching,
   } = useTasksForDate(selectedDate, profileTimezone);
 
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -183,70 +185,65 @@ export default function TodayScreen() {
 
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar style="auto" />
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <Text style={styles.headerTitle}>Focus</Text>
-          {isToday && totalCount > 0 && (
-            <ProgressRing completed={completedCount} total={totalCount} />
-          )}
-          {!isToday && (
-            <Pressable
-              onPress={() => selectCalendarDay(todayDateKey)}
-              style={styles.todayButton}
-            >
-              <Text style={styles.todayButtonText}>Сегодня</Text>
-            </Pressable>
-          )}
-        </View>
-        <View style={styles.dateNav}>
-          <Pressable
-            onPress={() => {
-              selectCalendarDay(addCalendarDays(selectedDateKey, -1));
-            }}
-            style={styles.navButton}
-          >
-            <Text style={styles.navButtonText}>‹</Text>
-          </Pressable>
-          <Text style={styles.headerDate}>{dateLabel}</Text>
-          <Pressable
-            onPress={() => {
-              selectCalendarDay(addCalendarDays(selectedDateKey, 1));
-            }}
-            style={styles.navButton}
-          >
-            <Text style={styles.navButtonText}>›</Text>
-          </Pressable>
-        </View>
-        <WeekStrip
-          selectedDate={selectedDateKey}
-          todayDate={todayDateKey}
-          onSelectDate={selectCalendarDay}
-        />
-      </View>
+      <TodayHeader
+        isToday={isToday}
+        now={currentTime}
+        profileTimezone={profileTimezone}
+        dateLabel={dateLabel}
+        selectedDateKey={selectedDateKey}
+        todayDateKey={todayDateKey}
+        progressKnown={!isLoading && !isError}
+        completed={completedCount}
+        total={totalCount}
+        onPrevious={() => selectCalendarDay(addCalendarDays(selectedDateKey, -1))}
+        onNext={() => selectCalendarDay(addCalendarDays(selectedDateKey, 1))}
+        onToday={() => selectCalendarDay(todayDateKey)}
+        onSelectDate={selectCalendarDay}
+      />
 
       {isLoading && (
-        <View style={styles.centered}>
-          <ActivityIndicator color="#6B5BFC" />
+        <View style={styles.centered} accessible accessibilityLabel="Загружаем ваш день">
+          <ActivityIndicator color={theme.brand} />
+          <Text style={[styles.stateText, { color: theme.textSecondary }]}>Загружаем ваш день…</Text>
         </View>
       )}
 
       {isError && (
-        <View style={styles.centered}>
-          <Text style={styles.errorText}>
-            Не удалось загрузить задачи. Потяните вниз, чтобы обновить.
-          </Text>
+        <View
+          style={[styles.errorContainer, { backgroundColor: theme.errorSoft }]}
+          accessibilityLabel="Не удалось загрузить ваш день"
+        >
+          <Text style={[styles.errorText, { color: theme.errorPrimary }]}>Не удалось загрузить ваш день.</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Повторить загрузку"
+            accessibilityState={{ disabled: Boolean(isRefetching), busy: Boolean(isRefetching) }}
+            disabled={isRefetching}
+            onPress={() => {
+              if (!isRefetching) void refetch();
+            }}
+            style={[
+              styles.retry,
+              { backgroundColor: theme.brandPressed },
+              isRefetching && styles.retryDisabled,
+            ]}
+          >
+            <Text style={[styles.retryText, { color: theme.retryText }]}>
+              {isRefetching ? 'Загружаем…' : 'Повторить'}
+            </Text>
+          </Pressable>
         </View>
       )}
 
       {!isLoading && !isError && !hasPlanEntries && (
         <EmptyState
-          emoji="🌅"
-          title={isToday ? "Начни свой день" : "На этот день нет задач"}
+          emoji="○"
+          title={isToday ? "День пока свободен" : "На этот день пока нет задач"}
           description={
             isToday
-              ? "Добавь первую задачу, чтобы начать планирование. Нажми + внизу или коснись таймлайна."
+              ? "Можно начать с одного небольшого шага. Нажмите + внизу или коснитесь таймлайна."
               : "На этот день пока нет задач. Создай задачу или вернись к сегодняшнему дню."
           }
           actionLabel="Создать задачу"
@@ -295,11 +292,15 @@ export default function TodayScreen() {
             )}</>
           )}
           {unscheduledTasks.length > 0 && (
-            <View style={styles.unscheduledList}>
+            <View style={[styles.unscheduledList, { borderBottomColor: theme.borderSubtle, backgroundColor: theme.background }]}>
               {unscheduledTasks.map((task: Task) => (
                 <Pressable
                   key={task.id}
-                  style={styles.unscheduledItem}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: Boolean(task.completedAt) }}
+                  accessibilityLabel={`${task.title}${task.completedAt ? ', Выполнено' : ''}`}
+                  accessibilityHint="Нажмите, чтобы изменить выполнение. Удерживайте, чтобы открыть задачу"
+                  style={[styles.unscheduledItem, { backgroundColor: task.completedAt ? theme.completionSoft : theme.surfacePrimary, borderColor: task.completedAt ? theme.completionPrimary : theme.borderSubtle }]}
                   onPress={() => toggleTask.mutate(task.id)}
                   onLongPress={() =>
                     router.push({
@@ -315,15 +316,16 @@ export default function TodayScreen() {
                   <View
                     style={[
                       styles.unscheduledDot,
-                      { backgroundColor: task.completedAt ? '#E5E7EB' : task.color },
+                      { backgroundColor: task.completedAt ? theme.completionPrimary : theme.brand },
                     ]}
                   />
+                  {!!task.completedAt && <Text style={{ color: theme.completionPrimary, fontWeight: '700', marginRight: 6 }}>✓ Готово</Text>}
                   <Text
                     style={[
                       styles.unscheduledText,
+                      { color: theme.textPrimary },
                       !!task.completedAt && styles.unscheduledTextDone,
                     ]}
-                    numberOfLines={1}
                   >
                     {task.title}
                   </Text>
@@ -372,63 +374,27 @@ export default function TodayScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F9FAFB' },
-  header: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  container: { flex: 1 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 },
+  errorContainer: {
+    margin: 24,
+    padding: 24,
+    borderRadius: 16,
     alignItems: 'center',
-    marginBottom: 8,
-  },
-  headerTitle: { fontSize: 28, fontWeight: '700', color: '#6B5BFC' },
-  todayButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: '#EDE9FE',
-  },
-  todayButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6B5BFC',
-  },
-  dateNav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
     gap: 12,
   },
-  navButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  navButtonText: {
-    fontSize: 24,
-    color: '#6B5BFC',
-    fontWeight: '600',
-  },
-  headerDate: { fontSize: 16, color: '#111827', fontWeight: '500', textTransform: 'capitalize', flex: 1, textAlign: 'center' },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  errorText: { color: '#6B7280', textAlign: 'center' },
+  stateText: { fontSize: 15 },
+  retry: { minHeight: 44, paddingHorizontal: 20, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  retryDisabled: { opacity: 0.6 },
+  retryText: { fontWeight: '700' },
+  errorText: { textAlign: 'center' },
   unscheduledList: {
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
   },
-  unscheduledItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
+  unscheduledItem: { flexDirection: 'row', alignItems: 'center', padding: 12, minHeight: 48, borderWidth: 1, borderRadius: 12, marginVertical: 4 },
   unscheduledDot: { width: 8, height: 8, borderRadius: 4, marginRight: 10 },
-  unscheduledText: { fontSize: 14, color: '#111827', flex: 1 },
-  unscheduledTextDone: { textDecorationLine: 'line-through', color: '#9CA3AF' },
+  unscheduledText: { fontSize: 14, flex: 1 },
+  unscheduledTextDone: { textDecorationLine: 'line-through' },
 });

@@ -4,6 +4,7 @@ import { formatWallClock } from '../../lib/time-format';
 import { TIMELINE_CONFIG } from '../../lib/timeline-config';
 import { getTimelineMinutesFromStart } from '../../lib/timeline-geometry';
 import { taskKind } from '../../lib/task-kind';
+import { useOrbitsTheme } from '../../theme/orbits';
 
 interface Props {
   task: Task;
@@ -35,6 +36,7 @@ export function PlanBlock({
   columnCount = 1,
   profileTimezone,
 }: Props) {
+  const theme = useOrbitsTheme();
   if (!task.startTime) return null;
   const kind = taskKind(task);
   if (kind === 'TASK') return null;
@@ -68,15 +70,15 @@ export function PlanBlock({
         onPress={() => onOpen(task)}
         style={[
           styles.block,
-          kind === 'REST' ? styles.rest : styles.buffer,
+          kind === 'REST' ? { backgroundColor: theme.completionSoft, borderColor: theme.completionPrimary } : { backgroundColor: theme.surfaceMuted, borderColor: theme.timelineNeutral },
           {
             left: `${columnIndex * columnWidthPercent}%`,
             width: `${columnWidthPercent}%`,
           },
         ]}
       >
-        <Text style={styles.kind}>{typeLabel}</Text>
-        <Text style={styles.title} numberOfLines={2}>{task.title}</Text>
+        <Text style={[styles.kind, { color: theme.textSecondary }]}>{typeLabel}</Text>
+        <Text style={[styles.title, { color: theme.textPrimary }]} numberOfLines={2}>{task.title}</Text>
       </Pressable>
     </View>
   );

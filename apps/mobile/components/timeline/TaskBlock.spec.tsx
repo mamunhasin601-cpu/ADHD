@@ -23,3 +23,42 @@ it('uses the same Moscow 14:30 coordinate as overlap layout and keeps unknown du
   expect(layout.get('unknown')?.columnCount).toBe(2);
   expect(unknown.durationMinutes).toBeNull();
 });
+
+describe('TaskBlock compact state treatment', () => {
+  it.each([
+    { state: 'normal', isCurrent: false, completedAt: null },
+    { state: 'current', isCurrent: true, completedAt: null },
+    { state: 'completed', isCurrent: false, completedAt: new Date() },
+  ])('keeps title and $state cues inside a 32-unit block', ({ state, isCurrent, completedAt }) => {
+    const task = {
+      ...makeTask(state, '2026-08-13T11:30:00.000Z', 1),
+      title: 'Короткая задача',
+      completedAt,
+      subTasks: [{ id: 'subtask', title: 'Шаг', completedAt: null }],
+    } as Task;
+
+    render(
+      <TaskBlock
+        task={task}
+        isCurrent={isCurrent}
+        onToggle={jest.fn()}
+        onOpen={jest.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId(`task-block-row-${state}`).props.style[1].height).toBe(32);
+    expect(screen.getByText('Короткая задача')).toBeTruthy();
+    expect(screen.queryByText('0/1')).toBeNull();
+
+    const checkbox = screen.getByRole('checkbox');
+    expect(checkbox.props.accessibilityState.checked).toBe(Boolean(completedAt));
+    if (state === 'current') {
+      expect(screen.getByText('Сейчас')).toBeTruthy();
+      expect(checkbox.props.accessibilityLabel).toContain('Сейчас');
+    }
+    if (state === 'completed') {
+      expect(screen.getByText('✓')).toBeTruthy();
+      expect(checkbox.props.accessibilityLabel).toContain('Выполнено');
+    }
+  });
+});

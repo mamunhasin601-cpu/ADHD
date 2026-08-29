@@ -20,6 +20,7 @@ import { computeTimelineFreeWindows } from "../../lib/timeline-free-windows";
 import { formatTimelineFreeWindowAccessibilityLabel } from "../../lib/timeline-free-window-label";
 import { PlanBlock } from "./PlanBlock";
 import { taskKind } from "../../lib/task-kind";
+import { useOrbitsTheme } from "../../theme/orbits";
 
 interface Props {
   tasks: Task[];
@@ -51,6 +52,7 @@ export function Timeline({
   profileTimezone,
   currentTaskId,
 }: Props) {
+  const theme = useOrbitsTheme();
   const scrollRef = useRef<ScrollView>(null);
   const timeFormat = useAuthStore(
     (state) => state.user?.timeFormat ?? "SYSTEM",
@@ -131,10 +133,10 @@ export function Timeline({
               { top: (hour - dayStartHour) * hourHeight, height: hourHeight },
             ]}
           >
-            <Text style={styles.hourLabel}>
+            <Text style={[styles.hourLabel, { color: theme.textSecondary }]}>
               {formatWallClock(hour % 24, 0, timeFormat)}
             </Text>
-            <View style={styles.hourLine} />
+            <View style={[styles.hourLine, { backgroundColor: theme.timelineNeutral }]} />
           </View>
         ))}
 
@@ -151,10 +153,10 @@ export function Timeline({
               accessibilityLabel={accessibilityLabel}
               style={[
                 styles.freeWindow,
-                { top: window.top, height: window.height },
+                { top: window.top, height: window.height, backgroundColor: theme.surfaceMuted, borderColor: theme.timelineNeutral },
               ]}
             >
-              <Text style={styles.freeWindowLabel}>{label}</Text>
+              <Text style={[styles.freeWindowLabel, { color: theme.textSecondary }]}>{label}</Text>
             </View>
           );
         })}

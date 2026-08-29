@@ -18,6 +18,13 @@ describe('Orbits themes', () => {
     }
   });
 
+  it('keeps semantic Today text and state accents distinguishable', () => {
+    for (const theme of Object.values(ORBITS_THEMES)) {
+      expect(contrastRatio(theme.textPrimary, theme.surfacePrimary)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(theme.errorPrimary, theme.errorSoft)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it('resolves an explicit override deterministically without external state', () => {
     const wrapper = ({ children }: { children: React.ReactNode }) => <OrbitsThemeProvider theme="dark">{children}</OrbitsThemeProvider>;
     const { result } = renderHook(() => useOrbitsTheme(), { wrapper });

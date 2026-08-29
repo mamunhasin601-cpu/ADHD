@@ -226,3 +226,7 @@ C-01 + S-02 -> D-04/S-05
 - [`docs/research/19-architecture-risk-report.md`](research/19-architecture-risk-report.md) — предыдущий risk baseline, намеренно не дублируемый.
 - [`docs/research/13-dependency-graph.md`](research/13-dependency-graph.md), [`14-call-graph.md`](research/14-call-graph.md), [`15-data-flow.md`](research/15-data-flow.md), [`16-module-analysis.md`](research/16-module-analysis.md), [`18-component-analysis.md`](research/18-component-analysis.md).
 - `package.json`, `apps/api/package.json`, `.gitignore`, реальные исходники `apps/api/src/**` и `apps/mobile/**`.
+
+### Task 0039 Phase B checkpoint
+
+Phase A is complete; Phase B.1 is merged; Phase B.2 implements the source-level Orbits Today reference screen. Task 0039 and full Phase B remain in progress pending runtime, physical-device and assistive-technology evidence and later truthful navigation mapping.

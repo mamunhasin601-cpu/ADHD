@@ -8,6 +8,8 @@ const mockUseTasksForDate = jest.fn((_date: Date, _timezone?: string | null) => 
   data: mockTasks,
   isLoading: false,
   isError: false,
+  refetch: jest.fn(),
+  isRefetching: false,
 }));
 let mockStartImplementation: (id: string) => Promise<any>;
 let mockUpdateImplementation: (input: { id: string; dto: { firstStep: string } }) => Promise<any>;

@@ -11,7 +11,7 @@ jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 jest.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ refetchQueries: jest.fn() }) }));
 jest.mock('../lib/notification-lifecycle', () => ({ useNotificationLifecycle: () => ({ permission: mockPermission, invitation: mockInvitation, busy: false, error: null, requestPermission: mockRequestPermission, deferInvitation: jest.fn(), openSettings: jest.fn() }) }));
 jest.mock('../lib/api/tasks', () => ({
-  useTasksForDate: () => ({ data: mockTasks, isLoading: mockLoading, isError: mockError }),
+  useTasksForDate: () => ({ data: mockTasks, isLoading: mockLoading, isError: mockError, refetch: jest.fn(), isRefetching: false }),
   useCreateTask: () => ({ mutateAsync: jest.fn(), isPending: false }),
   useUpdateTask: () => ({ mutateAsync: jest.fn(), isPending: false }),
   useToggleTask: () => ({ mutate: jest.fn(), isPending: false }),

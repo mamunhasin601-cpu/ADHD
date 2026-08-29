@@ -17,6 +17,8 @@ jest.mock("../lib/api/tasks", () => ({
     data: [],
     isLoading: false,
     isError: false,
+    refetch: jest.fn(),
+    isRefetching: false,
   })),
   useCreateTask: jest.fn(() => ({
     mutateAsync: mockMutateAsync,
