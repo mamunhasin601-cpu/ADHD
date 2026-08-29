@@ -2,9 +2,11 @@
 
 ## Статус
 
-Запланировано. Эта задача фиксирует продуктовое направление и границы будущей
-реализации; production UI, assets, tokens, billing и entitlement в ней не
-меняются.
+В работе. Phase A завершена, Phase B.1 объединена, а source-level реализация
+Phase B.2 проходит проверку в draft PR. Task 0039 и полная Phase B ещё не
+завершены; physical-device и assistive-technology approval остаются
+неподтверждёнными. Production Orbits raster assets, theme tokens и navigation
+foundation уже существуют; paid packs, entitlement и billing не реализованы.
 
 ## Контекст
 
@@ -90,8 +92,9 @@ Focus уже описан как спокойный взрослый напар�
   sound и haptics не обязательны для смысла.
 - Free/default Orbits сохраняет полный базовый путь «увидеть → начать →
   вернуться». Pack unavailable/expired не повреждает задачи и данные.
-- Нет production application asset-файлов, лицензированных логотипов, цен, paywall flow,
-  database/schema/migration или production deployment claims.
+- Помимо утверждённых Orbits raster assets из Phase B.1 не добавляются
+  непроверенные production assets, лицензированные логотипы, цены или paywall
+  flow; database/schema/migration и production deployment не затрагиваются.
 
 ## Phase A checkpoint — 2026-08-27
 
@@ -185,7 +188,8 @@ Focus уже описан как спокойный взрослый напар�
 
 Эта задача не означает, что:
 
-- source-level Orbits Today reference screen существует; physical-device rendering, large text, VoiceOver/TalkBack и финальное runtime accessibility approval остаются непроверенными;
+- source-level Orbits Today reference screen прошёл physical-device rendering,
+  large-text, VoiceOver/TalkBack или финальную runtime accessibility-проверку;
 - финальные production SVG assets одобрены;
 - character system завершён;
 - paid packs реализованы;

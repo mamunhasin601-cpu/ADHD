@@ -142,7 +142,7 @@ describe('Today quick capture destinations', () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-08-12T12:00:00.000Z'));
     render(<GlobalCaptureProvider><TodayScreen /></GlobalCaptureProvider>);
     fireEvent.press(screen.getByLabelText(/четверг, 13 августа 2026/));
-    expect(screen.getByText('На этот день нет задач')).toBeTruthy();
+    expect(screen.getByText('На этот день пока нет задач')).toBeTruthy();
     expect(screen.queryByText('Свободный день')).toBeNull();
     jest.useRealTimers();
   });
