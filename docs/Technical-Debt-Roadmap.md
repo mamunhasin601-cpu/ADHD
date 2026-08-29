@@ -156,6 +156,7 @@ one-time purchase, subscription или premium tier не решён.
 | Q-03 | Theme tokens и shared business policies | M | Low | Medium | — |
 | Q-04 | Shared auth shell/form/submit hook | M | Medium | Medium | H-01 |
 | V-01 (Task 0039, Phase A) | Visual identity spec и Today mockup approved; implementation и paid packs не входят в этот sprint. | M | Medium | High | Product/design review |
+| V-02 (Task 0039, Phase B.1 checkpoint) | Production Orbits assets, semantic tokens и presentational navigation готовы; текущие четыре route не заменены, router integration и Today Phase B.2 отложены. | M | Medium | High | V-01, product route decision |
 | A-05 (часть 1) | `TaskResponse` ISO mapper; сокращение casts | L | Medium | High | API contract inventory |
 
 **Exit criteria:** крупные экраны — composition-only; form/view-model pure logic имеет unit tests; mobile/backend defaults не расходятся; даты парсятся на boundary.

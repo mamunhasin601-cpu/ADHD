@@ -164,6 +164,22 @@ Focus уже описан как спокойный взрослый напар�
 - Exact gray/dark runtime tokens, physical-device contrast и accessibility
   evidence остаются pending; PNG masters и density exports не изменялись.
 
+## Phase B.1 checkpoint — 2026-08-29
+
+- Production now contains the 15 approved Orbits navigation density exports,
+  typed static asset roots, semantic warm/gray/dark tokens and a reusable
+  accessible presentational navigation component.
+- The app still uses the current four-route navigation (`today`, `inbox`,
+  `focus`, `settings`). The Orbits bar is not installed because План and Успех
+  do not yet have truthful route mappings; GlobalCapture remains unchanged.
+- No theme-selection UI or persistence exists. Gray and dark are candidates;
+  Android/iOS physical-device rendering, text scaling, screen reader behavior
+  and final gray/dark approval remain unverified.
+- Today redesign remains Phase B.2. Paid packs, entitlement and billing remain
+  deferred. This checkpoint does not complete Phase B or Task 0039.
+- Detailed evidence and boundaries are recorded in
+  [`0039b1-orbits-theme-navigation-foundation.md`](0039b1-orbits-theme-navigation-foundation.md).
+
 ## Honesty boundary
 
 Эта задача не означает, что:
