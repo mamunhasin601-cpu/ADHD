@@ -90,8 +90,79 @@ Focus уже описан как спокойный взрослый напар�
   sound и haptics не обязательны для смысла.
 - Free/default Orbits сохраняет полный базовый путь «увидеть → начать →
   вернуться». Pack unavailable/expired не повреждает задачи и данные.
-- Нет финальных asset-файлов, лицензированных логотипов, цен, paywall flow,
+- Нет production application asset-файлов, лицензированных логотипов, цен, paywall flow,
   database/schema/migration или production deployment claims.
+
+## Phase A checkpoint — 2026-08-27
+
+- Concept board архивирован в `docs/design/visual-references/orbits/` как
+  visual-language inspiration; четыре supplied PNG сохранены без изменений.
+- `orbits-navigation-approved-direction-02.png` утверждён как navigation
+  direction; `orbits-navigation-approved-direction-01.png` сохранён как
+  superseded design history.
+- `today/today-orbits-approved-direction-01.png` утверждён как Today visual
+  direction.
+- Добавлены reference index и implementation-neutral спецификация:
+  `docs/design/visual-references/orbits/README.md` и
+  `docs/design/orbits-visual-spec.md`.
+- Production SVG, app code, shared runtime tokens, provider marks и
+  accessibility runtime evidence не добавлялись.
+- Exact semantic colors, contrast pairs, typography/spacing values, SVG/icon
+  sources и runtime/device checks остаются открытыми для Phase B evidence gate.
+- Phase B не начата; статус задачи остаётся «Запланировано».
+
+## Phase A.2 checkpoint — 2026-08-27
+
+- Созданы пять SVG navigation prototypes Orbits: Today, Plan, Add, internal
+  Progress (`Успех` в permanent visible contract) и Profile; добавлены
+  active/inactive preview и inspection на 24/28/32 px.
+- `Добавить` остаётся отдельным raised action, а не selected destination.
+- В preview labels остаются реальным UI text; SVG используют `currentColor` и
+  candidate accents, без production integration.
+- Application code, `apps/mobile/assets` и runtime navigation не изменялись.
+- Production asset approval не заявляется; visual approval пользователем для
+  финальной vector geometry остаётся обязательным.
+- Contrast, screen-reader/text-scaling/device evidence и другие accessibility
+  проверки остаются открытыми; Phase B не начата, статус задачи не изменён.
+
+## Phase A.3 checkpoint — 2026-08-27
+
+- Phase A.2 SVG direction отклонено после visual review из-за слабых scale и
+  visual presence, а также black fallback при external-`<img>` `currentColor`;
+  пять SVG сохранены как superseded historical artifacts и не являются
+  production assets.
+- Пять approved transparent raster masters зафиксированы для Today, Plan, Add,
+  internal Progress (`Успех` в permanent visible contract) и Profile без redraw,
+  recoloring или изменения исходных bytes.
+- Из masters детерминированно подготовлены 1×/2×/3× candidates: normal icons
+  44/88/132 px и raised Add 64/128/192 px; labels остаются реальным UI text.
+- Static preview показывает warm light `#FCF9F6`, gray candidate `#8B8E96` и
+  dark candidate `#211D2E`, active/non-color cues и Add default/pressed/disabled.
+- Source-level responsive review покрывает 320, 360, 390, 412 и 480 logical px,
+  а также increased-text example: слова не скрываются, порядок не меняется,
+  touch-target intent остаётся не меньше примерно 44×44.
+- Accessibility review проверяет visible labels, non-color active container,
+  decorative icon semantics, отсутствие animation/flash и documented contrast
+  boundary. Physical-device, screen-reader, final gray/dark token и platform
+  rendering evidence всё ещё обязательны.
+- Application code, `apps/mobile/assets`, production integration, theme/pack
+  switching и entitlement runtime не изменялись. Интеграция отложена до Phase B;
+  Task 0039 остаётся «Запланировано».
+
+### Phase A.3 visual correction — 2026-08-28
+
+- Постоянное user-facing имя четвёртой navigation section — `Успех`; полный
+  contract: `Сегодня | План | Добавить | Успех | Профиль`.
+- Internal technical identifier `progress`, route и filenames
+  `orbits-progress*` сохраняются без rename. Mobile application ещё не
+  интегрировало новое visible label; это остаётся работой Phase B.
+- Full navigation surface следует `theme.background`, без hardcoded white card:
+  warm `#FCF9F6`, gray candidate `#8B8E96`, dark candidate `#211D2E`.
+- На dark preview все пять navigation labels white. Compact active state
+  дополнительно использует background, border, shape и label weight, поэтому
+  selection не зависит только от цвета.
+- Exact gray/dark runtime tokens, physical-device contrast и accessibility
+  evidence остаются pending; PNG masters и density exports не изменялись.
 
 ## Honesty boundary
 

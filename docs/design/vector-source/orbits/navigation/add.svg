@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none" role="img" aria-labelledby="title">
+  <title id="title">Добавить</title>
+  <path id="orbit-circle" d="M16 4.75c6.2 0 11.25 5.05 11.25 11.25 0 2.9-1.1 5.55-2.9 7.55" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
+  <path id="orbit-gap" d="M20.2 27.05A11.23 11.23 0 0 1 4.75 16c0-6.2 5.05-11.25 11.25-11.25" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle id="orbit-dot" cx="25.25" cy="24.7" r="1.7" fill="#0FA9A8"/>
+  <path id="plus" d="M16 10.75v10.5M10.75 16h10.5" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none" role="img" aria-labelledby="title">
+  <title id="title">Прогресс</title>
+  <path id="rising-arc" d="M5.25 22.5c3.75-5.7 8.15-8.9 13.1-9.5 2.8-.35 5.45.25 8.4 1.75" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle id="end-dot" cx="26.75" cy="14.8" r="1.65" fill="#0FA9A8"/>
+  <path id="spark" d="m22.25 7.25.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5-1.5-.5 1.5-.5.5-1.5Z" fill="#F4B72A"/>
+</svg>

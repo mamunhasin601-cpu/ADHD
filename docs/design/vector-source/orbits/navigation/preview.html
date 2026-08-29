@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Orbits navigation SVG prototypes</title>
+  <style>
+    :root {
+      --warm: #fbf8f5;
+      --surface: #ffffff;
+      --purple: #6B5BFC;
+      --purple-soft: #F3F1FF;
+      --pressed: #5B4BE7;
+      --ink: #211D2E;
+      --muted: #6B6477;
+      --turquoise: #0FA9A8;
+      --yellow: #F4B72A;
+      --disabled: #a9a5b0;
+      --line: #e9e4ed;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 32px 18px 56px;
+      background: var(--warm);
+      color: var(--ink);
+      font: 16px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main { max-width: 1100px; margin: 0 auto; }
+    h1, h2 { line-height: 1.15; }
+    h1 { margin: 0 0 8px; font-size: clamp(28px, 5vw, 46px); letter-spacing: -0.03em; }
+    h2 { margin: 38px 0 14px; font-size: 22px; }
+    p { max-width: 760px; }
+    .note { color: var(--muted); }
+    .warning {
+      display: inline-block;
+      margin: 16px 0 4px;
+      padding: 9px 12px;
+      border: 1px solid #e5d9bb;
+      border-radius: 10px;
+      background: #fff9e9;
+      color: #5d4a18;
+      font-weight: 650;
+    }
+    .matrix {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(90px, 1fr));
+      gap: 12px;
+      overflow-x: auto;
+    }
+    .matrix-card, .state-card {
+      min-width: 90px;
+      padding: 14px 10px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--surface);
+      text-align: center;
+    }
+    .matrix-card strong, .state-card strong { display: block; margin-bottom: 10px; }
+    .size-row { display: flex; align-items: center; justify-content: space-around; gap: 8px; }
+    .size-row span { display: grid; gap: 4px; justify-items: center; color: var(--muted); font-size: 12px; }
+    img { display: block; }
+    .icon-24 { width: 24px; height: 24px; }
+    .icon-28 { width: 28px; height: 28px; }
+    .icon-32 { width: 32px; height: 32px; }
+    .inactive-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; padding: 22px; border-radius: 24px; background: var(--surface); box-shadow: 0 12px 28px rgba(45, 32, 75, .08); }
+    .inactive-item { display: grid; justify-items: center; gap: 7px; color: var(--muted); font-weight: 600; }
+    .nav-examples { display: grid; gap: 16px; }
+    .nav-bar { display: grid; grid-template-columns: repeat(5, 1fr); align-items: end; gap: 6px; min-height: 112px; padding: 14px 12px 10px; border: 1px solid var(--line); border-radius: 28px; background: var(--surface); box-shadow: 0 12px 28px rgba(45, 32, 75, .08); }
+    .nav-item { display: grid; min-width: 0; justify-items: center; align-content: center; gap: 5px; min-height: 78px; padding: 9px 4px 7px; border-radius: 18px; color: var(--muted); font-size: clamp(11px, 1.8vw, 15px); font-weight: 600; text-align: center; }
+    .nav-item img { width: 28px; height: 28px; }
+    .nav-item.active { color: var(--purple); background: var(--purple-soft); }
+    .nav-item.active img { filter: none; }
+    .nav-item.add { align-self: start; min-height: 96px; margin-top: -32px; padding-top: 13px; border: 1px solid #eeeaf5; border-radius: 50%; background: var(--surface); color: var(--ink); box-shadow: 0 10px 22px rgba(45, 32, 75, .16); }
+    .nav-item.add img { width: 32px; height: 32px; }
+    .nav-item.add span { max-width: 76px; }
+    .state-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .state-card img { width: 32px; height: 32px; margin: 4px auto 9px; }
+    .state-card.pressed { background: var(--purple-soft); color: var(--pressed); }
+    .state-card.disabled { color: var(--disabled); }
+    .state-card.disabled img { opacity: .48; }
+    .calm { display: flex; justify-content: center; gap: 26px; padding: 20px; border: 1px dashed #cfc8d8; border-radius: 22px; background: var(--surface); }
+    .calm .nav-item { min-height: 58px; padding: 8px 14px; color: var(--ink); }
+    .calm .nav-item img { display: none; }
+    .caption { margin-top: 8px; color: var(--muted); font-size: 13px; }
+    @media (max-width: 620px) {
+      body { padding: 24px 12px 42px; }
+      .matrix { grid-template-columns: repeat(5, 132px); }
+      .nav-bar { gap: 2px; padding-inline: 4px; }
+      .nav-item { padding-inline: 1px; font-size: 10px; }
+      .nav-item img { width: 24px; height: 24px; }
+      .nav-item.add { min-height: 86px; }
+      .state-grid { grid-template-columns: 1fr; }
+      .calm { gap: 4px; justify-content: space-between; padding-inline: 8px; }
+      .calm .nav-item { padding-inline: 4px; font-size: 11px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Orbits navigation prototypes</h1>
+    <p class="note">Documentation-only preview for the approved direction 02. The five SVGs are independent vector prototypes; labels below are real HTML text.</p>
+    <p class="warning">Candidate colors — contrast and physical-device review still required</p>
+
+    <h2>1. Size matrix</h2>
+    <div class="matrix">
+      <div class="matrix-card"><strong>Сегодня</strong><div class="size-row"><span><img class="icon-24" src="today.svg" alt="Сегодня, 24 px">24</span><span><img class="icon-28" src="today.svg" alt="Сегодня, 28 px">28</span><span><img class="icon-32" src="today.svg" alt="Сегодня, 32 px">32</span></div></div>
+      <div class="matrix-card"><strong>План</strong><div class="size-row"><span><img class="icon-24" src="plan.svg" alt="План, 24 px">24</span><span><img class="icon-28" src="plan.svg" alt="План, 28 px">28</span><span><img class="icon-32" src="plan.svg" alt="План, 32 px">32</span></div></div>
+      <div class="matrix-card"><strong>Добавить</strong><div class="size-row"><span><img class="icon-24" src="add.svg" alt="Добавить, 24 px">24</span><span><img class="icon-28" src="add.svg" alt="Добавить, 28 px">28</span><span><img class="icon-32" src="add.svg" alt="Добавить, 32 px">32</span></div></div>
+      <div class="matrix-card"><strong>Успех</strong><div class="size-row"><span><img class="icon-24" src="progress.svg" alt="Успех, 24 px">24</span><span><img class="icon-28" src="progress.svg" alt="Успех, 28 px">28</span><span><img class="icon-32" src="progress.svg" alt="Успех, 32 px">32</span></div></div>
+      <div class="matrix-card"><strong>Профиль</strong><div class="size-row"><span><img class="icon-24" src="profile.svg" alt="Профиль, 24 px">24</span><span><img class="icon-28" src="profile.svg" alt="Профиль, 28 px">28</span><span><img class="icon-32" src="profile.svg" alt="Профиль, 32 px">32</span></div></div>
+    </div>
+
+    <h2>2. Inactive icon row</h2>
+    <div class="inactive-row">
+      <div class="inactive-item"><img class="icon-32" src="today.svg" alt="Сегодня"><span>Сегодня</span></div>
+      <div class="inactive-item"><img class="icon-32" src="plan.svg" alt="План"><span>План</span></div>
+      <div class="inactive-item"><img class="icon-32" src="add.svg" alt="Добавить"><span>Добавить</span></div>
+      <div class="inactive-item"><img class="icon-32" src="progress.svg" alt="Успех"><span>Успех</span></div>
+      <div class="inactive-item"><img class="icon-32" src="profile.svg" alt="Профиль"><span>Профиль</span></div>
+    </div>
+
+    <h2>3. Active navigation states</h2>
+    <div class="nav-examples">
+      <div><p class="caption">Сегодня активно</p><nav class="nav-bar" aria-label="Навигация, Сегодня активно"><div class="nav-item active" aria-current="page"><img src="today.svg" alt=""><span>Сегодня</span></div><div class="nav-item"><img src="plan.svg" alt=""><span>План</span></div><div class="nav-item add"><img src="add.svg" alt=""><span>Добавить</span></div><div class="nav-item"><img src="progress.svg" alt=""><span>Успех</span></div><div class="nav-item"><img src="profile.svg" alt=""><span>Профиль</span></div></nav></div>
+      <div><p class="caption">План активно</p><nav class="nav-bar" aria-label="Навигация, План активно"><div class="nav-item"><img src="today.svg" alt=""><span>Сегодня</span></div><div class="nav-item active" aria-current="page"><img src="plan.svg" alt=""><span>План</span></div><div class="nav-item add"><img src="add.svg" alt=""><span>Добавить</span></div><div class="nav-item"><img src="progress.svg" alt=""><span>Успех</span></div><div class="nav-item"><img src="profile.svg" alt=""><span>Профиль</span></div></nav></div>
+      <div><p class="caption">Успех активно</p><nav class="nav-bar" aria-label="Навигация, Успех активно"><div class="nav-item"><img src="today.svg" alt=""><span>Сегодня</span></div><div class="nav-item"><img src="plan.svg" alt=""><span>План</span></div><div class="nav-item add"><img src="add.svg" alt=""><span>Добавить</span></div><div class="nav-item active" aria-current="page"><img src="progress.svg" alt=""><span>Успех</span></div><div class="nav-item"><img src="profile.svg" alt=""><span>Профиль</span></div></nav></div>
+      <div><p class="caption">Профиль активно</p><nav class="nav-bar" aria-label="Навигация, Профиль активно"><div class="nav-item"><img src="today.svg" alt=""><span>Сегодня</span></div><div class="nav-item"><img src="plan.svg" alt=""><span>План</span></div><div class="nav-item add"><img src="add.svg" alt=""><span>Добавить</span></div><div class="nav-item"><img src="progress.svg" alt=""><span>Успех</span></div><div class="nav-item active" aria-current="page"><img src="profile.svg" alt=""><span>Профиль</span></div></nav></div>
+    </div>
+
+    <h2>4. Add interaction states</h2>
+    <div class="state-grid">
+      <div class="state-card"><strong>Default</strong><img src="add.svg" alt="Добавить"><span>Добавить</span></div>
+      <div class="state-card pressed"><strong>Pressed</strong><img src="add.svg" alt="Добавить"><span>Добавить</span></div>
+      <div class="state-card disabled"><strong>Disabled example</strong><img src="add.svg" alt="Добавить"><span>Добавить</span><p class="caption">Не означает, что Add недоступен в продукте.</p></div>
+    </div>
+
+    <h2>5. Future concept — not implemented</h2>
+    <p class="note">Words-only calm mode keeps every label and visually suppresses icons. This is a static non-production illustration.</p>
+    <div class="calm" aria-label="Future concept — not implemented"><div class="nav-item"><img src="today.svg" alt=""><span>Сегодня</span></div><div class="nav-item"><img src="plan.svg" alt=""><span>План</span></div><div class="nav-item"><img src="add.svg" alt=""><span>Добавить</span></div><div class="nav-item"><img src="progress.svg" alt=""><span>Успех</span></div><div class="nav-item"><img src="profile.svg" alt=""><span>Профиль</span></div></div>
+  </main>
+</body>
+</html>
