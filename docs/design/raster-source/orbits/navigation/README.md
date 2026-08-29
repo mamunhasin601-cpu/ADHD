@@ -63,6 +63,13 @@ Neutral gray `#8B8E96` and dark `#211D2E` are preview candidates only; their
 exact runtime tokens still require physical-device contrast and accessibility
 validation.
 
+## Integrity manifest
+
+`SHA256SUMS.txt` is the committed canonical integrity manifest for the five
+approved masters and 15 deterministic density exports. Verify these hashes
+before production integration or regeneration; master and export files must
+not be silently replaced.
+
 ## Evidence boundary
 
 - **Approved:** the five master images and their semantic visual direction.
