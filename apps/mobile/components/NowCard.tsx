@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import type { Task } from "@focus/shared-types";
 import { useAuthStore } from "../stores/auth.store";
 import { formatClockTime } from "../lib/time-format";
+import { useOrbitsTheme } from "../theme/orbits";
 
 type NowCardMode = "current" | "upcoming";
 
@@ -49,6 +50,7 @@ export function NowCard({
   startError = null,
   isSavingFirstStep = false,
 }: Props) {
+  const theme = useOrbitsTheme();
   const [supportOpen, setSupportOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(task.firstStep ?? "");
@@ -168,16 +170,16 @@ export function NowCard({
   }
 
   return (
-    <View style={styles.card} accessibilityRole="summary">
-      <Text style={styles.eyebrow}>Сейчас</Text>
-      <Text style={styles.context}>
+    <View style={[styles.card, { backgroundColor: theme.surfacePrimary, borderColor: theme.borderSubtle, shadowColor: theme.elevationShadow }]} accessibilityRole="summary">
+      <Text style={[styles.eyebrow, { color: theme.brand }]}>Сейчас</Text>
+      <Text style={[styles.context, { color: theme.textSecondary }]}>
         {isStarted ? "Начато" : isCurrent ? "Запланировано сейчас" : "Ближайшее действие"}
       </Text>
-      <Text style={styles.title} numberOfLines={2}>
+      <Text style={[styles.title, { color: theme.textPrimary }]} numberOfLines={2}>
         {task.title}
       </Text>
 
-      <Text style={styles.meta}>
+      <Text style={[styles.meta, { color: theme.textSecondary }]}>
         {time
           ? `Запланировано на ${time}  •  `
           : ""}

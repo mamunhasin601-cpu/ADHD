@@ -20,6 +20,14 @@ import { apiClient } from "../../lib/api-client";
 import { useRef, useState } from "react";
 import { formatWallClock } from "../../lib/time-format";
 import { useNotificationLifecycle } from "../../lib/notification-lifecycle";
+import { ORBITS_THEMES, type OrbitsThemeName } from "../../theme/orbits";
+import { useOrbitsThemeStore } from "../../stores/orbits-theme.store";
+
+const THEME_CHOICES: ReadonlyArray<readonly [OrbitsThemeName, string, string]> = [
+  ["warm", "Тёплая", "Мягкий светлый фон"],
+  ["gray", "Серая", "Спокойный нейтральный фон"],
+  ["dark", "Тёмная", "Тёмный фон и светлый текст"],
+];
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -31,6 +39,10 @@ export default function SettingsScreen() {
   const [formatError, setFormatError] = useState<string | null>(null);
   const { data: planInfo, isLoading: planLoading } = usePlanInfo();
   const notifications = useNotificationLifecycle();
+  const themeName = useOrbitsThemeStore((s) => s.themeName);
+  const themeSaving = useOrbitsThemeStore((s) => s.saving);
+  const themeError = useOrbitsThemeStore((s) => s.saveError);
+  const selectTheme = useOrbitsThemeStore((s) => s.selectTheme);
 
   const isPro = planInfo?.isPro ?? false;
   const activeTasks = planInfo?.usage.activeTasks ?? 0;
@@ -88,6 +100,38 @@ export default function SettingsScreen() {
             <Text style={styles.rowLabel}>Часовой пояс</Text>
             <Text style={styles.rowValue}>{user?.timezone ?? "—"}</Text>
           </View>
+        </View>
+
+        <View style={styles.section} accessibilityLabel="Оформление">
+          <Text style={styles.sectionTitle}>Оформление</Text>
+          {THEME_CHOICES.map(([value, label, copy]) => {
+            const selected = themeName === value;
+            const preview = ORBITS_THEMES[value];
+            return (
+              <Pressable
+                key={value}
+                testID={`orbits-theme-${value}`}
+                accessibilityRole="radio"
+                accessibilityLabel={`${label}. ${copy}`}
+                accessibilityState={{ selected, disabled: themeSaving, busy: themeSaving }}
+                disabled={themeSaving}
+                onPress={() => void selectTheme(value)}
+                style={[styles.themeChoice, selected && styles.themeChoiceSelected, themeSaving && styles.formatChoiceDisabled]}
+              >
+                <Text style={styles.formatRadio}>{selected ? "●" : "○"}</Text>
+                <View testID={`orbits-theme-preview-${value}`} style={[styles.themePreview, { backgroundColor: preview.background, borderColor: preview.borderSubtle }]}>
+                  <Text style={{ color: preview.textPrimary, fontWeight: "700" }}>Aa</Text>
+                </View>
+                <View style={styles.themeCopy}>
+                  <Text style={styles.formatLabel}>{label}</Text>
+                  <Text style={styles.formatExample}>{copy}</Text>
+                </View>
+                {selected && <Text style={styles.themeCheck}>✓</Text>}
+              </Pressable>
+            );
+          })}
+          {themeSaving && <ActivityIndicator testID="orbits-theme-saving" color="#6B5BFC" />}
+          {themeError && <Text accessibilityRole="alert" style={styles.formatError}>{themeError}</Text>}
         </View>
 
         <View style={styles.section} accessibilityLabel="Напоминания">
@@ -267,6 +311,11 @@ sectionTitle: {
   formatChoice: { flexDirection: 'row', gap: 12, alignItems: 'center', paddingVertical: 10, paddingHorizontal: 8, borderRadius: 10 },
   formatChoiceSelected: { backgroundColor: '#F3F1FF' },
   formatChoiceDisabled: { opacity: 0.55 },
+  themeChoice: { minHeight: 44, flexDirection: 'row', gap: 10, alignItems: 'center', paddingVertical: 8, paddingHorizontal: 8, borderRadius: 10 },
+  themeChoiceSelected: { backgroundColor: '#F3F1FF' },
+  themePreview: { width: 38, height: 38, borderRadius: 9, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  themeCopy: { flex: 1 },
+  themeCheck: { color: '#6B5BFC', fontSize: 18, fontWeight: '700' },
   formatRadio: { fontSize: 20, color: '#6B5BFC' },
   formatLabel: { fontSize: 15, fontWeight: '600', color: '#211D2E' },
   formatExample: { fontSize: 13, color: '#6B7280', marginTop: 2 },

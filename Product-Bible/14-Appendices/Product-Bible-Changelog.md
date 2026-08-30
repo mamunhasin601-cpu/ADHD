@@ -102,3 +102,10 @@ accessibility-проверки и approval должны предшествова
 Task 0039 идёт через Phase A (spec), Phase B (Today-first implementation) и
 отдельную Phase C (packs/monetization). Коммерческая модель visual packs остаётся
 открытой.
+
+## 2026-08-30 — Orbits theme preference
+
+- Documented the device-local warm/gray/dark background preference in the free/default Orbits pack and its warm fail-safe.
+- Clarified that selection is not billing, entitlement, account synchronization or server persistence; logout retains it.
+- Kept Focus Sparks and Focusiki as future paid alternative packs and Task 0039/Phase B in progress.
+- Recorded that source/test evidence is not physical-device, VoiceOver, TalkBack or large-text approval.

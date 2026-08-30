@@ -230,3 +230,7 @@ C-01 + S-02 -> D-04/S-05
 ### Task 0039 Phase B checkpoint
 
 Phase A is complete; Phase B.1 is merged; Phase B.2 implements the source-level Orbits Today reference screen. Task 0039 and full Phase B remain in progress pending runtime, physical-device and assistive-technology evidence and later truthful navigation mapping.
+
+### 2026-08-30 — Orbits Phase B.3
+
+Local Orbits warm/gray/dark preference and Today application are implemented. Orbits remains the free/default pack; paid Focus Sparks/Focusiki, device accessibility verification, and the remainder of Task 0039/Phase B are still pending.

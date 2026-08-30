@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { addCalendarDays } from '../lib/timezone';
+import { useOrbitsTheme } from '../theme/orbits';
 
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'] as const;
 
@@ -48,6 +49,7 @@ type WeekStripProps = {
 };
 
 export function WeekStrip({ selectedDate, todayDate, onSelectDate }: WeekStripProps) {
+  const theme = useOrbitsTheme();
   const days = buildWeekDays(selectedDate, todayDate);
   return (
     <View style={styles.row} accessibilityRole="tablist" testID="week-strip">
@@ -58,12 +60,12 @@ export function WeekStrip({ selectedDate, todayDate, onSelectDate }: WeekStripPr
           accessibilityRole="tab"
           accessibilityLabel={day.accessibilityLabel}
           accessibilityState={{ selected: day.selected }}
-          style={[styles.day, day.selected && styles.selectedDay]}
+          style={[styles.day, day.selected && { backgroundColor: theme.brand }]}
           testID={`week-day-${day.date}`}
         >
-          <Text style={[styles.weekday, day.selected && styles.selectedText]}>{day.weekday}</Text>
-          <Text style={[styles.number, day.selected && styles.selectedText]}>{day.dayNumber}</Text>
-          <View style={[styles.marker, day.today && styles.todayMarker]} testID={day.today ? 'today-marker' : undefined} />
+          <Text style={[styles.weekday, { color: day.selected ? theme.retryText : theme.textSecondary }]}>{day.weekday}</Text>
+          <Text style={[styles.number, { color: day.selected ? theme.retryText : theme.textPrimary }]}>{day.dayNumber}</Text>
+          <View style={[styles.marker, day.today && { backgroundColor: day.selected ? theme.retryText : theme.brand }]} testID={day.today ? 'today-marker' : undefined} />
         </Pressable>
       ))}
     </View>

@@ -103,3 +103,7 @@ Task 0039 утверждает направление **Focus is calm but alive*
 фон, семантическая палитра, Orbits как free/default и Today как первый reference
 screen. Это не PDR о runtime-реализации; rollout, packs, billing и entitlement
 требуют отдельных evidence gates.
+
+## 2026-08-30 — Orbits background choice is local, not an entitlement
+
+Warm, gray and dark are included user-selectable backgrounds in the free/default Orbits pack. The choice stays on the device across logout/account changes, fails safely to warm, and is independent of authentication and API data. Focus Sparks and Focusiki remain future paid packs. This decision does not claim physical-device validation or completion of Task 0039/Phase B.

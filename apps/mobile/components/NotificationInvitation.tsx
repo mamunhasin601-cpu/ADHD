@@ -1,19 +1,21 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useNotificationLifecycle } from '../lib/notification-lifecycle';
+import { useOrbitsTheme } from '../theme/orbits';
 
 export function NotificationInvitation() {
+  const theme = useOrbitsTheme();
   const { busy, error, requestPermission, deferInvitation } = useNotificationLifecycle();
   return (
-    <View style={styles.card} accessibilityLabel="Предложение настроить напоминания">
-      <Text style={styles.title}>Хотите получать напоминания?</Text>
-      <Text style={styles.body}>Focus сможет напомнить о запланированном действии. Это можно изменить позже.</Text>
-      {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
+    <View style={[styles.card, { backgroundColor: theme.activeSurface }]} accessibilityLabel="Предложение настроить напоминания">
+      <Text style={[styles.title, { color: theme.activeSurfaceText }]}>Хотите получать напоминания?</Text>
+      <Text style={[styles.body, { color: theme.textSecondary }]}>Focus сможет напомнить о запланированном действии. Это можно изменить позже.</Text>
+      {error && <Text accessibilityRole="alert" style={[styles.error, { color: theme.errorPrimary }]}>{error}</Text>}
       <View style={styles.actions}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Включить напоминания" accessibilityState={{ disabled: busy, busy }} disabled={busy} onPress={requestPermission} style={[styles.primary, busy && styles.disabled]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Включить напоминания" accessibilityState={{ disabled: busy, busy }} disabled={busy} onPress={requestPermission} style={[styles.primary, { backgroundColor: theme.brand }, busy && styles.disabled]}>
           {busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryText}>Включить напоминания</Text>}
         </Pressable>
         <Pressable accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy} onPress={deferInvitation} style={styles.secondary}>
-          <Text style={styles.secondaryText}>Не сейчас</Text>
+          <Text style={[styles.secondaryText, { color: theme.brand }]}>Не сейчас</Text>
         </Pressable>
       </View>
     </View>

@@ -216,3 +216,7 @@ Concept images и mockups остаются design references, а не production
 ### Phase B status update — Today reference screen
 
 Phase A is complete and Phase B.1 is merged. Phase B.2 now integrates the Orbits Today reference screen at source level (see `0039b2-orbits-today-reference-screen.md`); Task 0039 and full Phase B remain in progress. This does not install five-item navigation, theme selection/persistence, or establish physical-device/accessibility approval.
+
+## Phase B.3 note (2026-08-30)
+
+Device-local selection of the free Orbits `warm`, `gray`, and `dark` backgrounds is implemented with warm as fail-safe. It is independent of authentication, billing and API state and survives logout. Focus Sparks and Focusiki remain future paid alternative packs. Task 0039 and Phase B remain in progress; source tests are not physical-device or assistive-technology approval.

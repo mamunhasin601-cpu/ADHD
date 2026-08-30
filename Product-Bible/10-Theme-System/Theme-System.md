@@ -206,3 +206,7 @@ Focus character используется для tips, congratulations, recovery 
 Этот документ не утверждает наличие готовых tokens, SVG/bitmap assets, Theme
 Worlds, Focus Sparks, Focusiki, billing, pricing, entitlement или rollout на
 каждый экран. Это продуктовая политика и план evidence-first реализации.
+
+## Orbits background preference (Phase B.3, 2026-08-30)
+
+Orbits is the free/default visual pack. Its user-selectable backgrounds are exactly warm, gray and dark; warm is the default and local fail-safe. This device-local preference is neither billing nor entitlement and is not synchronized through an account or server. Focus Sparks and Focusiki remain future paid alternative packs. Implementation tests do not establish physical-device, VoiceOver, TalkBack or large-text approval, and Task 0039/Phase B remain in progress.
