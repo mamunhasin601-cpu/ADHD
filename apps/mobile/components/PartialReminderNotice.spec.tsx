@@ -53,7 +53,8 @@ describe('PartialReminderNotice', () => {
     const flattened = Object.assign({}, ...notice.props.style.filter(Boolean));
     expect(flattened.backgroundColor).toBe(ORBITS_THEMES.dark.rewardSoft);
     expect(flattened.borderColor).toBe(ORBITS_THEMES.dark.rewardPrimary);
-    expect(screen.getByText('Задачи перенесены').props.style.at(-1).color).toBe(ORBITS_THEMES.dark.rewardPrimary);
+    const titleStyle = screen.getByText('Задачи перенесены').props.style;
+    expect(titleStyle[titleStyle.length - 1].color).toBe(ORBITS_THEMES.dark.rewardPrimary);
   });
 
 });

@@ -190,7 +190,8 @@ describe('RecoverySection — theme surfaces', () => {
     const flattened = Object.assign({}, ...state.props.style.filter(Boolean));
     expect(flattened.backgroundColor).toBe(ORBITS_THEMES.dark.surfacePrimary);
     expect(flattened.borderColor).toBe(ORBITS_THEMES.dark.borderSubtle);
-    expect(screen.getByText('Часовой пояс не определён').props.style.at(-1).color).toBe(ORBITS_THEMES.dark.textPrimary);
+    const titleStyle = screen.getByText('Часовой пояс не определён').props.style;
+    expect(titleStyle[titleStyle.length - 1].color).toBe(ORBITS_THEMES.dark.textPrimary);
   });
 });
 
