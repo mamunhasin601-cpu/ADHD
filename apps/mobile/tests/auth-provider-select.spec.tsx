@@ -4,7 +4,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { getOAuthProviderAvailability } from '../lib/api/auth';
 import { useAuthStore } from '../stores/auth.store';
-import AuthProviderSelectScreen from './auth-provider-select';
+import AuthProviderSelectScreen from '../app/auth-provider-select';
 
 jest.mock('../lib/api/auth', () => ({ getOAuthProviderAvailability: jest.fn() }));
 jest.mock('../stores/auth.store', () => ({ useAuthStore: jest.fn() }));
