@@ -7,6 +7,8 @@ import * as Notifications from 'expo-notifications';
 import { NotificationPermissionBanner } from '../components/NotificationPermissionBanner';
 import { NotificationLifecycleProvider, useNotificationLifecycle } from '../lib/notification-lifecycle';
 import { resolveAuthRedirect } from '../lib/auth-routing';
+import { OrbitsThemeProvider } from '../theme/orbits';
+import { useOrbitsThemeStore } from '../stores/orbits-theme.store';
 
 // Настройка обработчика уведомлений
 Notifications.setNotificationHandler({
@@ -28,6 +30,9 @@ const queryClient = new QueryClient({
 
 export default function RootLayout() {
   const bootstrap = useAuthStore((s) => s.bootstrap);
+  const bootstrapTheme = useOrbitsThemeStore((s) => s.bootstrap);
+  const themeName = useOrbitsThemeStore((s) => s.themeName);
+  const themeHydrated = useOrbitsThemeStore((s) => s.hydrated);
   const user = useAuthStore((s) => s.user);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isLoading = useAuthStore((s) => s.isLoading);
@@ -44,6 +49,10 @@ export default function RootLayout() {
   useEffect(() => {
     void bootstrap();
   }, [bootstrap]);
+
+  useEffect(() => {
+    void bootstrapTheme();
+  }, [bootstrapTheme]);
 
   // Notification-tap listener: routes generic task-reminder taps to Today.
   useEffect(() => {
@@ -85,6 +94,7 @@ export default function RootLayout() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <OrbitsThemeProvider theme={themeName}>
       <NotificationLifecycleProvider userId={user?.id}>
       <View style={styles.rootContainer}>
         <PermissionBanner authenticated={Boolean(user)} />
@@ -109,8 +119,14 @@ export default function RootLayout() {
             <ActivityIndicator color="#6B5BFC" />
           </View>
         )}
+        {!themeHydrated && (
+          <View style={styles.themeLoadingContainer} testID="theme-bootstrap-loading">
+            <ActivityIndicator color="#6B5BFC" />
+          </View>
+        )}
       </View>
       </NotificationLifecycleProvider>
+      </OrbitsThemeProvider>
     </QueryClientProvider>
   );
 }
@@ -130,5 +146,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
     zIndex: 1,
+  },
+  themeLoadingContainer: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FCF9F6',
+    zIndex: 2,
   },
 });

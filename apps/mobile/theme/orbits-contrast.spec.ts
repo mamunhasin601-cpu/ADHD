@@ -11,6 +11,13 @@ describe('actual Orbits Today small-text contrast pairs', () => {
         error: [theme.errorPrimary, theme.errorSoft],
         current: [theme.activeSurfaceText, theme.activeSurface],
         retry: [theme.retryText, theme.brandPressed],
+        notificationSecondary: [theme.activeSurfaceText, theme.activeSurface],
+        nowEyebrow: [theme.activeBorder, theme.surfacePrimary],
+        nowError: [theme.errorPrimary, theme.surfacePrimary],
+        recoveryBanner: [theme.rewardPrimary, theme.rewardSoft],
+        recoveryPrimary: [theme.textPrimary, theme.surfacePrimary],
+        recoverySecondary: [theme.textSecondary, theme.surfacePrimary],
+        recoveryAction: [theme.activeSurfaceText, theme.activeSurface],
       } as const;
 
       for (const [pairName, [foreground, background]] of Object.entries(productionPairs)) {

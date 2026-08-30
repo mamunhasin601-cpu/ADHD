@@ -185,8 +185,8 @@ export default function TodayScreen() {
 
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar style="auto" />
+    <SafeAreaView testID="today-screen" style={[styles.container, { backgroundColor: theme.background }]}>
+      <StatusBar style={theme.name === 'dark' ? 'light' : 'dark'} />
       <TodayHeader
         isToday={isToday}
         now={currentTime}
@@ -239,6 +239,7 @@ export default function TodayScreen() {
 
       {!isLoading && !isError && !hasPlanEntries && (
         <EmptyState
+          orbits
           emoji="○"
           title={isToday ? "День пока свободен" : "На этот день пока нет задач"}
           description={
@@ -335,6 +336,7 @@ export default function TodayScreen() {
           )}
           {timelineEntries.length === 0 ? (
             <EmptyState
+              orbits
               emoji="📅"
               title="Нет задач со временем"
               description="Коснись таймлайна, чтобы запланировать задачу на конкретное время."

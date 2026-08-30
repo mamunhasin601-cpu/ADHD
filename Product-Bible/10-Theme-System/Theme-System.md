@@ -1,6 +1,6 @@
 # Theme System
 
-> Статус: approved product direction; implementation planned, not runtime-verified.
+> Статус: approved product direction; Orbits foundation and local background preference implemented, physical-device verification incomplete.
 >
 > Компонентная реализация, токены и архитектурные ограничения должны быть согласованы с [Frontend](../../docs/Frontend.md), [Architecture](../../docs/Architecture.md) и [Engineering Handbook v5](../../docs/Engineering-Handbook-v5.md), но не дублируются здесь.
 
@@ -23,9 +23,9 @@ alive**. Тема поддерживает ориентацию и возвра�
 #### 2.1 Базовая тема
 
 Базовая тема — **Orbits**, бесплатная и доступная без entitlement. Направление
-фона — тёплый светлый вместо холодного чисто-белого. Точные hex-значения,
-типографические tokens и размеры поверхностей появятся только после
-implementation/accessibility review.
+фона — тёплый светлый вместо холодного чисто-белого. Semantic Orbits tokens,
+утверждённые navigation bitmap assets и локальный выбор warm/gray/dark уже
+реализованы; окончательное approval требует physical-device и accessibility review.
 
 #### 2.2 Theme packs
 
@@ -149,8 +149,8 @@ animation и несколько равнозначных CTA. Пустые и ov
 
 Fallback остаётся спокойным, читаемым и функционально полным. Настройки
 персонализации должны позволять preview/reset, но не требовать их до действия.
-Dark theme остаётся только future compatibility consideration и не заявляется
-как реализованная возможность.
+Dark входит в локально выбираемые Orbits backgrounds, но ещё не имеет
+physical-device, VoiceOver, TalkBack и large-text approval.
 
 ### 6. Product and monetization policy
 
@@ -172,8 +172,9 @@ Sparks и Focusiki — будущая дополнительная эмоцио�
 
 #### 6.4 Theme previews and reset
 
-Будущий профиль показывает preview и reset; ошибка загрузки pack честно
-возвращает Orbits. Runtime preview, store и entitlement пока не реализованы.
+Настройки уже показывают preview и локально сохраняют warm/gray/dark внутри
+бесплатного Orbits. Reset, загрузка альтернативных packs и entitlement остаются
+будущими отдельными контрактами; ошибка будущего pack должна честно возвращать Orbits.
 
 ### 7. Content and quality rules
 
@@ -203,6 +204,12 @@ Focus character используется для tips, congratulations, recovery 
 
 ## 8. Honesty boundary
 
-Этот документ не утверждает наличие готовых tokens, SVG/bitmap assets, Theme
-Worlds, Focus Sparks, Focusiki, billing, pricing, entitlement или rollout на
-каждый экран. Это продуктовая политика и план evidence-first реализации.
+В Orbits уже существуют semantic tokens, утверждённые navigation bitmap assets,
+Today reference screen и локальный выбор warm/gray/dark. Этот документ не
+утверждает полный rollout на каждый экран, готовые Theme Worlds, production
+Focus Sparks/Focusiki, billing, pricing или entitlement. Physical-device,
+VoiceOver, TalkBack и large-text approval также ещё не получены.
+
+## Orbits background preference (Phase B.3, 2026-08-30)
+
+Orbits is the free/default visual pack. Its user-selectable backgrounds are exactly warm, gray and dark; warm is the default and local fail-safe. This device-local preference is neither billing nor entitlement and is not synchronized through an account or server. Focus Sparks and Focusiki remain future paid alternative packs. Implementation tests do not establish physical-device, VoiceOver, TalkBack or large-text approval, and Task 0039/Phase B remain in progress.

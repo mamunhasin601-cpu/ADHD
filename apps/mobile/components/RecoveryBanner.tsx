@@ -27,6 +27,7 @@ import {
 } from "../lib/timezone";
 import { useAuthStore } from "../stores/auth.store";
 import { formatWallClock, uses12HourClock } from "../lib/time-format";
+import { useOrbitsTheme } from "../theme/orbits";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -71,6 +72,7 @@ export function RecoveryBanner({
   isConfirming = false,
   mutationError = null,
 }: Props) {
+  const theme = useOrbitsTheme();
   const timeFormat = useAuthStore(
     (state) => state.user?.timeFormat ?? "SYSTEM",
   );
@@ -291,7 +293,7 @@ export function RecoveryBanner({
     <>
       <Pressable
         testID="recovery-banner"
-        style={styles.banner}
+        style={[styles.banner, { backgroundColor: theme.rewardSoft, borderColor: theme.rewardPrimary }]}
         onPress={openSheet}
         accessible
         accessibilityRole="button"
@@ -301,19 +303,19 @@ export function RecoveryBanner({
         }
       >
         <View style={styles.bannerLeft}>
-          <Text style={styles.bannerIcon}>↩</Text>
+          <Text style={[styles.bannerIcon, { color: theme.rewardPrimary }]}>↩</Text>
           <View style={styles.bannerTextCol}>
-            <Text style={styles.bannerTitle}>
+            <Text style={[styles.bannerTitle, { color: theme.rewardPrimary }]}>
               {overdueTasks.length === 1
                 ? "1 незавершённая задача"
                 : `${overdueTasks.length} незавершённых задачи`}
             </Text>
-            <Text style={styles.bannerSubtitle}>
+            <Text style={[styles.bannerSubtitle, { color: theme.textPrimary }]}>
               Нажмите, чтобы выбрать, что делать дальше
             </Text>
           </View>
         </View>
-        <Text style={styles.bannerChevron}>›</Text>
+        <Text style={[styles.bannerChevron, { color: theme.rewardPrimary }]}>›</Text>
       </Pressable>
 
       <Modal
@@ -326,30 +328,30 @@ export function RecoveryBanner({
         accessibilityViewIsModal
       >
         <SafeAreaView style={styles.overlay}>
-          <View style={styles.sheet}>
+          <View testID="recovery-sheet-surface" style={[styles.sheet, { backgroundColor: theme.surfacePrimary }]}>
             {/* Invalid timezone — neutral retryable error */}
             {!timezoneValid ? (
               <View style={styles.timezoneError} testID="timezone-error-state">
-                <Text style={styles.timezoneErrorText}>
+                <Text style={[styles.timezoneErrorText, { color: theme.textPrimary }]}>
                   Не удалось определить ваш часовой пояс. Обновите приложение
                   или проверьте настройки профиля.
                 </Text>
                 <Pressable
                   testID="timezone-error-close"
-                  style={styles.timezoneErrorClose}
+                  style={[styles.timezoneErrorClose, { backgroundColor: theme.activeSurface, borderColor: theme.activeBorder }]}
                   onPress={closeSheet}
                   accessible
                   accessibilityRole="button"
                   accessibilityLabel="Закрыть"
                 >
-                  <Text style={styles.timezoneErrorCloseText}>Закрыть</Text>
+                  <Text style={[styles.timezoneErrorCloseText, { color: theme.activeSurfaceText }]}>Закрыть</Text>
                 </Pressable>
               </View>
             ) : (
               <>
                 <View style={styles.sheetHeader}>
-                  <Text style={styles.sheetTitle}>Незавершённые задачи</Text>
-                  <Text style={styles.sheetSubtitle}>
+                  <Text style={[styles.sheetTitle, { color: theme.textPrimary }]}>Незавершённые задачи</Text>
+                  <Text style={[styles.sheetSubtitle, { color: theme.textSecondary }]}>
                     Выберите задачи и куда их перенести. Неотмеченные задачи
                     останутся без изменений.
                   </Text>
@@ -369,14 +371,15 @@ export function RecoveryBanner({
                     return (
                       <View
                         key={task.id}
-                        style={styles.taskRow}
+                        style={[styles.taskRow, { borderBottomColor: theme.borderSubtle }]}
                         testID={`task-row-${task.id}`}
                       >
                         <Pressable
                           testID={`checkbox-${task.id}`}
                           style={[
                             styles.checkbox,
-                            isSelected && styles.checkboxChecked,
+                            { backgroundColor: theme.surfacePrimary, borderColor: theme.borderSubtle },
+                            isSelected && { backgroundColor: theme.brand, borderColor: theme.brand },
                           ]}
                           onPress={() => toggleTask(task.id)}
                           accessible
@@ -385,7 +388,7 @@ export function RecoveryBanner({
                           accessibilityLabel={`Выбрать задачу: ${task.title}`}
                         >
                           {isSelected && (
-                            <Text style={styles.checkmark}>✓</Text>
+                            <Text style={[styles.checkmark, { color: theme.retryText }]}>✓</Text>
                           )}
                         </Pressable>
 
@@ -394,13 +397,13 @@ export function RecoveryBanner({
                             testID={`task-title-${task.id}`}
                             style={[
                               styles.taskTitle,
-                              !isSelected && styles.taskTitleUnselected,
+                              { color: isSelected ? theme.textPrimary : theme.textSecondary },
                             ]}
                             numberOfLines={2}
                           >
                             {task.title}
                           </Text>
-                          <Text style={styles.taskDate}>
+                          <Text style={[styles.taskDate, { color: theme.textSecondary }]}>
                             Было: {formatOverdueDate(task.startTime)}
                           </Text>
 
@@ -409,7 +412,7 @@ export function RecoveryBanner({
                               style={styles.destinationArea}
                               testID={`dest-area-${task.id}`}
                             >
-                              <Text style={styles.destinationLabel}>
+                              <Text style={[styles.destinationLabel, { color: theme.textPrimary }]}>
                                 Перенести:
                               </Text>
                               <View style={styles.destinationButtons}>
@@ -417,7 +420,8 @@ export function RecoveryBanner({
                                   testID={`inbox-btn-${task.id}`}
                                   style={[
                                     styles.destButton,
-                                    dest === "inbox" && styles.destButtonActive,
+                                    { backgroundColor: theme.surfaceMuted, borderColor: theme.borderSubtle },
+                                    dest === "inbox" && { backgroundColor: theme.activeSurface, borderColor: theme.activeBorder },
                                   ]}
                                   onPress={() => setInbox(task.id)}
                                   accessible
@@ -430,8 +434,7 @@ export function RecoveryBanner({
                                   <Text
                                     style={[
                                       styles.destButtonText,
-                                      dest === "inbox" &&
-                                        styles.destButtonTextActive,
+                                      { color: dest === "inbox" ? theme.activeSurfaceText : theme.textPrimary },
                                     ]}
                                   >
                                     В «Мысли»
@@ -442,8 +445,9 @@ export function RecoveryBanner({
                                   testID={`pick-time-btn-${task.id}`}
                                   style={[
                                     styles.destButton,
-                                    dest !== null && dest !== 'inbox' && styles.destButtonActive,
-                                    pickerOpenForThis && styles.destButtonPicking,
+                                    { backgroundColor: theme.surfaceMuted, borderColor: theme.borderSubtle },
+                                    dest !== null && dest !== 'inbox' && { backgroundColor: theme.activeSurface, borderColor: theme.activeBorder },
+                                    pickerOpenForThis && { backgroundColor: theme.activeSurface, borderColor: theme.activeBorder },
                                   ]}
                                   onPress={() => openDatePicker(task.id)}
                                   accessible
@@ -453,7 +457,7 @@ export function RecoveryBanner({
                                 >
                                   <Text style={[
                                     styles.destButtonText,
-                                    dest !== null && dest !== 'inbox' && styles.destButtonTextActive,
+                                    { color: dest !== null && dest !== 'inbox' ? theme.activeSurfaceText : theme.textPrimary },
                                   ]}>
                                     {pickerState?.phase === 'date' && pickerState.taskId === task.id
                                       ? 'Выбор даты…'
@@ -468,8 +472,9 @@ export function RecoveryBanner({
                                 testID={`dest-preview-${task.id}`}
                                 style={[
                                   styles.destinationPreview,
-                                  preview.warn && styles.destinationPreviewWarn,
-                                  !dest && !dstErrors[task.id] && styles.destinationPreviewEmpty,
+                                  { color: theme.activeBorder },
+                                  preview.warn && { color: theme.errorPrimary, fontStyle: "normal" },
+                                  !dest && !dstErrors[task.id] && { color: theme.textSecondary, fontStyle: "normal" },
                                 ]}
                                 accessibilityLabel={`Назначение: ${preview.text}`}
                               >
@@ -507,28 +512,28 @@ export function RecoveryBanner({
                 {mutationError && (
                   <View
                     testID="mutation-error-banner"
-                    style={styles.errorBanner}
+                    style={[styles.errorBanner, { backgroundColor: theme.errorSoft, borderColor: theme.errorPrimary }]}
                   >
-                    <Text style={styles.errorText}>{mutationError}</Text>
+                    <Text style={[styles.errorText, { color: theme.errorPrimary }]}>{mutationError}</Text>
                   </View>
                 )}
 
                 <View style={styles.actions}>
                   <Pressable
                     testID="cancel-btn"
-                    style={styles.cancelButton}
+                    style={[styles.cancelButton, { backgroundColor: theme.activeSurface, borderColor: theme.activeBorder }]}
                     onPress={closeSheet}
                     disabled={isConfirming}
                     accessible
                     accessibilityRole="button"
                     accessibilityLabel="Отмена — никаких изменений"
                   >
-                    <Text style={styles.cancelButtonText}>Отмена</Text>
+                    <Text style={[styles.cancelButtonText, { color: theme.activeSurfaceText }]}>Отмена</Text>
                   </Pressable>
 
                   <Pressable
                     testID="confirm-btn"
-                    style={[styles.confirmButton, !canConfirm && styles.confirmButtonDisabled]}
+                    style={[styles.confirmButton, { backgroundColor: theme.brandPressed }, !canConfirm && { backgroundColor: theme.surfaceMuted, borderColor: theme.borderSubtle }]}
                     onPress={handleConfirm}
                     disabled={!canConfirm}
                     accessible
@@ -543,9 +548,9 @@ export function RecoveryBanner({
                     accessibilityState={{ disabled: !canConfirm, busy: isConfirming }}
                   >
                     {isConfirming ? (
-                      <ActivityIndicator testID="confirm-spinner" color="#FFFFFF" size="small" />
+                      <ActivityIndicator testID="confirm-spinner" color={theme.retryText} size="small" />
                     ) : (
-                      <Text style={styles.confirmButtonText}>
+                      <Text style={[styles.confirmButtonText, { color: canConfirm ? theme.retryText : theme.textSecondary }]}>
                         {selectedIds.size === 0
                           ? 'Выберите задачи'
                           : !allValid
@@ -623,6 +628,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 12,
     backgroundColor: "#F3F4F6",
+    borderWidth: 1,
     borderRadius: 8,
     minHeight: 44,
     justifyContent: "center",
@@ -726,6 +732,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 10,
     backgroundColor: "#F3F4F6",
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },

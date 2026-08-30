@@ -18,6 +18,7 @@ import { RecoverySection } from './RecoverySection';
 import { apiClient } from '../lib/api-client';
 import { getLocalDateString, toCanonicalDateParam } from '../lib/timezone';
 import { useAuthStore } from '../stores/auth.store';
+import { ORBITS_THEMES, OrbitsThemeProvider, type OrbitsThemeName } from '../theme/orbits';
 
 // ── Boundary mocks ───────────────────────────────────────────────────────────
 
@@ -95,6 +96,7 @@ function renderSection(props?: {
   selectedDate?: Date;
   onTimezoneInvalid?: () => void;
   strictMode?: boolean;
+  theme?: OrbitsThemeName;
 }) {
   queryClient = new QueryClient({
     defaultOptions: {
@@ -121,7 +123,8 @@ function renderSection(props?: {
       />
     </QueryClientProvider>
   );
-  const utils = render(props?.strictMode ? <React.StrictMode>{section}</React.StrictMode> : section);
+  const themedSection = <OrbitsThemeProvider theme={props?.theme ?? 'warm'}>{section}</OrbitsThemeProvider>;
+  const utils = render(props?.strictMode ? <React.StrictMode>{themedSection}</React.StrictMode> : themedSection);
   unmountTree = utils.unmount;
   return utils;
 }
@@ -179,6 +182,18 @@ afterEach(async () => {
 });
 
 // ── Tests ────────────────────────────────────────────────────────────────────
+
+describe('RecoverySection — theme surfaces', () => {
+  it('uses dark semantic tokens for the timezone-unavailable state', () => {
+    renderSection({ profileTimezone: null, theme: 'dark' });
+    const state = screen.getByTestId('recovery-timezone-unavailable');
+    const flattened = Object.assign({}, ...state.props.style.filter(Boolean));
+    expect(flattened.backgroundColor).toBe(ORBITS_THEMES.dark.surfacePrimary);
+    expect(flattened.borderColor).toBe(ORBITS_THEMES.dark.borderSubtle);
+    const titleStyle = screen.getByText('Часовой пояс не определён').props.style;
+    expect(titleStyle[titleStyle.length - 1].color).toBe(ORBITS_THEMES.dark.textPrimary);
+  });
+});
 
 describe('RecoverySection — banner presence', () => {
   it('does not render the banner when there are no overdue tasks', async () => {

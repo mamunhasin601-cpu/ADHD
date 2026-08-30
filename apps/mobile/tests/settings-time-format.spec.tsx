@@ -9,12 +9,24 @@ import SettingsScreen from "../app/(tabs)/settings";
 import { apiClient } from "../lib/api-client";
 
 const mockSetUser = jest.fn();
+const mockSelectTheme = jest.fn();
 let mockUser: any;
+let mockThemeName: 'warm' | 'gray' | 'dark' = 'warm';
+let mockThemeSaving = false;
+let mockThemeError: string | null = null;
 jest.mock("../stores/auth.store", () => ({
   useAuthStore: (selector: any) =>
     selector({ user: mockUser, setUser: mockSetUser, logout: jest.fn() }),
 }));
 jest.mock("../lib/api-client", () => ({ apiClient: { patch: jest.fn() } }));
+jest.mock("../stores/orbits-theme.store", () => ({
+  useOrbitsThemeStore: (selector: any) => selector({
+    themeName: mockThemeName,
+    saving: mockThemeSaving,
+    saveError: mockThemeError,
+    selectTheme: mockSelectTheme,
+  }),
+}));
 jest.mock("../lib/api/plan", () => ({
   usePlanInfo: () => ({
     data: { isPro: false, usage: { activeTasks: 0 } },
@@ -40,6 +52,9 @@ describe("settings time format", () => {
     mockNotificationPermission = "not-asked";
     mockNotificationBusy = false;
     mockNotificationError = null;
+    mockThemeName = "warm";
+    mockThemeSaving = false;
+    mockThemeError = null;
     mockUser = { id: "u", timezone: "Europe/Moscow", timeFormat: "SYSTEM" };
   });
   it("shows a real SYSTEM clock example", () => {
@@ -114,6 +129,32 @@ describe("settings time format", () => {
     expect(enable.props.accessibilityState).toEqual({ disabled: true, busy: true });
     expect(screen.getByRole("alert").props.children).toContain("Не удалось");
     expect(screen.getByTestId("time-format-H24").props.accessibilityState.disabled).toBe(false);
+  });
+
+  it("shows all Orbits choices with radio semantics and the active value", () => {
+    mockThemeName = "gray";
+    render(<SettingsScreen />);
+    expect(screen.getByTestId("orbits-theme-warm").props.accessibilityRole).toBe("radio");
+    expect(screen.getByTestId("orbits-theme-gray").props.accessibilityState.selected).toBe(true);
+    expect(screen.getByTestId("orbits-theme-dark").props.accessibilityState.selected).toBe(false);
+    expect(screen.getByText("Тёплая")).toBeTruthy();
+    expect(screen.getByText("Серая")).toBeTruthy();
+    expect(screen.getByText("Тёмная")).toBeTruthy();
+  });
+
+  it("changes only the local theme preference", () => {
+    render(<SettingsScreen />);
+    fireEvent.press(screen.getByTestId("orbits-theme-dark"));
+    expect(mockSelectTheme).toHaveBeenCalledWith("dark");
+    expect(apiClient.patch).not.toHaveBeenCalled();
+  });
+
+  it("exposes theme busy and sanitized error states", () => {
+    mockThemeSaving = true;
+    mockThemeError = "Не удалось сохранить оформление. Попробуйте ещё раз.";
+    render(<SettingsScreen />);
+    expect(screen.getByTestId("orbits-theme-dark").props.accessibilityState).toEqual({ selected: false, disabled: true, busy: true });
+    expect(screen.getByText(mockThemeError).props.accessibilityRole).toBe("alert");
   });
 
 });

@@ -14,6 +14,7 @@ jest.mock("../stores/auth.store", () => ({
 import React from "react";
 import { render, fireEvent, act, screen } from "@testing-library/react-native";
 import { RecoveryBanner } from "./RecoveryBanner";
+import { ORBITS_THEMES, OrbitsThemeProvider, type OrbitsThemeName } from "../theme/orbits";
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -78,6 +79,7 @@ const task2 = makeTask("t2", "Вторая задача");
 
 function renderBanner(
   overrides: Partial<React.ComponentProps<typeof RecoveryBanner>> = {},
+  themeName: OrbitsThemeName = "warm",
 ) {
   const onConfirm = jest.fn();
   const props = {
@@ -89,7 +91,7 @@ function renderBanner(
     reminderSyncPartial: false,
     ...overrides,
   };
-  return { ...render(<RecoveryBanner {...props} />), onConfirm };
+  return { ...render(<OrbitsThemeProvider theme={themeName}><RecoveryBanner {...props} /></OrbitsThemeProvider>), onConfirm };
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -108,6 +110,19 @@ describe("RecoveryBanner — banner absent/present", () => {
   it("banner shows count for multiple tasks", () => {
     renderBanner({ overdueTasks: [task1, task2] });
     expect(screen.getByText(/2 незавершённых задачи/)).toBeTruthy();
+  });
+});
+
+describe("RecoveryBanner — Orbits theme surfaces", () => {
+  it("uses semantic dark tokens for the banner and sheet", () => {
+    renderBanner({}, "dark");
+    const banner = screen.getByTestId("recovery-banner");
+    const bannerStyle = Object.assign({}, ...banner.props.style.filter(Boolean));
+    expect(bannerStyle.backgroundColor).toBe(ORBITS_THEMES.dark.rewardSoft);
+    expect(bannerStyle.borderColor).toBe(ORBITS_THEMES.dark.rewardPrimary);
+    fireEvent.press(banner);
+    const sheetStyle = Object.assign({}, ...screen.getByTestId("recovery-sheet-surface").props.style.filter(Boolean));
+    expect(sheetStyle.backgroundColor).toBe(ORBITS_THEMES.dark.surfacePrimary);
   });
 });
 

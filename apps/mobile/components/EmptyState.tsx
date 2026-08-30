@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { useOrbitsTheme } from '../theme/orbits';
 
 interface Props {
   emoji: string;
@@ -6,20 +7,22 @@ interface Props {
   description: string;
   actionLabel?: string;
   onAction?: () => void;
+  orbits?: boolean;
 }
 
 /**
  * Дружелюбное сообщение для пустых экранов.
  * Используется когда нет задач на таймлайне, в inbox, или при первом запуске.
  */
-export function EmptyState({ emoji, title, description, actionLabel, onAction }: Props) {
+export function EmptyState({ emoji, title, description, actionLabel, onAction, orbits = false }: Props) {
+  const theme = useOrbitsTheme();
   return (
     <View style={styles.container}>
       <Text style={styles.emoji}>{emoji}</Text>
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.description}>{description}</Text>
+      <Text style={[styles.title, orbits && { color: theme.textPrimary }]}>{title}</Text>
+      <Text style={[styles.description, orbits && { color: theme.textSecondary }]}>{description}</Text>
       {actionLabel && onAction && (
-        <Pressable style={styles.button} onPress={onAction}>
+        <Pressable style={[styles.button, orbits && { backgroundColor: theme.brand }]} onPress={onAction}>
           <Text style={styles.buttonText}>{actionLabel}</Text>
         </Pressable>
       )}

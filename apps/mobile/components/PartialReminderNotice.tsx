@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { useOrbitsTheme } from '../theme/orbits';
 
 interface Props {
   /** Called when the user dismisses the notice. */
@@ -14,17 +15,18 @@ interface Props {
  * Copy is neutral, actionable, and free of task titles or IDs.
  */
 export function PartialReminderNotice({ onDismiss }: Props) {
+  const theme = useOrbitsTheme();
   return (
     <View
       testID="partial-reminder-notice"
-      style={styles.container}
+      style={[styles.container, { backgroundColor: theme.rewardSoft, borderColor: theme.rewardPrimary }]}
       accessible
       accessibilityRole="alert"
       accessibilityLabel="Задачи перенесены. Некоторые напоминания не удалось обновить. Откройте перенесённые задачи и сохраните время заново."
     >
       <View style={styles.content}>
-        <Text style={styles.title}>Задачи перенесены</Text>
-        <Text style={styles.body}>
+        <Text style={[styles.title, { color: theme.rewardPrimary }]}>Задачи перенесены</Text>
+        <Text style={[styles.body, { color: theme.textPrimary }]}>
           Некоторые напоминания не удалось обновить. Откройте перенесённые
           задачи и сохраните время заново, если нужно напоминание.
         </Text>
@@ -37,7 +39,7 @@ export function PartialReminderNotice({ onDismiss }: Props) {
         accessibilityRole="button"
         accessibilityLabel="Закрыть уведомление"
       >
-        <Text style={styles.dismissText}>✕</Text>
+        <Text style={[styles.dismissText, { color: theme.rewardPrimary }]}>✕</Text>
       </Pressable>
     </View>
   );
