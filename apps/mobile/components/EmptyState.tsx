@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useOrbitsTheme } from '../theme/orbits';
 
 interface Props {
-  emoji: string;
+  emoji?: string;
   title: string;
   description: string;
   actionLabel?: string;
@@ -18,7 +18,7 @@ export function EmptyState({ emoji, title, description, actionLabel, onAction, o
   const theme = useOrbitsTheme();
   return (
     <View style={styles.container}>
-      <Text style={styles.emoji}>{emoji}</Text>
+      {emoji ? <Text style={styles.emoji}>{emoji}</Text> : null}
       <Text style={[styles.title, orbits && { color: theme.textPrimary }]}>{title}</Text>
       <Text style={[styles.description, orbits && { color: theme.textSecondary }]}>{description}</Text>
       {actionLabel && onAction && (
