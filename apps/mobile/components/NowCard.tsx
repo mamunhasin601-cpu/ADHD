@@ -171,7 +171,7 @@ export function NowCard({
 
   return (
     <View style={[styles.card, { backgroundColor: theme.surfacePrimary, borderColor: theme.borderSubtle, shadowColor: theme.elevationShadow }]} accessibilityRole="summary">
-      <Text style={[styles.eyebrow, { color: theme.brand }]}>Сейчас</Text>
+      <Text style={[styles.eyebrow, { color: theme.activeBorder }]}>Сейчас</Text>
       <Text style={[styles.context, { color: theme.textSecondary }]}>
         {isStarted ? "Начато" : isCurrent ? "Запланировано сейчас" : "Ближайшее действие"}
       </Text>
@@ -187,7 +187,7 @@ export function NowCard({
           ? "Длительность: Не знаю"
           : `около ${task.durationMinutes} мин`}
       </Text>
-      {startError && !supportOpen && !task.startedAt && !task.completedAt ? <Text accessibilityRole="alert" style={styles.error}>{startError}</Text> : null}
+      {startError && !supportOpen && !task.startedAt && !task.completedAt ? <Text accessibilityRole="alert" style={[styles.error, { color: theme.errorPrimary }]}>{startError}</Text> : null}
 
       <View style={styles.actions}>
         {isStarted ? (

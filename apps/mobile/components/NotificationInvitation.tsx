@@ -15,7 +15,7 @@ export function NotificationInvitation() {
           {busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryText}>Включить напоминания</Text>}
         </Pressable>
         <Pressable accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy} onPress={deferInvitation} style={styles.secondary}>
-          <Text style={[styles.secondaryText, { color: theme.brand }]}>Не сейчас</Text>
+          <Text style={[styles.secondaryText, { color: theme.activeSurfaceText }]}>Не сейчас</Text>
         </Pressable>
       </View>
     </View>

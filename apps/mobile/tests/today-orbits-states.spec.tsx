@@ -44,7 +44,11 @@ jest.mock('../stores/auth.store', () => ({
 jest.mock('../components/RecoverySection', () => ({ RecoverySection: () => null }));
 jest.mock('../components/NowCard', () => ({ NowCard: () => null }));
 jest.mock('../components/timeline/Timeline', () => ({ Timeline: () => null }));
-jest.mock('expo-status-bar', () => ({ StatusBar: () => null }));
+jest.mock('expo-status-bar', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return { StatusBar: (props: any) => React.createElement(View, { ...props, testID: 'today-status-bar' }) };
+});
 jest.mock('react-native-safe-area-context', () => {
   const { View } = require('react-native');
   return { SafeAreaView: View };
@@ -53,6 +57,11 @@ jest.mock('react-native-safe-area-context', () => {
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import TodayScreen from '../app/(tabs)/today';
+import { ORBITS_THEMES, OrbitsThemeProvider, type OrbitsThemeName } from '../theme/orbits';
+
+function renderToday(theme: OrbitsThemeName) {
+  return render(<OrbitsThemeProvider theme={theme}><TodayScreen /></OrbitsThemeProvider>);
+}
 
 const unscheduledTask = (completed: boolean) => ({
   id: completed ? 'done' : 'open',
@@ -153,5 +162,15 @@ describe('unscheduled cards', () => {
 
     fireEvent.press(open);
     expect(mockToggle).toHaveBeenCalledWith('open');
+  });
+});
+
+
+describe('Today Orbits theme application', () => {
+  it.each(['warm', 'gray', 'dark'] as const)('uses the %s canvas and deterministic StatusBar', (name) => {
+    renderToday(name);
+    const screenStyle = Object.assign({}, ...screen.getByTestId('today-screen').props.style.filter(Boolean));
+    expect(screenStyle.backgroundColor).toBe(ORBITS_THEMES[name].background);
+    expect(screen.getByTestId('today-status-bar').props.style).toBe(name === 'dark' ? 'light' : 'dark');
   });
 });

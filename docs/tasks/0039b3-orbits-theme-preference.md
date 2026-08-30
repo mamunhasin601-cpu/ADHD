@@ -10,15 +10,15 @@ The Zustand preference boundary exposes the active name, hydration completion, s
 
 ## Runtime integration and UX
 
-The root keeps the existing singleton query client, notification lifecycle, auth bootstrap, redirects and Stack routes, while an `OrbitsThemeProvider` supplies the hydrated preference independently of auth. A bounded neutral loading veil prevents fully loaded warm Today content flashing before a saved dark preference is known.
+The root keeps the existing singleton query client, notification lifecycle, auth bootstrap, redirects and Stack routes, while an `OrbitsThemeProvider` supplies the hydrated preference independently of auth. A neutral hydration veil prevents fully loaded warm Today content flashing before a saved dark preference is known.
 
 Settings adds an `Оформление` radio group with always-visible labels and supporting copy, actual-token previews, visible radio/check cues, selected/busy/disabled semantics and 44-unit minimum targets. It does not change the independent time-format, notification or logout flows.
 
-Today remains one production implementation. Its canvas and existing semantic components consume the selected token record; WeekStrip and Today-only empty states are theme-aware, and StatusBar uses light content only for dark. The audit covers header/progress, loading/error/empty and unscheduled states, Now and Recovery surfaces, notification invitation, timeline task/plan/free-window/hour presentation. Timeline coordinates, 32-unit geometry, overlap, date calculations and task color meaning are unchanged.
+Today remains one production implementation. Its canvas and existing semantic components consume the selected token record; WeekStrip and Today-only empty states are theme-aware, and StatusBar uses light content only for dark. NotificationInvitation, NowCard, RecoverySection, RecoveryBanner and PartialReminderNotice use semantic Orbits surfaces and text roles in warm, gray and dark. Timeline coordinates, 32-unit geometry, overlap, date calculations and task color meaning are unchanged.
 
 ## Evidence and scope
 
-Focused storage/store tests cover strict parsing, fail-safe reads, exact persistence, one-time hydration, durable-before-active selection, no-op active selection, sanitized failure and concurrent-write prevention. Existing Settings and Today suites remain the regression boundary.
+Focused storage/store tests cover strict parsing, fail-safe reads, exact persistence, one-time hydration, durable-before-active selection, no-op active selection, sanitized failure and concurrent-write prevention. Focused Settings, Today, Recovery and production-token contrast cases are added as the UI regression boundary. The original Cloud run passed the storage/store tests; the follow-up rendering and contrast cases require CI or a dependency-complete local environment and are not claimed as executed by the GitHub editing workflow.
 
 No route file, fictional `План`/`Успех` destination, five-item navigation, API field, Prisma change, dependency or paid visual pack was introduced. Focus Sparks and Focusiki remain future paid alternative packs; selecting an Orbits background is not billing or entitlement.
 

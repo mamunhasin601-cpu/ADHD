@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, fireEvent, screen } from '@testing-library/react-native';
 import { PartialReminderNotice } from './PartialReminderNotice';
+import { ORBITS_THEMES, OrbitsThemeProvider } from '../theme/orbits';
 
 describe('PartialReminderNotice', () => {
   it('renders neutral success copy (not an error)', () => {
@@ -46,4 +47,13 @@ describe('PartialReminderNotice', () => {
     expect(screen.getByText('Задачи перенесены')).toBeTruthy();
     expect(screen.queryByText(/task-[a-z0-9]+/i)).toBeNull();
   });
+  it('uses semantic dark reward tokens', () => {
+    render(<OrbitsThemeProvider theme="dark"><PartialReminderNotice onDismiss={jest.fn()} /></OrbitsThemeProvider>);
+    const notice = screen.getByTestId('partial-reminder-notice');
+    const flattened = Object.assign({}, ...notice.props.style.filter(Boolean));
+    expect(flattened.backgroundColor).toBe(ORBITS_THEMES.dark.rewardSoft);
+    expect(flattened.borderColor).toBe(ORBITS_THEMES.dark.rewardPrimary);
+    expect(screen.getByText('Задачи перенесены').props.style.at(-1).color).toBe(ORBITS_THEMES.dark.rewardPrimary);
+  });
+
 });

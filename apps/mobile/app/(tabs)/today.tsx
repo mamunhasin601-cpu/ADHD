@@ -185,7 +185,7 @@ export default function TodayScreen() {
 
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+    <SafeAreaView testID="today-screen" style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar style={theme.name === 'dark' ? 'light' : 'dark'} />
       <TodayHeader
         isToday={isToday}

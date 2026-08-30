@@ -5,6 +5,7 @@ import { PartialReminderNotice } from './PartialReminderNotice';
 import { useOverdueTasks, useRescheduleOverdueTasks, useUndoRecovery } from '../lib/api/tasks';
 import { useAuthStore } from '../stores/auth.store';
 import { isValidIANATimezone, toCanonicalDateParam } from '../lib/timezone';
+import { useOrbitsTheme } from '../theme/orbits';
 
 interface Props {
   /** The calendar date currently shown on Today. */
@@ -37,6 +38,8 @@ export function RecoverySection({
   profileTimezone,
   onTimezoneInvalid,
 }: Props) {
+  const theme = useOrbitsTheme();
+
   // ── Timezone guard: validate BEFORE any formatter call ────────────────────
   const timezoneValid = useMemo(
     () => !!profileTimezone && isValidIANATimezone(profileTimezone),
@@ -202,22 +205,22 @@ export function RecoverySection({
   // ── Invalid/unavailable timezone on Today: neutral recoverable state ──────
   if (!timezoneValid) {
     return (
-      <View testID="recovery-timezone-unavailable" style={styles.tzState}>
-        <Text style={styles.tzTitle}>Часовой пояс не определён</Text>
-        <Text style={styles.tzBody}>
+      <View testID="recovery-timezone-unavailable" style={[styles.tzState, { backgroundColor: theme.surfacePrimary, borderColor: theme.borderSubtle }]}>
+        <Text style={[styles.tzTitle, { color: theme.textPrimary }]}>Часовой пояс не определён</Text>
+        <Text style={[styles.tzBody, { color: theme.textSecondary }]}>
           Незавершённые задачи не показаны, потому что не удалось определить ваш
           часовой пояс. Проверьте его в настройках профиля.
         </Text>
         {onTimezoneInvalid && (
           <Pressable
             testID="recovery-timezone-action"
-            style={styles.tzAction}
+            style={[styles.tzAction, { backgroundColor: theme.activeSurface, borderColor: theme.activeBorder }]}
             onPress={onTimezoneInvalid}
             accessible
             accessibilityRole="button"
             accessibilityLabel="Открыть настройки профиля"
           >
-            <Text style={styles.tzActionText}>Настройки профиля</Text>
+            <Text style={[styles.tzActionText, { color: theme.activeSurfaceText }]}>Настройки профиля</Text>
           </Pressable>
         )}
       </View>
@@ -232,8 +235,8 @@ export function RecoverySection({
       )}
 
       {undoNotice && (
-        <View testID="recovery-undo-confirmation" style={styles.undoNotice} accessible accessibilityRole="alert" accessibilityLiveRegion="polite">
-          <Text style={styles.undoText}>
+        <View testID="recovery-undo-confirmation" style={[styles.undoNotice, { backgroundColor: theme.completionSoft, borderColor: theme.completionPrimary }]} accessible accessibilityRole="alert" accessibilityLiveRegion="polite">
+          <Text style={[styles.undoText, { color: theme.textPrimary }]}>
             {undoNotice.status === 'ready' && 'Задачи перенесены. Можно спокойно отменить изменение.'}
             {undoNotice.status === 'success' && 'Перенос отменён. Задачи возвращены на прежнее место.'}
             {undoNotice.status === 'expired' && 'Время отмены закончилось. Текущие задачи не изменены.'}
@@ -243,8 +246,8 @@ export function RecoverySection({
           {undoNotice.status === 'ready' && (
             <Pressable testID="recovery-undo-button" onPress={handleUndo} disabled={undo.isPending}
               accessible accessibilityRole="button" accessibilityLabel="Отменить перенос задач"
-              accessibilityState={{ disabled: undo.isPending, busy: undo.isPending }} style={styles.undoButton}>
-              <Text style={styles.undoButtonText}>{undo.isPending ? 'Отменяем…' : 'Отменить'}</Text>
+              accessibilityState={{ disabled: undo.isPending, busy: undo.isPending }} style={[styles.undoButton, { backgroundColor: theme.activeSurface, borderColor: theme.activeBorder }]}>
+              <Text style={[styles.undoButtonText, { color: theme.activeSurfaceText }]}>{undo.isPending ? 'Отменяем…' : 'Отменить'}</Text>
             </Pressable>
           )}
         </View>
@@ -282,6 +285,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 8,
     backgroundColor: '#EDE9FE',
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'flex-start',
@@ -289,6 +293,6 @@ const styles = StyleSheet.create({
   tzActionText: { fontSize: 14, color: '#6B5BFC', fontWeight: '600' },
   undoNotice: { marginHorizontal: 20, marginVertical: 8, padding: 14, borderRadius: 10, backgroundColor: '#F5F3FF', borderWidth: 1, borderColor: '#C4B5FD' },
   undoText: { color: '#374151', fontSize: 14, lineHeight: 20 },
-  undoButton: { minHeight: 44, marginTop: 8, paddingHorizontal: 16, justifyContent: 'center', alignSelf: 'flex-start' },
+  undoButton: { minHeight: 44, marginTop: 8, paddingHorizontal: 16, borderRadius: 8, borderWidth: 1, justifyContent: 'center', alignSelf: 'flex-start' },
   undoButtonText: { color: '#6B5BFC', fontWeight: '700', fontSize: 15 },
 });
