@@ -14,7 +14,7 @@ describe('Orbits themes', () => {
     expect(contrastRatio(ORBITS_THEMES.gray.background, ORBITS_THEMES.gray.surfacePrimary)).toBeLessThanOrEqual(1.2);
   });
 
-  it('keeps navigation labels readable',
+  it('keeps navigation labels readable', () => {
     expect(ORBITS_THEMES.dark.navigationLabel).toBe('#FFFFFF');
     expect(contrastRatio(ORBITS_THEMES.gray.navigationLabel, ORBITS_THEMES.gray.background)).toBeGreaterThanOrEqual(4.5);
     for (const theme of Object.values(ORBITS_THEMES)) {
