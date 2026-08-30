@@ -9,28 +9,96 @@ export type OrbitsThemeTokens = Readonly<{
   textSecondary: string;
   navigationLabel: string;
   activeSurface: string;
+  activeSurfaceText: string;
   activeBorder: string;
   brand: string;
   brandPressed: string;
   borderSubtle: string;
   elevationShadow: string;
+  surfacePrimary: string;
+  surfaceMuted: string;
+  completionPrimary: string;
+  completionSoft: string;
+  rewardPrimary: string;
+  rewardSoft: string;
+  timelineNeutral: string;
+  errorPrimary: string;
+  errorSoft: string;
+  retryText: string;
 }>;
 
 export const ORBITS_THEMES: Readonly<Record<OrbitsThemeName, OrbitsThemeTokens>> = {
   warm: {
-    name: 'warm', background: '#FCF9F6', textPrimary: '#211D2E', textSecondary: '#6B6477',
-    navigationLabel: '#211D2E', activeSurface: '#F3F1FF', activeBorder: '#6B5BFC',
-    brand: '#6B5BFC', brandPressed: '#5B4BE7', borderSubtle: '#DED8E5', elevationShadow: '#211D2E',
+    name: 'warm',
+    background: '#FCF9F6',
+    textPrimary: '#211D2E',
+    textSecondary: '#6B6477',
+    navigationLabel: '#211D2E',
+    activeSurface: '#F3F1FF',
+    activeSurfaceText: '#211D2E',
+    activeBorder: '#6B5BFC',
+    brand: '#6B5BFC',
+    brandPressed: '#5B4BE7',
+    borderSubtle: '#DED8E5',
+    elevationShadow: '#211D2E',
+    surfacePrimary: '#FFFFFF',
+    surfaceMuted: '#F7F2EE',
+    completionPrimary: '#126F6B',
+    completionSoft: '#E2F4F1',
+    rewardPrimary: '#8A6500',
+    rewardSoft: '#FFF4CC',
+    timelineNeutral: '#DED8E5',
+    errorPrimary: '#A43B4A',
+    errorSoft: '#FBEAEC',
+    retryText: '#FFFFFF',
   },
   gray: {
-    name: 'gray', background: '#8B8E96', textPrimary: '#17151D', textSecondary: '#29262F',
-    navigationLabel: '#17151D', activeSurface: '#F3F1FF', activeBorder: '#4B3BC7',
-    brand: '#6B5BFC', brandPressed: '#5B4BE7', borderSubtle: '#5F6269', elevationShadow: '#17151D',
+    name: 'gray',
+    background: '#8B8E96',
+    textPrimary: '#17151D',
+    textSecondary: '#29262F',
+    navigationLabel: '#17151D',
+    activeSurface: '#F3F1FF',
+    activeSurfaceText: '#17151D',
+    activeBorder: '#4B3BC7',
+    brand: '#6B5BFC',
+    brandPressed: '#5B4BE7',
+    borderSubtle: '#5F6269',
+    elevationShadow: '#17151D',
+    surfacePrimary: '#F7F7F8',
+    surfaceMuted: '#DADCE0',
+    completionPrimary: '#126F6B',
+    completionSoft: '#DDF1EE',
+    rewardPrimary: '#765700',
+    rewardSoft: '#F8EDC6',
+    timelineNeutral: '#5F6269',
+    errorPrimary: '#8C2F3D',
+    errorSoft: '#F7E1E4',
+    retryText: '#FFFFFF',
   },
   dark: {
-    name: 'dark', background: '#211D2E', textPrimary: '#FFFFFF', textSecondary: '#DDD8E8',
-    navigationLabel: '#FFFFFF', activeSurface: '#3A324F', activeBorder: '#AFA6FF',
-    brand: '#6B5BFC', brandPressed: '#5B4BE7', borderSubtle: '#514963', elevationShadow: '#000000',
+    name: 'dark',
+    background: '#211D2E',
+    textPrimary: '#FFFFFF',
+    textSecondary: '#DDD8E8',
+    navigationLabel: '#FFFFFF',
+    activeSurface: '#3A324F',
+    activeSurfaceText: '#FFFFFF',
+    activeBorder: '#AFA6FF',
+    brand: '#6B5BFC',
+    brandPressed: '#5B4BE7',
+    borderSubtle: '#514963',
+    elevationShadow: '#000000',
+    surfacePrimary: '#2C2739',
+    surfaceMuted: '#352F43',
+    completionPrimary: '#75D6CF',
+    completionSoft: '#243F40',
+    rewardPrimary: '#F2D36B',
+    rewardSoft: '#463E28',
+    timelineNeutral: '#514963',
+    errorPrimary: '#FF9AA8',
+    errorSoft: '#4B2932',
+    retryText: '#FFFFFF',
   },
 };
 
