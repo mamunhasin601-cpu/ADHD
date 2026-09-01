@@ -1,6 +1,6 @@
 import React, { createContext, useContext } from 'react';
 
-export type OrbitsThemeName = 'warm' | 'gray' | 'dark';
+export type OrbitsThemeName = 'warm' | 'dark';
 
 export type OrbitsThemeTokens = Readonly<{
   name: OrbitsThemeName;
@@ -50,30 +50,6 @@ export const ORBITS_THEMES: Readonly<Record<OrbitsThemeName, OrbitsThemeTokens>>
     timelineNeutral: '#DED8E5',
     errorPrimary: '#A43B4A',
     errorSoft: '#FBEAEC',
-    retryText: '#FFFFFF',
-  },
-  gray: {
-    name: 'gray',
-    background: '#E7E7EA',
-    textPrimary: '#17151D',
-    textSecondary: '#29262F',
-    navigationLabel: '#17151D',
-    activeSurface: '#F3F1FF',
-    activeSurfaceText: '#17151D',
-    activeBorder: '#4B3BC7',
-    brand: '#6B5BFC',
-    brandPressed: '#5B4BE7',
-    borderSubtle: '#5F6269',
-    elevationShadow: '#17151D',
-    surfacePrimary: '#F7F7F8',
-    surfaceMuted: '#DADCE0',
-    completionPrimary: '#126F6B',
-    completionSoft: '#DDF1EE',
-    rewardPrimary: '#765700',
-    rewardSoft: '#F8EDC6',
-    timelineNeutral: '#5F6269',
-    errorPrimary: '#8C2F3D',
-    errorSoft: '#F7E1E4',
     retryText: '#FFFFFF',
   },
   dark: {

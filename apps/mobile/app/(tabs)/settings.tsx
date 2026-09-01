@@ -25,7 +25,6 @@ import { useOrbitsThemeStore } from "../../stores/orbits-theme.store";
 
 const THEME_CHOICES: ReadonlyArray<readonly [OrbitsThemeName, string, string]> = [
   ["warm", "Тёплая", "Мягкий светлый фон"],
-  ["gray", "Серая", "Спокойный нейтральный фон"],
   ["dark", "Тёмная", "Тёмный фон и светлый текст"],
 ];
 

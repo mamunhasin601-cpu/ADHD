@@ -10,7 +10,10 @@ import { isValidIANATimezone, localMidnightToInstant, toCanonicalDateParam } fro
 import { useAuthStore } from '../stores/auth.store';
 
 type CaptureSelection = { instant: Date | null; selectedDate: Date; selectedDateKey: string };
-type GlobalCaptureContextValue = { openTimelineCapture: (selection: CaptureSelection) => void };
+type GlobalCaptureContextValue = {
+  openTimelineCapture: (selection: CaptureSelection) => void;
+  openGlobalCapture: () => void;
+};
 type CaptureOperation = {
   id: number;
   ownerMounted: boolean;
@@ -26,7 +29,7 @@ export function useGlobalCapture() {
   const value = useContext(GlobalCaptureContext);
   // Screens are also rendered in isolation by focused tests and previews.
   // The production tabs always install the provider in their layout.
-  return value ?? { openTimelineCapture: () => undefined };
+  return value ?? { openTimelineCapture: () => undefined, openGlobalCapture: () => undefined };
 }
 
 function currentDaySelection(profileTimezone?: string | null): CaptureSelection {
@@ -39,7 +42,7 @@ function currentDaySelection(profileTimezone?: string | null): CaptureSelection 
   return { instant: null, selectedDate: new Date(year, month - 1, day), selectedDateKey };
 }
 
-export function GlobalCaptureProvider({ children }: { children: React.ReactNode }) {
+export function GlobalCaptureProvider({ children, showFloatingAction = true }: { children: React.ReactNode; showFloatingAction?: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const queryClient = useQueryClient();
@@ -92,12 +95,12 @@ export function GlobalCaptureProvider({ children }: { children: React.ReactNode 
     setOpen(true);
   }, []);
 
-  const openGlobalCapture = () => {
+  const openGlobalCapture = useCallback(() => {
     setSelection(currentDaySelection(profileTimezone));
     setTitle('');
     setDuration(null);
     setOpen(true);
-  };
+  }, [profileTimezone]);
 
   async function submit(startTime: Date | null = selection.instant) {
     const trimmedTitle = title.trim();
@@ -170,9 +173,9 @@ export function GlobalCaptureProvider({ children }: { children: React.ReactNode 
   const disabled = !title.trim() || isSubmitting;
   const busy = isSubmitting;
   return (
-    <GlobalCaptureContext.Provider value={{ openTimelineCapture }}>
+    <GlobalCaptureContext.Provider value={{ openTimelineCapture, openGlobalCapture }}>
       <View style={styles.owner}>{children}</View>
-      <Pressable
+      {showFloatingAction && <Pressable
         testID="global-capture-action"
         style={[styles.fab, busy && styles.disabled]}
         onPress={openGlobalCapture}
@@ -180,7 +183,7 @@ export function GlobalCaptureProvider({ children }: { children: React.ReactNode 
         accessibilityLabel="Добавить запись: задачу, мысль, отдых или буфер"
         accessibilityState={{ disabled: busy, busy }}
         disabled={busy}
-      ><Text style={styles.fabText}>＋</Text></Pressable>
+      ><Text style={styles.fabText}>＋</Text></Pressable>}
       <Modal visible={open} transparent animationType="slide" onRequestClose={resetAndClose}>
         <View style={styles.overlay}><View style={styles.card}>
           <Text style={styles.title}>Новая запись</Text>

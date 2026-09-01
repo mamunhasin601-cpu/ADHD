@@ -42,8 +42,14 @@ jest.mock('../stores/auth.store', () => ({
   }),
 }));
 jest.mock('../components/RecoverySection', () => ({ RecoverySection: () => null }));
-jest.mock('../components/NowCard', () => ({ NowCard: () => null }));
-jest.mock('../components/timeline/Timeline', () => ({ Timeline: () => null }));
+jest.mock('../components/NowCard', () => {
+  const { View } = require('react-native');
+  return { NowCard: () => <View testID="now-card" /> };
+});
+jest.mock('../components/timeline/Timeline', () => {
+  const { View } = require('react-native');
+  return { Timeline: () => <View testID="timeline" /> };
+});
 jest.mock('expo-status-bar', () => {
   const React = require('react');
   const { View } = require('react-native');
@@ -150,6 +156,21 @@ describe('Today query states', () => {
   });
 });
 
+describe('Today physical-device reachability regression', () => {
+  it('keeps current, next and timeline content inside the scrollable body', () => {
+    mockQueryState.data = [
+      { ...unscheduledTask(false), id: 'current', title: 'Текущая', startTime: '2026-08-15T09:00:00.000Z' },
+      { ...unscheduledTask(false), id: 'next', title: 'Следующая', startTime: '2026-08-15T11:00:00.000Z' },
+    ];
+    render(<TodayScreen />);
+    expect(screen.getByTestId('today-content-scroll')).toBeTruthy();
+    expect(screen.getByTestId('now-card')).toBeTruthy();
+    expect(screen.getByTestId('today-next-task-preview')).toBeTruthy();
+    expect(screen.getByText('Следующая')).toBeTruthy();
+    expect(screen.getByTestId('timeline')).toBeTruthy();
+  });
+});
+
 describe('unscheduled cards', () => {
   it('exposes checked and unchecked states with a visible completion cue', () => {
     mockQueryState.data = [unscheduledTask(false), unscheduledTask(true)];
@@ -168,7 +189,7 @@ describe('unscheduled cards', () => {
 
 
 describe('Today Orbits theme application', () => {
-  it.each(['warm', 'gray', 'dark'] as const)('uses the %s canvas and deterministic StatusBar', (name) => {
+  it.each(['warm', 'dark'] as const)('uses the %s canvas and deterministic StatusBar', (name) => {
     renderToday(name);
     const screenStyle = Object.assign({}, ...screen.getByTestId('today-screen').props.style.filter(Boolean));
     expect(screenStyle.backgroundColor).toBe(ORBITS_THEMES[name].background);

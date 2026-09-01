@@ -6,12 +6,12 @@ jest.mock('expo-secure-store', () => ({ getItemAsync: jest.fn(), setItemAsync: j
 describe('Orbits theme storage', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it.each([null, 'blue', '', '{"theme":"dark"}'])('loads %p as warm', async (stored) => {
+  it.each([null, 'blue', 'gray', '', '{"theme":"dark"}'])('loads %p as warm', async (stored) => {
     (SecureStore.getItemAsync as jest.Mock).mockResolvedValue(stored);
     await expect(loadOrbitsTheme()).resolves.toBe('warm');
   });
 
-  it.each(['warm', 'gray', 'dark'] as const)('loads exact %s', async (stored) => {
+  it.each(['warm', 'dark'] as const)('loads exact %s', async (stored) => {
     (SecureStore.getItemAsync as jest.Mock).mockResolvedValue(stored);
     await expect(loadOrbitsTheme()).resolves.toBe(stored);
   });

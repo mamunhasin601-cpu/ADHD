@@ -1,57 +1,38 @@
+import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Tabs } from 'expo-router';
-import { Text } from 'react-native';
-import { GlobalCaptureProvider } from '../../components/GlobalCapture';
+import { GlobalCaptureProvider, useGlobalCapture } from '../../components/GlobalCapture';
+import { OrbitsNavigation } from '../../components/navigation/OrbitsNavigation';
+import {
+  destinationForRuntimeRoute,
+  runtimeRouteForDestination,
+} from '../../lib/orbits-tabs';
 
-function TabIcon({ label, color, size }: { label: string; color: string; size: number }) {
-  return <Text style={{ color, fontSize: size }}>{label}</Text>;
+function OrbitsTabBar({ state, navigation }: BottomTabBarProps) {
+  const { openGlobalCapture } = useGlobalCapture();
+  const activeRoute = state.routes[state.index]?.name ?? 'today';
+
+  return (
+    <OrbitsNavigation
+      activeDestination={destinationForRuntimeRoute(activeRoute)}
+      onSelect={(destination) => navigation.navigate(runtimeRouteForDestination(destination))}
+      onAdd={openGlobalCapture}
+    />
+  );
 }
 
 export default function TabsLayout() {
   return (
-    <GlobalCaptureProvider>
+    <GlobalCaptureProvider showFloatingAction={false}>
       <Tabs
-        screenOptions={{
-          tabBarActiveTintColor: '#6B5BFC',
-          tabBarInactiveTintColor: '#9CA3AF',
-          headerShown: false,
-        }}
+        tabBar={(props) => <OrbitsTabBar {...props} />}
+        screenOptions={{ headerShown: false }}
       >
-      <Tabs.Screen
-        name="today"
-        options={{
-          title: 'Сегодня',
-          tabBarIcon: ({ color, size }) => (
-            <TabIcon label="□" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="inbox"
-        options={{
-          title: 'Мысли',
-          tabBarIcon: ({ color, size }) => (
-            <TabIcon label="≡" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="focus"
-        options={{
-          title: 'Фокус',
-          tabBarIcon: ({ color, size }) => (
-            <TabIcon label="○" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: 'Настройки',
-          tabBarIcon: ({ color, size }) => (
-            <TabIcon label="⚙" size={size} color={color} />
-          ),
-        }}
-      />
+        <Tabs.Screen name="today" options={{ title: 'Сегодня' }} />
+        <Tabs.Screen name="plan" options={{ title: 'План' }} />
+        <Tabs.Screen name="progress" options={{ title: 'Успех' }} />
+        <Tabs.Screen name="settings" options={{ title: 'Профиль' }} />
+        <Tabs.Screen name="inbox" options={{ href: null }} />
+        <Tabs.Screen name="focus" options={{ href: null }} />
       </Tabs>
     </GlobalCaptureProvider>
   );

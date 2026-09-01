@@ -11,7 +11,7 @@ import { apiClient } from "../lib/api-client";
 const mockSetUser = jest.fn();
 const mockSelectTheme = jest.fn();
 let mockUser: any;
-let mockThemeName: 'warm' | 'gray' | 'dark' = 'warm';
+let mockThemeName: 'warm' | 'dark' = 'warm';
 let mockThemeSaving = false;
 let mockThemeError: string | null = null;
 jest.mock("../stores/auth.store", () => ({
@@ -131,14 +131,15 @@ describe("settings time format", () => {
     expect(screen.getByTestId("time-format-H24").props.accessibilityState.disabled).toBe(false);
   });
 
-  it("shows all Orbits choices with radio semantics and the active value", () => {
-    mockThemeName = "gray";
+  it("shows the approved warm and dark choices with radio semantics", () => {
+    mockThemeName = "dark";
     render(<SettingsScreen />);
     expect(screen.getByTestId("orbits-theme-warm").props.accessibilityRole).toBe("radio");
-    expect(screen.getByTestId("orbits-theme-gray").props.accessibilityState.selected).toBe(true);
-    expect(screen.getByTestId("orbits-theme-dark").props.accessibilityState.selected).toBe(false);
+    expect(screen.getByTestId("orbits-theme-warm").props.accessibilityState.selected).toBe(false);
+    expect(screen.getByTestId("orbits-theme-dark").props.accessibilityState.selected).toBe(true);
+    expect(screen.queryByTestId("orbits-theme-gray")).toBeNull();
     expect(screen.getByText("Тёплая")).toBeTruthy();
-    expect(screen.getByText("Серая")).toBeTruthy();
+    expect(screen.queryByText("Серая")).toBeNull();
     expect(screen.getByText("Тёмная")).toBeTruthy();
   });
 

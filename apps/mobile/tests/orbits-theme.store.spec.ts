@@ -24,11 +24,11 @@ describe('Orbits theme preference state', () => {
   it('accepts a selection only after persistence succeeds', async () => {
     let resolve!: () => void;
     (storage.saveOrbitsTheme as jest.Mock).mockReturnValue(new Promise<void>((done) => { resolve = done; }));
-    const pending = useOrbitsThemeStore.getState().selectTheme('gray');
+    const pending = useOrbitsThemeStore.getState().selectTheme('dark');
     expect(useOrbitsThemeStore.getState()).toMatchObject({ themeName: 'warm', saving: true });
     resolve();
     await expect(pending).resolves.toBe(true);
-    expect(useOrbitsThemeStore.getState().themeName).toBe('gray');
+    expect(useOrbitsThemeStore.getState().themeName).toBe('dark');
   });
 
   it('preserves the previous theme and sanitizes a failed save', async () => {
@@ -39,8 +39,8 @@ describe('Orbits theme preference state', () => {
 
   it('prevents concurrent writes', async () => {
     (storage.saveOrbitsTheme as jest.Mock).mockReturnValue(new Promise(() => {}));
-    void useOrbitsThemeStore.getState().selectTheme('gray');
-    await expect(useOrbitsThemeStore.getState().selectTheme('dark')).resolves.toBe(false);
+    void useOrbitsThemeStore.getState().selectTheme('dark');
+    await expect(useOrbitsThemeStore.getState().selectTheme('warm')).resolves.toBe(false);
     expect(storage.saveOrbitsTheme).toHaveBeenCalledTimes(1);
   });
 });

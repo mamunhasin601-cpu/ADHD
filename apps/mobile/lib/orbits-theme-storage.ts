@@ -4,9 +4,7 @@ import { DEFAULT_ORBITS_THEME_NAME, type OrbitsThemeName } from '../theme/orbits
 export const ORBITS_THEME_STORAGE_KEY = 'focus_orbits_theme';
 
 export function parseOrbitsThemeName(value: unknown): OrbitsThemeName {
-  return value === 'warm' || value === 'gray' || value === 'dark'
-    ? value
-    : DEFAULT_ORBITS_THEME_NAME;
+  return value === 'warm' || value === 'dark' ? value : DEFAULT_ORBITS_THEME_NAME;
 }
 
 export async function loadOrbitsTheme(): Promise<OrbitsThemeName> {

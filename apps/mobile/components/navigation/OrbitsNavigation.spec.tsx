@@ -51,7 +51,7 @@ describe('OrbitsNavigation', () => {
     expect(onAdd).not.toHaveBeenCalled();
   });
 
-  it.each(['warm', 'gray', 'dark'] as const)('uses the %s navigation background', (name) => {
+  it.each(['warm', 'dark'] as const)('uses the %s navigation background', (name) => {
     setup({ theme: name });
     expect(StyleSheet.flatten(screen.getByTestId('orbits-navigation').props.style).backgroundColor).toBe(ORBITS_THEMES[name].background);
   });

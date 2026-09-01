@@ -118,7 +118,7 @@ export function Timeline({
   }
 
   return (
-    <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false}>
+    <ScrollView ref={scrollRef} testID="timeline-scroll" style={styles.viewport} nestedScrollEnabled showsVerticalScrollIndicator={false}>
       <View
         style={{ height: totalHeight }}
         onStartShouldSetResponder={() => true}
@@ -197,6 +197,7 @@ export function Timeline({
 }
 
 const styles = StyleSheet.create({
+  viewport: { height: 480, minHeight: 360 },
   hourRow: {
     position: "absolute",
     left: 0,

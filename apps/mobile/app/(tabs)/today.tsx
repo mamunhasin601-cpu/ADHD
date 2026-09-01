@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Pressable,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -35,6 +36,7 @@ import { useOrbitsTheme } from '../../theme/orbits';
 import { useNotificationLifecycle } from '../../lib/notification-lifecycle';
 import { useGlobalCapture } from '../../components/GlobalCapture';
 import { isTaskRecord } from '../../lib/task-kind';
+import { formatClockTime } from '../../lib/time-format';
 
 /**
  * Экран "Сегодня" — главный экран таймлайна дня.
@@ -203,6 +205,13 @@ export default function TodayScreen() {
         onSelectDate={selectCalendarDay}
       />
 
+      <ScrollView
+        testID="today-content-scroll"
+        style={styles.contentScroll}
+        contentContainerStyle={styles.scrollContent}
+        nestedScrollEnabled
+        showsVerticalScrollIndicator={false}
+      >
       {isLoading && (
         <View style={styles.centered} accessible accessibilityLabel="Загружаем ваш день">
           <ActivityIndicator color={theme.brand} />
@@ -289,6 +298,22 @@ export default function TodayScreen() {
             />
             {hasCompletedOnboarding && notificationLifecycle.permission === 'not-asked' && notificationLifecycle.invitation === 'available' && (
               <NotificationInvitation />
+            )}
+            {currentTask && nextTask && currentTask.id !== nextTask.id && (
+              <Pressable
+                testID="today-next-task-preview"
+                accessibilityRole="button"
+                accessibilityLabel={`Следующая задача: ${nextTask.title}, ${formatClockTime(new Date(nextTask.startTime!), timeFormat)}`}
+                accessibilityHint="Открыть следующую задачу"
+                onPress={() => openTask(nextTask)}
+                style={[styles.nextTask, { backgroundColor: theme.activeSurface, borderColor: theme.activeBorder }]}
+              >
+                <Text style={[styles.nextEyebrow, { color: theme.activeBorder }]}>Дальше</Text>
+                <Text style={[styles.nextTitle, { color: theme.textPrimary }]} numberOfLines={2}>{nextTask.title}</Text>
+                <Text style={[styles.nextTime, { color: theme.textSecondary }]}>
+                  {formatClockTime(new Date(nextTask.startTime!), timeFormat)}
+                </Text>
+              </Pressable>
             )}</>
           )}
           {unscheduledTasks.length > 0 && (
@@ -369,6 +394,7 @@ export default function TodayScreen() {
           )}
         </>
       )}
+      </ScrollView>
 
     </SafeAreaView>
   );
@@ -376,6 +402,8 @@ export default function TodayScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  contentScroll: { flex: 1 },
+  scrollContent: { flexGrow: 1, paddingBottom: 24 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 },
   errorContainer: {
     margin: 24,
@@ -398,4 +426,8 @@ const styles = StyleSheet.create({
   unscheduledDot: { width: 8, height: 8, borderRadius: 4, marginRight: 10 },
   unscheduledText: { fontSize: 14, flex: 1 },
   unscheduledTextDone: { textDecorationLine: 'line-through' },
+  nextTask: { marginHorizontal: 20, marginBottom: 12, padding: 16, borderWidth: 1, borderRadius: 16, minHeight: 88 },
+  nextEyebrow: { fontSize: 12, lineHeight: 16, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
+  nextTitle: { marginTop: 4, fontSize: 17, lineHeight: 23, fontWeight: '700' },
+  nextTime: { marginTop: 4, fontSize: 14, lineHeight: 20 },
 });
