@@ -109,3 +109,16 @@ Task 0039 идёт через Phase A (spec), Phase B (Today-first implementatio
 - Clarified that selection is not billing, entitlement, account synchronization or server persistence; logout retains it.
 - Kept Focus Sparks and Focusiki as future paid alternative packs and Task 0039/Phase B in progress.
 - Recorded that source/test evidence is not physical-device, VoiceOver, TalkBack or large-text approval.
+
+
+## 2026-09-01 — Orbits Android emulator verification
+
+- Verified warm, gray and dark Today backgrounds on a Pixel 7 Android 15/API 35
+  emulator, including Metro reload and persistence after app-process removal.
+- Replaced the harsh gray runtime canvas with `#E7E7EA` and removed the
+  decorative Today empty-state `○` that appeared like a stuck loader.
+- Recorded successful focused Jest (3 suites / 17 tests), TypeScript,
+  `git diff --check` and Metro Android bundle evidence.
+- Kept the evidence boundary explicit: no physical-device, TalkBack, VoiceOver,
+  large-text, reduced-motion, haptic or physical timeline touch-target approval
+  is claimed; no post-fix empty-state emulator screenshot was obtained.

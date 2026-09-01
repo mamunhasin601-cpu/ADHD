@@ -213,3 +213,23 @@ VoiceOver, TalkBack и large-text approval также ещё не получен
 ## Orbits background preference (Phase B.3, 2026-08-30)
 
 Orbits is the free/default visual pack. Its user-selectable backgrounds are exactly warm, gray and dark; warm is the default and local fail-safe. This device-local preference is neither billing nor entitlement and is not synchronized through an account or server. Focus Sparks and Focusiki remain future paid alternative packs. Implementation tests do not establish physical-device, VoiceOver, TalkBack or large-text approval, and Task 0039/Phase B remain in progress.
+
+
+## Orbits Android emulator checkpoint (Phase B.4, 2026-09-01)
+
+The current selectable Orbits backgrounds remain warm, gray and dark. The
+production gray canvas is now `#E7E7EA`; historical Phase A references to
+`#8B8E96` remain candidate-preview history rather than current runtime policy.
+
+Pixel 7 Android 15/API 35 emulator verification confirmed switching all three
+backgrounds on Today, persistence through Metro reload, and persistence of the
+gray selection after app-process termination and relaunch. A post-fix screenshot
+confirms the calmer gray canvas/primary-surface transition. Focused tests confirm
+that the Orbits loaded-empty Today state no longer renders the decorative `○`
+that Android presented like a stuck spinner.
+
+This is Android emulator evidence only. It does not establish physical Android
+or iOS approval, TalkBack, VoiceOver, large-text, reduced-motion, haptic or
+physical timeline touch-target approval. A post-fix empty-state emulator
+screenshot also remains absent because the test account has a recurring task on
+the inspected dates.

@@ -234,3 +234,15 @@ Phase A is complete; Phase B.1 is merged; Phase B.2 implements the source-level 
 ### 2026-08-30 — Orbits Phase B.3
 
 Local Orbits warm/gray/dark preference and Today application are implemented. Orbits remains the free/default pack; paid Focus Sparks/Focusiki, device accessibility verification, and the remainder of Task 0039/Phase B are still pending.
+
+
+### 2026-09-01 — Orbits Phase B.4 Android emulator checkpoint
+
+Pixel 7 Android 15/API 35 emulator evidence confirms Today warm/gray/dark
+switching, Metro reload behavior and persistence after app-process termination.
+Runtime review led to removal of the misleading empty-state `○` and correction
+of the gray canvas to `#E7E7EA`; focused Jest (3 suites / 17 tests),
+TypeScript, Metro Android bundling and diff checks passed. V-01 remains open:
+emulator evidence is not physical-device, TalkBack/VoiceOver, large-text,
+reduced-motion or physical touch-target approval. Detailed evidence is in
+[`tasks/0039b4-orbits-android-runtime-verification.md`](tasks/0039b4-orbits-android-runtime-verification.md).

@@ -10,7 +10,7 @@ The route keeps orchestration in `today.tsx`. Its visible hierarchy is: warm saf
 
 ## Shared theme and greeting
 
-Today consumes `useOrbitsTheme`; no route-local palette exists. The shared contract adds `surfacePrimary`, `surfaceMuted`, `completionPrimary`, `completionSoft`, `rewardPrimary`, `rewardSoft`, `timelineNeutral`, `errorPrimary`, `errorSoft`, `activeSurfaceText`, and `retryText` for warm, gray and dark records. Warm remains the runtime default (`#FCF9F6`); gray/dark remain candidates with no selector or persistence.
+Today consumes `useOrbitsTheme`; no route-local palette exists. The shared contract adds `surfacePrimary`, `surfaceMuted`, `completionPrimary`, `completionSoft`, `rewardPrimary`, `rewardSoft`, `timelineNeutral`, `errorPrimary`, `errorSoft`, `activeSurfaceText`, and `retryText` for warm, gray and dark records. Warm remains the runtime default (`#FCF9F6`). At the Phase B.2 checkpoint gray/dark had no selector or persistence; that historical boundary was superseded by the device-local Phase B.3 preference and the Phase B.4 Android emulator verification.
 
 The pure greeting helper uses the profile-local hour only for a valid IANA timezone. Missing or invalid timezone uses `Date#getHours`, i.e. device local time, never an implicit UTC substitute. A non-current selected day says `План на день`.
 
@@ -29,3 +29,16 @@ Task hooks/API and cache contracts, canonical day keys, recurrence occurrences, 
 ## Accessibility and validation evidence
 
 Source tests cover the default theme, actual production contrast pairs, unknown progress, greeting timezone fallback, progress rendering and normalization, retry behavior, unscheduled cards, compact timeline cards and safe color normalization where the Cloud test environment can execute them. Day-navigation and retry controls are at least 44 logical units. Timeline task cards retain the existing 32-unit minimum geometry; their touch-target behavior still requires physical-device/accessibility validation. State is duplicated with text and semantics; no animation, sound or haptics was introduced. Validation is automated/source-level only. No physical-device rendering, Android/iOS approval, large-text exercise, VoiceOver or TalkBack verification was performed; those remain runtime gaps.
+
+
+## Phase B.4 follow-up
+
+Later Android 15/API 35 emulator verification exercised the selectable
+warm/gray/dark Today canvases. It found that the empty-state `○` resembled a
+stuck loader and that the original gray canvas produced a harsh split beside
+`surfacePrimary`. The glyph was removed from the Orbits Today empty state and
+the gray runtime canvas became `#E7E7EA`. See
+[`0039b4-orbits-android-runtime-verification.md`](0039b4-orbits-android-runtime-verification.md).
+
+This later evidence does not revise the B.2 source-level claims into
+physical-device, TalkBack/VoiceOver, large-text or touch-target approval.
