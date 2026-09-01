@@ -146,6 +146,7 @@ describe('Today query states', () => {
 
     expect(screen.getByText('0 задач')).toBeTruthy();
     expect(screen.getByRole('progressbar')).toBeTruthy();
+    expect(screen.queryByText('○')).toBeNull();
   });
 });
 

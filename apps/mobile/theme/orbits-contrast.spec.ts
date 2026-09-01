@@ -6,6 +6,8 @@ describe('actual Orbits Today small-text contrast pairs', () => {
     (name) => {
       const theme = ORBITS_THEMES[name];
       const productionPairs = {
+        canvasPrimary: [theme.textPrimary, theme.background],
+        canvasSecondary: [theme.textSecondary, theme.background],
         completion: [theme.completionPrimary, theme.completionSoft],
         todayReturn: [theme.activeSurfaceText, theme.activeSurface],
         error: [theme.errorPrimary, theme.errorSoft],

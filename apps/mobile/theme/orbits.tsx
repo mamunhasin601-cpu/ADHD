@@ -54,7 +54,7 @@ export const ORBITS_THEMES: Readonly<Record<OrbitsThemeName, OrbitsThemeTokens>>
   },
   gray: {
     name: 'gray',
-    background: '#8B8E96',
+    background: '#E7E7EA',
     textPrimary: '#17151D',
     textSecondary: '#29262F',
     navigationLabel: '#17151D',

@@ -240,7 +240,6 @@ export default function TodayScreen() {
       {!isLoading && !isError && !hasPlanEntries && (
         <EmptyState
           orbits
-          emoji="○"
           title={isToday ? "День пока свободен" : "На этот день пока нет задач"}
           description={
             isToday

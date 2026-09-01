@@ -6,8 +6,12 @@ describe('Orbits themes', () => {
   it('uses warm by default and preserves the approved backgrounds', () => {
     expect(DEFAULT_ORBITS_THEME_NAME).toBe('warm');
     expect(ORBITS_THEMES.warm.background).toBe('#FCF9F6');
-    expect(ORBITS_THEMES.gray.background).toBe('#8B8E96');
+    expect(ORBITS_THEMES.gray.background).toBe('#E7E7EA');
     expect(ORBITS_THEMES.dark.background).toBe('#211D2E');
+  });
+
+  it('keeps the gray canvas calm beside its primary surface', () => {
+    expect(contrastRatio(ORBITS_THEMES.gray.background, ORBITS_THEMES.gray.surfacePrimary)).toBeLessThanOrEqual(1.2);
   });
 
   it('keeps navigation labels readable', () => {
