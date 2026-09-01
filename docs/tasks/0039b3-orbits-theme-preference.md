@@ -23,3 +23,22 @@ Focused storage/store tests cover strict parsing, fail-safe reads, exact persist
 No route file, fictional `План`/`Успех` destination, five-item navigation, API field, Prisma change, dependency or paid visual pack was introduced. Focus Sparks and Focusiki remain future paid alternative packs; selecting an Orbits background is not billing or entitlement.
 
 Source and simulator-style tests do not establish physical Android/iOS approval, timeline physical touch-target approval, VoiceOver, TalkBack or large-text approval. Those remain explicit gaps.
+
+
+## Phase B.4 Android emulator follow-up (2026-09-01)
+
+Pixel 7 Android 15/API 35 emulator verification confirmed all three selections
+on Today, persistence through Metro reload, and persistence of the gray
+preference after the app process was removed and relaunched. The current gray
+runtime canvas is `#E7E7EA`, corrected after the previous darker canvas formed
+an abrupt split beside `surfacePrimary`.
+
+The same session produced a successful Metro Android bundle and post-fix gray
+screenshot. Focused verification passed 3 Jest suites / 17 tests, TypeScript and
+`git diff --check`. Removal of the misleading empty-state `○` is covered by a
+focused render test; a post-fix empty-state emulator screenshot was not obtained
+because the test account has a recurring task on the inspected dates.
+
+This is emulator evidence, not physical-device, TalkBack, VoiceOver, large-text,
+reduced-motion, haptic or physical timeline touch-target approval. See
+[`0039b4-orbits-android-runtime-verification.md`](0039b4-orbits-android-runtime-verification.md).

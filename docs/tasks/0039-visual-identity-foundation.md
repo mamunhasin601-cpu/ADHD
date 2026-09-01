@@ -2,11 +2,12 @@
 
 ## Статус
 
-В работе. Phase A завершена, Phase B.1 объединена, а source-level реализация
-Phase B.2 проходит проверку в draft PR. Task 0039 и полная Phase B ещё не
-завершены; physical-device и assistive-technology approval остаются
-неподтверждёнными. Production Orbits raster assets, theme tokens и navigation
-foundation уже существуют; paid packs, entitlement и billing не реализованы.
+В работе. Phase A завершена; Phase B.1–B.4 объединены. Production содержит
+Orbits assets/tokens, Today reference screen, локальный выбор warm/gray/dark и
+Android 15 emulator evidence. Task 0039 и полная Phase B ещё не завершены:
+physical-device, TalkBack/VoiceOver, large-text, reduced-motion и финальная
+runtime touch-target approval остаются неподтверждёнными. Paid packs,
+entitlement и billing не реализованы.
 
 ## Контекст
 
@@ -215,8 +216,26 @@ Concept images и mockups остаются design references, а не production
 
 ### Phase B status update — Today reference screen
 
-Phase A is complete and Phase B.1 is merged. Phase B.2 now integrates the Orbits Today reference screen at source level (see `0039b2-orbits-today-reference-screen.md`); Task 0039 and full Phase B remain in progress. This does not install five-item navigation, theme selection/persistence, or establish physical-device/accessibility approval.
+Phase A is complete and Phase B.1–B.4 are merged. Phase B.2 provides the Today reference screen, Phase B.3 adds device-local warm/gray/dark selection, and Phase B.4 records Android emulator verification and the resulting empty/gray-state corrections. Task 0039 and full Phase B remain in progress. Five-item navigation is still not installed, and emulator evidence does not establish physical-device or assistive-technology approval.
 
 ## Phase B.3 note (2026-08-30)
 
 Device-local selection of the free Orbits `warm`, `gray`, and `dark` backgrounds is implemented with warm as fail-safe. It is independent of authentication, billing and API state and survives logout. Focus Sparks and Focusiki remain future paid alternative packs. Task 0039 and Phase B remain in progress; source tests are not physical-device or assistive-technology approval.
+
+
+## Phase B.4 note (2026-09-01)
+
+Pixel 7 Android 15/API 35 emulator verification confirmed warm/gray/dark
+selection, Metro reload behavior and persistence of the gray preference after
+the app process was removed and relaunched. Runtime review found a decorative
+`○` that looked like a stuck spinner and a harsh gray canvas/surface split.
+The Today empty state no longer renders that glyph, and the gray runtime canvas
+is now `#E7E7EA`; focused Jest, TypeScript, Metro Android bundling and diff
+checks passed. The gray correction has post-fix emulator screenshot evidence.
+The empty-state correction is covered by focused rendering tests but lacks a
+post-fix empty-state emulator screenshot because the test account exposes a
+recurring task on the inspected dates.
+
+This evidence is emulator-only. It does not approve physical Android/iOS,
+TalkBack, VoiceOver, large text, reduced motion, haptics or physical timeline
+touch targets. Details: [`0039b4-orbits-android-runtime-verification.md`](0039b4-orbits-android-runtime-verification.md).
