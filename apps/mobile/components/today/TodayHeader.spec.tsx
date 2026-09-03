@@ -35,6 +35,16 @@ describe('TodayHeader progress state', () => {
     expect(screen.getByRole('progressbar')).toBeTruthy();
   });
 
+  it('keeps the compact header factual without motivational support copy', () => {
+    render(<TodayHeader {...baseProps} progressKnown total={2} />);
+
+    expect(screen.getByText('Доброе утро')).toBeTruthy();
+    expect(screen.getByText('суббота, 15 августа')).toBeTruthy();
+    expect(screen.getByRole('progressbar')).toBeTruthy();
+    expect(screen.queryByText('Можно выбрать один посильный шаг.')).toBeNull();
+    expect(screen.queryByText('Одного небольшого шага достаточно, чтобы начать.')).toBeNull();
+  });
+
   it('provides a semantic return-to-Today control', () => {
     const onToday = jest.fn();
     render(

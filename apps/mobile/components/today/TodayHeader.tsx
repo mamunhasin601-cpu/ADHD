@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ProgressRing } from '../ProgressRing';
 import { WeekStrip } from '../WeekStrip';
 import { useOrbitsTheme } from '../../theme/orbits';
-import { greetingForDate, progressSupport } from './today-copy';
+import { greetingForDate } from './today-copy';
 
 type TodayHeaderProps = {
   isToday: boolean;
@@ -41,14 +41,9 @@ export function TodayHeader(props: TodayHeaderProps) {
           <Text style={[styles.date, { color: theme.textSecondary }]}>
             {props.dateLabel}
           </Text>
-          {props.progressKnown ? (
-            <Text style={[styles.support, { color: theme.textSecondary }]}>
-              {progressSupport(props.completed, props.total)}
-            </Text>
-          ) : null}
         </View>
         {props.progressKnown ? (
-          <ProgressRing completed={props.completed} total={props.total} size={72} />
+          <ProgressRing completed={props.completed} total={props.total} size={60} />
         ) : null}
       </View>
 
@@ -96,37 +91,32 @@ export function TodayHeader(props: TodayHeaderProps) {
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 12,
+    paddingTop: 8,
+    paddingBottom: 8,
     borderBottomWidth: 1,
   },
   hero: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 12,
   },
   copy: { flex: 1 },
   greeting: {
-    fontSize: 28,
-    lineHeight: 34,
+    fontSize: 24,
+    lineHeight: 29,
     fontWeight: '700',
   },
   date: {
-    fontSize: 15,
-    lineHeight: 21,
+    fontSize: 14,
+    lineHeight: 19,
     marginTop: 2,
     textTransform: 'capitalize',
-  },
-  support: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 8,
   },
   navigation: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 12,
+    marginTop: 6,
   },
   button: {
     width: 44,
@@ -149,6 +139,6 @@ const styles = StyleSheet.create({
   dayHeading: {
     fontSize: 21,
     fontWeight: '700',
-    marginTop: 18,
+    marginTop: 10,
   },
 });
