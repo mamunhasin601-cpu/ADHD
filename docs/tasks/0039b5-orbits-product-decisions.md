@@ -1,8 +1,8 @@
 # Task 0039 Phase B.5 — Orbits product decisions and physical-device evidence
 
-**Status:** planning record; implementation and verification remain explicitly separated  
-**Branch:** `codex/verify-orbits-phase-b5-android-accessibility`  
-**Code checkpoint:** `7ba66b2a64c982c977fd872adda4f8c38b5de6a8`  
+**Status:** planning record; implementation and verification remain explicitly separated
+**Branch:** `codex/verify-orbits-phase-b5-android-accessibility`
+**Code checkpoint:** `7ba66b2a64c982c977fd872adda4f8c38b5de6a8`
 **Recorded:** 2026-09-02
 
 ## Purpose
