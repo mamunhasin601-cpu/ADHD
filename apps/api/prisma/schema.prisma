@@ -46,6 +46,7 @@ model User {
   phone                   String?  @unique
   passwordHash            String
   timezone                String   @default("Europe/Moscow")
+  timezoneSyncedAt        DateTime?
   timeFormat              TimeFormat @default(SYSTEM)
   hasCompletedOnboarding  Boolean  @default(false)
   plan   Plan     @default(FREE)

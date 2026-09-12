@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { ProgressRing } from '../ProgressRing';
 import { WeekStrip } from '../WeekStrip';
 import { useOrbitsTheme } from '../../theme/orbits';
@@ -14,9 +14,9 @@ type TodayHeaderProps = {
   progressKnown: boolean;
   completed: number;
   total: number;
-  onPrevious: () => void;
-  onNext: () => void;
-  onToday: () => void;
+  canGoPrevious: boolean;
+  onPreviousWeek: () => void;
+  onNextWeek: () => void;
   onSelectDate: (date: string) => void;
 };
 
@@ -43,47 +43,18 @@ export function TodayHeader(props: TodayHeaderProps) {
           </Text>
         </View>
         {props.progressKnown ? (
-          <ProgressRing completed={props.completed} total={props.total} size={60} />
+          <ProgressRing completed={props.completed} total={props.total} size={52} />
         ) : null}
-      </View>
-
-      <View style={styles.navigation}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Предыдущий день"
-          style={[styles.button, { backgroundColor: theme.surfaceMuted }]}
-          onPress={props.onPrevious}
-        >
-          <Text style={[styles.arrow, { color: theme.brand }]}>‹</Text>
-        </Pressable>
-        {!props.isToday ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Вернуться к сегодняшнему дню"
-            style={[styles.today, { backgroundColor: theme.activeSurface }]}
-            onPress={props.onToday}
-          >
-            <Text style={{ color: theme.activeSurfaceText, fontWeight: '700' }}>
-              Сегодня
-            </Text>
-          </Pressable>
-        ) : null}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Следующий день"
-          style={[styles.button, { backgroundColor: theme.surfaceMuted }]}
-          onPress={props.onNext}
-        >
-          <Text style={[styles.arrow, { color: theme.brand }]}>›</Text>
-        </Pressable>
       </View>
 
       <WeekStrip
         selectedDate={props.selectedDateKey}
         todayDate={props.todayDateKey}
+        canGoPrevious={props.canGoPrevious}
+        onPreviousWeek={props.onPreviousWeek}
+        onNextWeek={props.onNextWeek}
         onSelectDate={props.onSelectDate}
       />
-      <Text style={[styles.dayHeading, { color: theme.textPrimary }]}>Ваш день</Text>
     </View>
   );
 }
@@ -91,19 +62,19 @@ export function TodayHeader(props: TodayHeaderProps) {
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 8,
+    paddingTop: 4,
+    paddingBottom: 4,
     borderBottomWidth: 1,
   },
   hero: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
   copy: { flex: 1 },
   greeting: {
-    fontSize: 24,
-    lineHeight: 29,
+    fontSize: 22,
+    lineHeight: 27,
     fontWeight: '700',
   },
   date: {
@@ -111,34 +82,5 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     marginTop: 2,
     textTransform: 'capitalize',
-  },
-  navigation: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 6,
-  },
-  button: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  arrow: {
-    fontSize: 28,
-    fontWeight: '600',
-  },
-  today: {
-    minHeight: 44,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 22,
-  },
-  dayHeading: {
-    fontSize: 21,
-    fontWeight: '700',
-    marginTop: 10,
   },
 });

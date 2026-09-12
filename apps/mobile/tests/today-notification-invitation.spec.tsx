@@ -53,7 +53,7 @@ it('is absent when the tasks query fails', () => {
 });
 it('is absent on another profile-local day', () => {
   render(<TodayScreen />);
-  fireEvent.press(screen.getAllByText('›')[0]);
+  fireEvent.press(screen.getByLabelText(/воскресенье, 16 августа 2026/));
   expect(screen.queryByText('Хотите получать напоминания?')).toBeNull();
 });
 it('is absent when there is no scheduled current or next task', () => {

@@ -51,7 +51,7 @@ jest.mock("../components/timeline/Timeline", () => {
         {tasks.map((task: any) => (
           <Text key={task.id}>{task.title}</Text>
         ))}
-        <Pressable onPress={() => onCreateAt(new Date(2026, 7, 12, 14, 30))}>
+        <Pressable onPress={() => onCreateAt(new Date('2026-08-12T11:30:00.000Z'))}>
           <Text>Выбрать 14:30</Text>
         </Pressable>
       </View>
@@ -181,8 +181,10 @@ describe('Today quick capture destinations', () => {
     fireEvent.press(screen.getByLabelText(label));
     const queriedDate = (useTasksForDate as jest.Mock).mock.calls.at(-1)[0] as Date;
     expect(queriedDate.toISOString()).toBe('2026-08-12T21:00:00.000Z');
-    expect(screen.getByText('Сегодня')).toBeTruthy();
-    fireEvent.press(screen.getByText('Сегодня'));
+    expect(screen.queryByText('Сегодня')).toBeNull();
+    fireEvent(screen.getByTestId('week-day-2026-08-13'), 'accessibilityAction', {
+      nativeEvent: { actionName: 'decrement' },
+    });
     expect((useTasksForDate as jest.Mock).mock.calls.at(-1)[0].toISOString()).toBe('2026-08-11T21:00:00.000Z');
     jest.useRealTimers();
   });
@@ -225,12 +227,12 @@ describe('Today quick capture destinations', () => {
 
     await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledWith({
       title: 'Встреча',
-      startTime: new Date(2026, 7, 12, 14, 30).toISOString(),
+      startTime: '2026-08-12T11:30:00.000Z',
       durationMinutes: null,
     }));
   });
 
-  it('uses H12 consistently while preserving the exact selected instant', async () => { mockTimeFormat='H12'; renderWithTimeline(); const selected=new Date(2026,7,12,14,30); expect(screen.getByText('Выбранное время: 2:30 PM')).toBeTruthy(); fireEvent.changeText(screen.getByLabelText('Название записи'),'Встреча'); const action=screen.getByLabelText('Добавить задачу на 2:30 PM'); expect(screen.getByText('Добавить на 2:30 PM')).toBeTruthy(); fireEvent.press(action); await waitFor(()=>expect(mockMutateAsync).toHaveBeenCalledWith(expect.objectContaining({startTime:selected.toISOString()}))); });
+  it('uses H12 consistently while preserving the exact selected instant', async () => { mockTimeFormat='H12'; renderWithTimeline(); const selected=new Date('2026-08-12T11:30:00.000Z'); expect(screen.getByText('Выбранное время: 2:30 PM')).toBeTruthy(); fireEvent.changeText(screen.getByLabelText('Название записи'),'Встреча'); const action=screen.getByLabelText('Добавить задачу на 2:30 PM'); expect(screen.getByText('Добавить на 2:30 PM')).toBeTruthy(); fireEvent.press(action); await waitFor(()=>expect(mockMutateAsync).toHaveBeenCalledWith(expect.objectContaining({startTime:selected.toISOString()}))); });
 
   it('can save timeline capture to Thoughts without a start time', async () => {
     renderWithTimeline();
@@ -311,7 +313,7 @@ describe('Today quick capture destinations', () => {
       params: {
         prefillKind: 'TASK',
         prefillTitle: 'Позвонить',
-        prefillStartTime: new Date(2026, 7, 12, 14, 30).toISOString(),
+        prefillStartTime: '2026-08-12T11:30:00.000Z',
         selectedDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
         selectedDateKey: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       },

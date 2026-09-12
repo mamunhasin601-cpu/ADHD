@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { render, screen } from '@testing-library/react-native';
 import { TodayHeader } from './TodayHeader';
 
 const baseProps = {
@@ -11,9 +11,9 @@ const baseProps = {
   todayDateKey: '2026-08-15',
   completed: 0,
   total: 0,
-  onPrevious: jest.fn(),
-  onNext: jest.fn(),
-  onToday: jest.fn(),
+  canGoPrevious: false,
+  onPreviousWeek: jest.fn(),
+  onNextWeek: jest.fn(),
   onSelectDate: jest.fn(),
 };
 
@@ -23,8 +23,6 @@ describe('TodayHeader progress state', () => {
 
     expect(screen.queryByText('0 задач')).toBeNull();
     expect(screen.queryByRole('progressbar')).toBeNull();
-    expect(screen.getByText('Ваш день')).toBeTruthy();
-    expect(screen.getByLabelText('Предыдущий день')).toBeTruthy();
     expect(screen.getByTestId('week-strip')).toBeTruthy();
   });
 
@@ -45,21 +43,12 @@ describe('TodayHeader progress state', () => {
     expect(screen.queryByText('Одного небольшого шага достаточно, чтобы начать.')).toBeNull();
   });
 
-  it('provides a semantic return-to-Today control', () => {
-    const onToday = jest.fn();
-    render(
-      <TodayHeader
-        {...baseProps}
-        isToday={false}
-        selectedDateKey="2026-08-16"
-        progressKnown
-        onToday={onToday}
-      />,
-    );
+  it('removes the old visible navigation row and day heading', () => {
+    render(<TodayHeader {...baseProps} progressKnown />);
 
-    const control = screen.getByLabelText('Вернуться к сегодняшнему дню');
-    expect(control.props.accessibilityRole).toBe('button');
-    fireEvent.press(control);
-    expect(onToday).toHaveBeenCalledTimes(1);
+    expect(screen.queryByLabelText('Предыдущий день')).toBeNull();
+    expect(screen.queryByLabelText('Следующий день')).toBeNull();
+    expect(screen.queryByText('Сегодня')).toBeNull();
+    expect(screen.queryByText('Ваш день')).toBeNull();
   });
 });

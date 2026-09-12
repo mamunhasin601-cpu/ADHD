@@ -1,4 +1,4 @@
-const mockUser = { timeFormat: "H24" as "H24" | "H12" };
+const mockUser = { timeFormat: "H24" as "H24" | "H12", timezone: "UTC" };
 jest.mock("../stores/auth.store", () => ({
   useAuthStore: (selector: any) => selector({ user: mockUser }),
 }));
@@ -16,7 +16,7 @@ const task: Task = {
 const props = { onStart: jest.fn(), onComplete: jest.fn(), onOpenTask: jest.fn(), onSaveFirstStep: jest.fn() };
 
 describe("NowCard regressions", () => {
-  beforeEach(() => { jest.clearAllMocks(); mockUser.timeFormat = "H24"; process.env.TZ = "UTC"; });
+  beforeEach(() => { jest.clearAllMocks(); mockUser.timeFormat = "H24"; mockUser.timezone = "UTC"; process.env.TZ = "UTC"; });
 
   it("shows known and honest unknown duration without fabricating zero", () => {
     const { rerender } = render(<NowCard task={task} mode="current" {...props} />);
@@ -42,6 +42,13 @@ describe("NowCard regressions", () => {
     expect(screen.getByText(/2:30.*PM/i)).toBeTruthy();
     expect(instant.getTime()).toBe(before);
     expect(task.startTime).toEqual(new Date("2026-08-12T14:30:00.000Z"));
+  });
+
+  it("uses profile timezone instead of the device timezone", () => {
+    mockUser.timezone = "America/New_York";
+    render(<NowCard task={task} mode="upcoming" {...props} />);
+    expect(screen.getByText(/10:30/)).toBeTruthy();
+    expect(screen.queryByText(/14:30/)).toBeNull();
   });
 });
 

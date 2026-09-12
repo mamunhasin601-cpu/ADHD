@@ -178,7 +178,9 @@ describe('Today explicit task start', () => {
   it('does not carry errors or render a live Now Card on another selected date', async () => {
     mockStartImplementation = async () => { throw new Error('offline'); }; render(<TodayScreen />);
     await act(async () => { fireEvent.press(screen.getByText('Начать')); }); expect(screen.getByRole('alert')).toBeTruthy();
-    fireEvent.press(screen.getByText('›'));
+    fireEvent(screen.getByTestId('week-day-2026-08-14'), 'accessibilityAction', {
+      nativeEvent: { actionName: 'increment' },
+    });
     expect(screen.queryByText('Начать')).toBeNull(); expect(screen.queryByRole('alert')).toBeNull();
   });
 
@@ -226,9 +228,13 @@ describe('Today explicit task start', () => {
     expect(mockStart).toHaveBeenCalledTimes(1); expect(screen.getByRole('button', { name: 'Начать с маленького шага задачу Задача current' })).toBeDisabled();
     await act(async () => reject(new Error('offline')));
     expect(screen.getByText('Сохранённый шаг')).toBeTruthy(); expect(screen.getByRole('alert')).toBeTruthy();
-    fireEvent.press(screen.getByText('›'));
+    fireEvent(screen.getByTestId('week-day-2026-08-14'), 'accessibilityAction', {
+      nativeEvent: { actionName: 'increment' },
+    });
     expect(screen.queryByText('Начать с малого')).toBeNull(); expect(screen.queryByRole('alert')).toBeNull();
-    fireEvent.press(screen.getByText('‹'));
+    fireEvent(screen.getByTestId('week-day-2026-08-21'), 'accessibilityAction', {
+      nativeEvent: { actionName: 'decrement' },
+    });
     expect(screen.getByText('Мне трудно начать')).toBeTruthy();
     fireEvent.press(screen.getByText('Мне трудно начать'));
     expect(screen.getByText('Сохранённый шаг')).toBeTruthy();

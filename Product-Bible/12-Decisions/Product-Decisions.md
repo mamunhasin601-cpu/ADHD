@@ -84,6 +84,9 @@
 - [PDR-002: User-controlled time format](PDR-002-User-Controlled-Time-Format.md)
   — принято 2026-08-12; дает пользователю независимый от языка и часового пояса
   выбор системного, 24-часового или 12-часового отображения времени во всем Focus.
+- [PDR-003: Smartphone-authoritative local time](PDR-003-Smartphone-Authoritative-Local-Time.md)
+  — принято 2026-09-12; смартфон задаёт актуальную IANA-зону аккаунта, а
+  будущие повторения сохраняют пользовательское местное wall-clock время.
 
 #### 6.2 Superseded decisions
 

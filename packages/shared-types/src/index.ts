@@ -21,6 +21,8 @@ export interface User {
   email: string | null;
   phone: string | null;
   timezone: string;
+  /** Null/omitted only for profiles not yet confirmed by the mobile lifecycle. */
+  timezoneSyncedAt?: Date | null;
   timeFormat: TimeFormat;
   hasCompletedOnboarding: boolean;
   plan: Plan;

@@ -15,6 +15,7 @@
 | [ADR-007](ADR-007-npm-workspaces-monorepo.md) | npm Workspaces Monorepo | active |
 | [ADR-008](ADR-008-overdue-task-recovery.md) | Overdue-Task Recovery Semantics | accepted — pre-implementation |
 | [ADR-010](ADR-010-russian-production-infrastructure-and-data-residency.md) | Russian Production Infrastructure and Data Residency | accepted |
+| [ADR-011](ADR-011-smartphone-authoritative-local-time.md) | Smartphone-Authoritative Floating Local Time | accepted — implementation in progress |
 
 ## Процесс
 

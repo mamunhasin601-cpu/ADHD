@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString, MinLength, ValidateIf } from 'class-validator';
+import { IsEmail, IsOptional, IsString, IsTimeZone, MinLength, ValidateIf } from 'class-validator';
 
 export class RegisterDto {
   @IsOptional()
@@ -22,7 +22,7 @@ export class RegisterDto {
   password: string;
 
   @IsOptional()
-  @IsString()
+  @IsTimeZone({ message: 'Некорректный часовой пояс (используйте формат IANA, напр. Europe/Samara)' })
   timezone?: string;
 
   // Хотя бы одно из полей обязательно

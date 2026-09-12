@@ -9,6 +9,7 @@ import { NotificationLifecycleProvider, useNotificationLifecycle } from '../lib/
 import { resolveAuthRedirect } from '../lib/auth-routing';
 import { OrbitsThemeProvider } from '../theme/orbits';
 import { useOrbitsThemeStore } from '../stores/orbits-theme.store';
+import { DeviceTimezoneSync } from '../lib/device-timezone-sync';
 
 // Настройка обработчика уведомлений
 Notifications.setNotificationHandler({
@@ -97,6 +98,7 @@ export default function RootLayout() {
       <OrbitsThemeProvider theme={themeName}>
       <NotificationLifecycleProvider userId={user?.id}>
       <View style={styles.rootContainer}>
+        <DeviceTimezoneSync />
         <PermissionBanner authenticated={Boolean(user)} />
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="login" />

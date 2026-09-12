@@ -32,6 +32,7 @@ jest.mock('../lib/notification-lifecycle', () => ({
   useNotificationLifecycle: () => mockLifecycle,
 }));
 jest.mock('../stores/auth.store', () => ({ useAuthStore: jest.fn() }));
+jest.mock('../lib/device-timezone-sync', () => ({ DeviceTimezoneSync: () => null }));
 
 import RootLayout from '../app/_layout';
 import { useAuthStore } from '../stores/auth.store';

@@ -112,8 +112,13 @@ export function NowCard({
   const timeFormat = useAuthStore(
     (state) => state.user?.timeFormat ?? "SYSTEM",
   );
+  const profileTimezone = useAuthStore(
+    (state) => state.user?.timezone,
+  );
   const time = task.startTime
-    ? formatClockTime(new Date(task.startTime), timeFormat)
+    ? formatClockTime(new Date(task.startTime), timeFormat, {
+        timeZone: profileTimezone,
+      })
     : null;
   const isCurrent = mode === "current";
   const isStarted = task.startedAt !== null;

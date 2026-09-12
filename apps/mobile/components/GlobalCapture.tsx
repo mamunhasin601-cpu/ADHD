@@ -188,7 +188,7 @@ export function GlobalCaptureProvider({ children, showFloatingAction = true }: {
         <View style={styles.overlay}><View style={styles.card}>
           <Text style={styles.title}>Новая запись</Text>
           <TextInput style={styles.input} placeholder="Название" placeholderTextColor="#9CA3AF" value={title} onChangeText={setTitle} autoFocus onSubmitEditing={() => submit()} returnKeyType="done" accessibilityLabel="Название записи" />
-          <Text style={styles.hint}>{selection.instant ? `Выбранное время: ${formatClockTime(selection.instant, timeFormat)}` : 'Без времени — запись сохранится в «Мысли»'}</Text>
+          <Text style={styles.hint}>{selection.instant ? `Выбранное время: ${formatClockTime(selection.instant, timeFormat, { timeZone: profileTimezone })}` : 'Без времени — запись сохранится в «Мысли»'}</Text>
           <Text style={styles.durationLabel}>Примерная длительность</Text>
           <View style={styles.presets}>{TASK_DURATION_PRESETS.map((value) => (
             <Pressable key={value ?? 'unknown'} onPress={() => setDuration(value)} accessibilityRole="button" accessibilityLabel={`Длительность ${taskDurationLabel(value)}`} accessibilityState={{ selected: duration === value }} style={[styles.chip, duration === value && styles.chipActive]}>
@@ -203,8 +203,8 @@ export function GlobalCaptureProvider({ children, showFloatingAction = true }: {
               <Pressable onPress={() => openFullForm('BUFFER')} accessibilityRole="button" accessibilityLabel="Открыть полную форму буфера" accessibilityState={{ disabled: busy }} disabled={busy} style={styles.blockAction}><Text style={styles.blockActionText}>Буфер</Text></Pressable>
             </View>
             {selection.instant && <Pressable onPress={() => submit(null)} accessibilityRole="button" accessibilityLabel="Сохранить задачу в Мысли без времени" accessibilityState={{ disabled, busy }} disabled={disabled}><Text style={styles.thoughts}>В Мысли</Text></Pressable>}
-            <Pressable onPress={() => submit()} style={[styles.submit, disabled && styles.disabled]} accessibilityRole="button" accessibilityLabel={selection.instant ? `Добавить задачу на ${formatClockTime(selection.instant, timeFormat)}` : 'Сохранить задачу в Мысли'} accessibilityState={{ disabled, busy }} disabled={disabled}>
-              {busy ? <ActivityIndicator color="#FFFFFF" accessibilityLabel="Сохранение задачи" /> : <Text style={styles.submitText}>{selection.instant ? `Добавить на ${formatClockTime(selection.instant, timeFormat)}` : 'Сохранить в Мысли'}</Text>}
+            <Pressable onPress={() => submit()} style={[styles.submit, disabled && styles.disabled]} accessibilityRole="button" accessibilityLabel={selection.instant ? `Добавить задачу на ${formatClockTime(selection.instant, timeFormat, { timeZone: profileTimezone })}` : 'Сохранить задачу в Мысли'} accessibilityState={{ disabled, busy }} disabled={disabled}>
+              {busy ? <ActivityIndicator color="#FFFFFF" accessibilityLabel="Сохранение задачи" /> : <Text style={styles.submitText}>{selection.instant ? `Добавить на ${formatClockTime(selection.instant, timeFormat, { timeZone: profileTimezone })}` : 'Сохранить в Мысли'}</Text>}
             </Pressable>
           </View>
         </View></View>

@@ -177,15 +177,18 @@ export default function TaskFormScreen() {
 
   const editTimezone = existingTask?.seriesTimezone ?? profileTimezone;
   const initialWallClock = initialStartTime && editTimezone &&
-    isValidIANATimezone(editTimezone) && params.selectedDateKey
+    isValidIANATimezone(editTimezone)
     ? getLocalHoursMinutes(initialStartTime, editTimezone)
     : initialStartTime
       ? { hours: initialStartTime.getHours(), minutes: initialStartTime.getMinutes() }
       : null;
   const blankNow = new Date();
-  const roundedBlankMinute = roundToStep(blankNow.getMinutes(), 5);
+  const blankWallClock = profileTimezone && isValidIANATimezone(profileTimezone)
+    ? getLocalHoursMinutes(blankNow, profileTimezone)
+    : { hours: blankNow.getHours(), minutes: blankNow.getMinutes() };
+  const roundedBlankMinute = roundToStep(blankWallClock.minutes, 5);
   const blankDefault = {
-    hours: (blankNow.getHours() + (roundedBlankMinute === 60 ? 1 : 0)) % 24,
+    hours: (blankWallClock.hours + (roundedBlankMinute === 60 ? 1 : 0)) % 24,
     minutes: roundedBlankMinute % 60,
   };
 

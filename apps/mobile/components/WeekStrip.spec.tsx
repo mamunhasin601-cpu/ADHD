@@ -1,6 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { buildWeekDays, WeekStrip } from './WeekStrip';
+import { buildWeekDays, resolveWeekSwipe, WeekStrip } from './WeekStrip';
 import { localMidnightToInstant, toCanonicalDateParam } from '../lib/timezone';
 
 describe('WeekStrip', () => {
@@ -14,13 +14,72 @@ describe('WeekStrip', () => {
 
   it('keeps selection distinct from the calm today marker and changes canonical day', () => {
     const onSelectDate = jest.fn();
-    render(<WeekStrip selectedDate="2026-08-12" todayDate="2026-08-15" onSelectDate={onSelectDate} />);
+    render(
+      <WeekStrip
+        selectedDate="2026-08-16"
+        todayDate="2026-08-15"
+        canGoPrevious
+        onPreviousWeek={jest.fn()}
+        onNextWeek={jest.fn()}
+        onSelectDate={onSelectDate}
+      />,
+    );
     expect(screen.getAllByRole('tab')).toHaveLength(7);
-    expect(screen.getByTestId('week-day-2026-08-12').props.accessibilityState).toEqual({ selected: true });
+    expect(screen.getByTestId('week-day-2026-08-16').props.accessibilityState).toEqual({ selected: true, disabled: false });
     expect(screen.getByTestId('today-marker')).toBeTruthy();
-    expect(screen.getByLabelText(/сегодня/).props.accessibilityState).toEqual({ selected: false });
+    expect(screen.getByLabelText(/сегодня/).props.accessibilityState).toEqual({ selected: false, disabled: false });
     fireEvent.press(screen.getByTestId('week-day-2026-08-16'));
     expect(onSelectDate).toHaveBeenCalledWith('2026-08-16');
+  });
+
+  it('disables dates before today and keeps today selectable', () => {
+    const onSelectDate = jest.fn();
+    render(
+      <WeekStrip
+        selectedDate="2026-08-15"
+        todayDate="2026-08-15"
+        canGoPrevious={false}
+        onPreviousWeek={jest.fn()}
+        onNextWeek={jest.fn()}
+        onSelectDate={onSelectDate}
+      />,
+    );
+
+    expect(screen.getByTestId('week-day-2026-08-14').props.accessibilityState.disabled).toBe(true);
+    fireEvent.press(screen.getByTestId('week-day-2026-08-14'));
+    expect(onSelectDate).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByTestId('week-day-2026-08-15'));
+    expect(onSelectDate).toHaveBeenCalledWith('2026-08-15');
+  });
+
+  it('resolves horizontal week swipes and blocks swiping into the past', () => {
+    expect(resolveWeekSwipe(-60, 0, false)).toBe('next');
+    expect(resolveWeekSwipe(60, 0, true)).toBe('previous');
+    expect(resolveWeekSwipe(60, 0, false)).toBeNull();
+    expect(resolveWeekSwipe(20, 0.6, true)).toBe('previous');
+    expect(resolveWeekSwipe(20, 0.6, false)).toBeNull();
+    expect(resolveWeekSwipe(20, 0.2, true)).toBeNull();
+  });
+
+  it('offers week navigation as accessibility actions on the selected day', () => {
+    const onPreviousWeek = jest.fn();
+    const onNextWeek = jest.fn();
+    render(
+      <WeekStrip
+        selectedDate="2026-08-22"
+        todayDate="2026-08-15"
+        canGoPrevious
+        onPreviousWeek={onPreviousWeek}
+        onNextWeek={onNextWeek}
+        onSelectDate={jest.fn()}
+      />,
+    );
+
+    const selectedDay = screen.getByTestId('week-day-2026-08-22');
+    fireEvent(selectedDay, 'accessibilityAction', { nativeEvent: { actionName: 'increment' } });
+    fireEvent(selectedDay, 'accessibilityAction', { nativeEvent: { actionName: 'decrement' } });
+    expect(onNextWeek).toHaveBeenCalledTimes(1);
+    expect(onPreviousWeek).toHaveBeenCalledTimes(1);
   });
 
   it.each(['2026-03-08', '2026-11-01'])('uses calendar arithmetic through DST week %s', (selectedDate) => {

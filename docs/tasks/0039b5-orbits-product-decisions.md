@@ -1,6 +1,6 @@
 # Task 0039 Phase B.5 — Orbits product decisions and physical-device evidence
 
-**Status:** planning record; implementation and verification remain explicitly separated
+**Status:** compact Today header and Plan → Thoughts are implemented and physically verified; remaining Phase B.5 scope stays open
 **Branch:** `codex/verify-orbits-phase-b5-android-accessibility`
 **Code checkpoint:** `7ba66b2a64c982c977fd872adda4f8c38b5de6a8`
 **Recorded:** 2026-09-02
@@ -286,6 +286,21 @@ Confirmed by direct user observation:
 - the gray theme is not accepted;
 - the Today header occupies too much of the first viewport and needs compaction.
 
+### Follow-up verification — 2026-09-12
+
+On the same physical Android/Expo Go path, the Product Owner directly confirmed:
+
+- the compact Today header renders without the arrow controls, the separate
+  **Сегодня** button, or the **Ваш день** heading;
+- past dates in the current week are unavailable;
+- a left swipe opens a future week, a right swipe returns to the current week
+  with today selected, and navigation cannot continue into a past week;
+- the **План → Мысли** entry opens the existing Thoughts screen successfully.
+
+This verification covers the normal device text setting used in the session.
+It does not establish TalkBack, increased-text, reduced-motion, iOS, or
+production-build approval.
+
 The phone's font settings screenshot reported **Обычный** (normal). The earlier Today clipping and reachability problem therefore was not limited to large-text mode.
 
 Development connectivity evidence:
@@ -298,8 +313,6 @@ Development connectivity evidence:
 
 This record does not claim completion of:
 
-- compact Today header runtime verification;
-- Thoughts entry inside Plan;
 - real Upcoming, Routines, or AI Plan content;
 - real Success metrics or achievements;
 - AI data-source, consent, privacy, provider, cost, or quality design;
@@ -323,14 +336,12 @@ Plan and Success may remain honest preview screens until their separately scoped
 
 ## Next bounded work
 
-Before broadening scope, the next implementation should remain small:
+The first two bounded items below are now implemented and physically verified:
 
-1. compact the Today header while preserving accessibility and date controls;
-2. expose the existing Thoughts inbox from Plan with truthful state handling;
+1. compact Today header and bounded week navigation — complete;
+2. existing Thoughts inbox entry from Plan with truthful states — complete;
 3. implement compact Appearance and Time Format disclosures;
 4. separately scope Add dismissal, draft protection, classification, and progressive details;
-5. run focused Jest and TypeScript checks;
-6. produce a Metro Android bundle;
-7. repeat physical-device verification on the Realme device at normal and increased font sizes.
+5. repeat physical-device verification at increased font sizes and with TalkBack.
 
 Notification permissions, real Plan aggregation, Success metrics, and AI planning should each receive a separate read-only audit and explicit implementation approval.

@@ -199,9 +199,12 @@ export default function TodayScreen() {
         progressKnown={!isLoading && !isError}
         completed={completedCount}
         total={totalCount}
-        onPrevious={() => selectCalendarDay(addCalendarDays(selectedDateKey, -1))}
-        onNext={() => selectCalendarDay(addCalendarDays(selectedDateKey, 1))}
-        onToday={() => selectCalendarDay(todayDateKey)}
+        canGoPrevious={selectedDateKey > todayDateKey}
+        onPreviousWeek={() => {
+          const previousDateKey = addCalendarDays(selectedDateKey, -7);
+          selectCalendarDay(previousDateKey < todayDateKey ? todayDateKey : previousDateKey);
+        }}
+        onNextWeek={() => selectCalendarDay(addCalendarDays(selectedDateKey, 7))}
         onSelectDate={selectCalendarDay}
       />
 
@@ -303,7 +306,7 @@ export default function TodayScreen() {
               <Pressable
                 testID="today-next-task-preview"
                 accessibilityRole="button"
-                accessibilityLabel={`Следующая задача: ${nextTask.title}, ${formatClockTime(new Date(nextTask.startTime!), timeFormat)}`}
+                accessibilityLabel={`Следующая задача: ${nextTask.title}, ${formatClockTime(new Date(nextTask.startTime!), timeFormat, { timeZone: profileTimezone })}`}
                 accessibilityHint="Открыть следующую задачу"
                 onPress={() => openTask(nextTask)}
                 style={[styles.nextTask, { backgroundColor: theme.activeSurface, borderColor: theme.activeBorder }]}
@@ -311,7 +314,7 @@ export default function TodayScreen() {
                 <Text style={[styles.nextEyebrow, { color: theme.activeBorder }]}>Дальше</Text>
                 <Text style={[styles.nextTitle, { color: theme.textPrimary }]} numberOfLines={2}>{nextTask.title}</Text>
                 <Text style={[styles.nextTime, { color: theme.textSecondary }]}>
-                  {formatClockTime(new Date(nextTask.startTime!), timeFormat)}
+                  {formatClockTime(new Date(nextTask.startTime!), timeFormat, { timeZone: profileTimezone })}
                 </Text>
               </Pressable>
             )}</>

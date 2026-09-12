@@ -45,7 +45,7 @@ function author(title = 'Новая мысль') {
 }
 function authorTimed(title = 'Время') {
   fireEvent.changeText(screen.getByLabelText('Название записи'), title);
-  fireEvent.press(screen.getByLabelText('Добавить задачу на 11:30'));
+  fireEvent.press(screen.getByLabelText('Добавить задачу на 14:30'));
 }
 function deferred<T = unknown>() {
   let resolve!: (value: T) => void;
