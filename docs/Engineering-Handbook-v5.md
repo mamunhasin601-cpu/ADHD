@@ -183,7 +183,7 @@ Trust rules: JWT supplies identity; `userId` from client is not trusted; Postgre
 
 ```mermaid
 sequenceDiagram
- participant UI as RecoverySection (Today)
+ participant UI as RecoverySection (Plan)
  participant Q as React Query
  participant S as TaskRecoveryService
  participant DB as PostgreSQL
@@ -213,9 +213,10 @@ sequenceDiagram
 - **Canonical date key.** `toCanonicalDateParam(date, profileTimezone)` — единственный
   хелпер для Today-запроса, dated-мутаций и Recovery-инвалидации. Разные хелперы для
   разных путей давали разные ключи вокруг полуночи при device tz ≠ profile tz.
-- **Today-only guard.** `RecoverySection` проверяет `!isToday` ДО `!timezoneValid`.
-  На исторических датах компонент возвращает `null` — без запроса и без timezone-state.
-  На сегодня с невалидной/отсутствующей timezone — нейтральный actionable state.
+- **Plan embedding.** `RecoverySection` остаётся владельцем Recovery query/cache и
+  в compact embedded mode не рисует внешний заголовок или zero-state. При нуле
+  Plan не резервирует место; при ненулевом count показывает один RecoveryBanner.
+  Default mode сохраняет прежний самостоятельный contract компонента.
 - **Strict absolute timestamp.** Destination принимает только абсолютный ISO-8601 инстант
   (`...Z` или `...±HH:MM`). Date-only и offsetless → HTTP 400. Destination строго >
   `referenceInstant` сервиса (equal-to-now и earlier-today → HTTP 422).
@@ -256,6 +257,59 @@ sequenceDiagram
 ### Task
 
 `Draft → Scheduled/Active → Completed | Deleted`; edit может reopen. При изменении проверять date projection, timezone, recurrence, parent/child ownership, quota и reminder state. Root-task limit не применять к subtask без явного policy.
+
+Для редактирования materialized recurring occurrence клиент передаёт явный
+`recurrenceEditScope`: `ONLY_THIS`, `THIS_AND_FUTURE` или `ENTIRE_SERIES`.
+`ONLY_THIS` меняет выбранную запись. `THIS_AND_FUTURE` атомарно завершает старую
+ветку накануне выбранного local date, создаёт новую series anchor в том же IANA
+timezone, удаляет только unstarted/incomplete projection и сохраняет UUID/state
+started/completed rows. Удалённые rows требуют очистки recovery references и
+отмены reminders после commit; новая ветка синхронизирует reminders. Whole-series
+update/delete работает по `recurrenceRootId`, а не только по последнему
+техническому `seriesId`: root наследуется новой веткой и её occurrences при
+каждом split. Forward migration заполняет templates/occurrences и восстанавливает
+старые цепочки по смежной local-date границе и близким транзакционным timestamps;
+строка без root остаётся обратно совместимой как одна локальная series. При
+удалении всей логической линии сначала инвалидируются recovery references, затем
+удаляются все anchors с cascade occurrences, после commit отменяются reminders.
+
+### Today timeline presentation contract
+
+Timeline остаётся проекцией real start/duration, но её display-coordinate может
+быть нелинейной ради читаемости. Один accumulated piecewise transform добавляет
+высоту после каждого chronological cluster и применяется одинаково к task/Rest/
+completed/NowCard, ticks, current-time marker, free windows и auto-scroll.
+Реально пересекающиеся интервалы сохраняют calendar columns; плотные смежные
+интервалы получают безопасный display gap. Обратное преобразование tap-coordinate
+не должно создавать ложное scheduled time: если inverse mapping не используется,
+форма получает выбранный date key и `startTime = null`.
+
+Gutter использует bounds уже преобразованной геометрии. Collision resolver не
+сравнивает только минуты: при пересечении действует приоритет internal started
+state → current marker → task start badge → tick, проигравшие text и dot/beacon
+скрываются вместе. Явный `startedAt` с известной duration даёт minute-snapshot
+`(now-startedAt)/duration`; UI ограничивает fill 100%, но сохраняет overtime
+семантику. Completed/unknown-duration/unstarted-overdue не получают fill.
+Focus expansion обязана зависеть от текущего rendered state и исчезать после
+start/complete/lost-focus, с пересчётом ticks, marker, free windows, canvas и
+auto-scroll через тот же transform.
+
+Today owns one minute wall-clock snapshot for the whole rendered lifecycle.
+Mount reads the real `Date.now()` immediately; a self-rescheduling timeout aims
+at each next system-minute boundary and recomputes from the real clock after
+every wake. App foreground, Today focus, and timezone-identity changes force an
+immediate resync. Timeline state, current marker, started-card current time,
+elapsed fill, and settling-wave eligibility all consume that same `nowMs`.
+
+`startedAt` now denotes the one incomplete active task for its user. A normal
+Start request encountering another active task returns the typed
+`ACTIVE_TASK_CONFLICT`; the client may explicitly retry with `confirmSwitch`.
+The server serializes the confirmed transition, clears `startedAt` on every
+other legacy active row without completing or rescheduling it, and starts the
+target with the actual server instant in the same transaction. The cleared task
+returns to the existing unstarted/lost-focus presentation and later follows the
+ordinary overdue Recovery eligibility rules; no parallel lifecycle state or
+automatic completion is introduced.
 
 Отдельный подпереход — `Overdue → Rescheduled | Inbox` (ADR-008, реализовано). Задача считается
 overdue только если она root (`parentTaskId IS NULL`), незавершённая, не recurring, имеет

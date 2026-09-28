@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,17 +9,19 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Timeline } from '../../components/timeline/Timeline';
 import { NowCard } from '../../components/NowCard';
 import { EmptyState } from '../../components/EmptyState';
-import { RecoverySection } from '../../components/RecoverySection';
 import {
   useTasksForDate,
   useCreateTask,
   useToggleTask,
   useStartTask,
   useUpdateTask,
+  useDeleteTask,
+  getActiveTaskConflict,
+  getEarlyStartConflict,
 } from '../../lib/api/tasks';
 import { useAuthStore } from '../../stores/auth.store';
 import {
@@ -32,11 +34,17 @@ import type { Task } from '@focus/shared-types';
 import { findCurrentTask } from '../../lib/current-task';
 import { NotificationInvitation } from '../../components/NotificationInvitation';
 import { TodayHeader } from '../../components/today/TodayHeader';
+import { useGlobalCapture } from '../../components/GlobalCapture';
 import { useOrbitsTheme } from '../../theme/orbits';
 import { useNotificationLifecycle } from '../../lib/notification-lifecycle';
-import { useGlobalCapture } from '../../components/GlobalCapture';
 import { isTaskRecord } from '../../lib/task-kind';
-import { formatClockTime } from '../../lib/time-format';
+import { FocusDatePicker } from '../../components/today/FocusDatePicker';
+import { useMinuteWallClock } from '../../lib/use-minute-wall-clock';
+import { FocusDialog } from '../../components/FocusDialog';
+import {
+  formatTaskActionSchedule,
+  isFutureUnstartedTask,
+} from '../../lib/task-action-confirmation';
 
 /**
  * Экран "Сегодня" — главный экран таймлайна дня.
@@ -44,15 +52,21 @@ import { formatClockTime } from '../../lib/time-format';
  */
 export default function TodayScreen() {
   const router = useRouter();
+  const { setGlobalCaptureDateContext } = useGlobalCapture();
   const theme = useOrbitsTheme();
-  const { openTimelineCapture } = useGlobalCapture();
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
 
   // Raw profile IANA timezone. May be undefined before the profile loads or
   // invalid if the stored value is corrupt. Never substituted with UTC for
   // Recovery — RecoverySection owns that guard (Task 0006C/0007A).
   const profileTimezone = useAuthStore((s) => s.user?.timezone);
   const timeFormat = useAuthStore((s) => s.user?.timeFormat ?? 'SYSTEM');
+  const { nowMs, resync: resyncClock } = useMinuteWallClock(profileTimezone);
+  const currentTime = useMemo(() => new Date(nowMs), [nowMs]);
+  useFocusEffect(useCallback(() => {
+    resyncClock();
+  }, [resyncClock]));
   const hasCompletedOnboarding = useAuthStore((s) => Boolean(s.user?.hasCompletedOnboarding));
   const notificationLifecycle = useNotificationLifecycle();
 
@@ -63,12 +77,16 @@ export default function TodayScreen() {
   const isToday = useMemo(
     () =>
       toCanonicalDateParam(selectedDate, profileTimezone) ===
-      toCanonicalDateParam(new Date(), profileTimezone),
-    [selectedDate, profileTimezone],
+      toCanonicalDateParam(currentTime, profileTimezone),
+    [selectedDate, currentTime, profileTimezone],
   );
 
   const selectedDateKey = toCanonicalDateParam(selectedDate, profileTimezone);
-  const todayDateKey = toCanonicalDateParam(new Date(), profileTimezone);
+  const todayDateKey = toCanonicalDateParam(currentTime, profileTimezone);
+
+  useEffect(() => {
+    setGlobalCaptureDateContext({ selectedDate, selectedDateKey });
+  }, [selectedDate, selectedDateKey, setGlobalCaptureDateContext]);
 
   function instantForCalendarDay(date: string): Date {
     if (profileTimezone && isValidIANATimezone(profileTimezone)) {
@@ -99,16 +117,6 @@ export default function TodayScreen() {
     refetch,
     isRefetching,
   } = useTasksForDate(selectedDate, profileTimezone);
-
-  const [currentTime, setCurrentTime] = useState(new Date());
-
-  // Обновляем время каждую минуту для актуализации Now/Next
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 60000); // каждую минуту
-    return () => clearInterval(interval);
-  }, []);
 
   const taskRecords = tasks.filter(isTaskRecord);
   const scheduledTasks = taskRecords.filter((task: Task) => task.startTime && !task.completedAt);
@@ -144,25 +152,72 @@ export default function TodayScreen() {
       .sort((a: Task, b: Task) => new Date(a.startTime!).getTime() - new Date(b.startTime!).getTime());
     return upcoming[0] || null;
   }, [scheduledTasks, currentTime, isToday]);
+  const focusedTask = currentTask ?? nextTask;
   // Same canonical key as the Today query and Recovery invalidation (0007A).
   const createTask = useCreateTask(selectedDate, profileTimezone);
   const toggleTask = useToggleTask(selectedDate, profileTimezone);
   const startTask = useStartTask(selectedDate, profileTimezone);
   const updateTask = useUpdateTask(selectedDate, profileTimezone);
+  const deleteTask = useDeleteTask(selectedDate, profileTimezone);
   const startSubmissionPending = useRef(false);
+  const switchSubmissionPending = useRef(false);
+  const [switchPending, setSwitchPending] = useState(false);
+  const [startConflict, setStartConflict] = useState<{
+    taskId: string;
+    activeTaskId: string;
+    activeTitle: string;
+    confirmEarlyStart: boolean;
+  } | null>(null);
+  const earlyStartSubmissionPending = useRef(false);
+  const [earlyStartPending, setEarlyStartPending] = useState(false);
+  const [earlyStartConfirmation, setEarlyStartConfirmation] = useState<{
+    taskId: string;
+    title: string;
+    startTime: Date | string;
+  } | null>(null);
+  const futureCompletionSubmissionPending = useRef(false);
+  const [futureCompletionPending, setFutureCompletionPending] = useState(false);
+  const [futureCompletionError, setFutureCompletionError] = useState<string | null>(null);
+  const [futureCompletionConfirmation, setFutureCompletionConfirmation] = useState<{
+    taskId: string;
+    title: string;
+    startTime: Date | string;
+  } | null>(null);
   const [startError, setStartError] = useState<{
     taskId: string;
     dateKey: string;
     message: string;
   } | null>(null);
 
-  async function handleStart(taskId: string) {
+  async function submitStart(taskId: string, confirmEarlyStart = false) {
     if (startSubmissionPending.current || startTask.isPending) return;
     startSubmissionPending.current = true;
     setStartError(null);
     try {
-      await startTask.mutateAsync(taskId);
-    } catch {
+      await startTask.mutateAsync(confirmEarlyStart ? { id: taskId, confirmEarlyStart: true } : taskId);
+      setEarlyStartConfirmation(null);
+    } catch (error) {
+      const earlyConflict = getEarlyStartConflict(error);
+      if (earlyConflict) {
+        setStartConflict(null);
+        setEarlyStartConfirmation({
+          taskId: earlyConflict.scheduledTask.id,
+          title: earlyConflict.scheduledTask.title,
+          startTime: earlyConflict.scheduledTask.startTime!,
+        });
+        return;
+      }
+      const conflict = getActiveTaskConflict(error);
+      if (conflict) {
+        setEarlyStartConfirmation(null);
+        setStartConflict({
+          taskId,
+          activeTaskId: conflict.activeTask.id,
+          activeTitle: conflict.activeTask.title,
+          confirmEarlyStart,
+        });
+        return;
+      }
       setStartError({
         taskId,
         dateKey: toCanonicalDateParam(selectedDate, profileTimezone),
@@ -170,6 +225,81 @@ export default function TodayScreen() {
       });
     } finally {
       startSubmissionPending.current = false;
+    }
+  }
+
+  async function handleStart(taskId: string) {
+    const task = tasks.find((candidate: Task) => candidate.id === taskId);
+    if (task && isFutureUnstartedTask(task, nowMs)) {
+      setStartError(null);
+      setEarlyStartConfirmation({ taskId, title: task.title, startTime: task.startTime! });
+      return;
+    }
+    await submitStart(taskId);
+  }
+
+  async function confirmEarlyTaskStart() {
+    if (!earlyStartConfirmation || earlyStartSubmissionPending.current || startTask.isPending) return;
+    earlyStartSubmissionPending.current = true;
+    setEarlyStartPending(true);
+    try {
+      await submitStart(earlyStartConfirmation.taskId, true);
+    } finally {
+      earlyStartSubmissionPending.current = false;
+      setEarlyStartPending(false);
+    }
+  }
+
+  async function confirmTaskSwitch() {
+    if (!startConflict || switchSubmissionPending.current || startTask.isPending) return;
+    const { taskId, activeTaskId, confirmEarlyStart } = startConflict;
+    switchSubmissionPending.current = true;
+    setSwitchPending(true);
+    setStartError(null);
+    try {
+      await startTask.mutateAsync({
+        id: taskId,
+        activeTaskId,
+        confirmSwitch: true,
+        ...(confirmEarlyStart ? { confirmEarlyStart: true } : {}),
+      });
+      setStartConflict(null);
+    } catch {
+      setStartConflict(null);
+      setStartError({
+        taskId,
+        dateKey: toCanonicalDateParam(selectedDate, profileTimezone),
+        message: 'Не удалось переключить задачу. Обновите день и попробуйте снова.',
+      });
+    } finally {
+      switchSubmissionPending.current = false;
+      setSwitchPending(false);
+    }
+  }
+
+  function handleToggle(taskId: string) {
+    const task = tasks.find((candidate: Task) => candidate.id === taskId);
+    if (task && isFutureUnstartedTask(task, nowMs)) {
+      setFutureCompletionError(null);
+      setFutureCompletionConfirmation({ taskId, title: task.title, startTime: task.startTime! });
+      return;
+    }
+    toggleTask.mutate(taskId);
+  }
+
+  async function confirmFutureCompletion() {
+    if (!futureCompletionConfirmation || futureCompletionSubmissionPending.current || toggleTask.isPending) return;
+    futureCompletionSubmissionPending.current = true;
+    setFutureCompletionPending(true);
+    setFutureCompletionError(null);
+    try {
+      await toggleTask.mutateAsync({ id: futureCompletionConfirmation.taskId, optimistic: false });
+      setFutureCompletionConfirmation(null);
+    } catch {
+      setFutureCompletionError('Не удалось отметить задачу выполненной. Попробуйте снова.');
+    } finally {
+      futureCompletionSubmissionPending.current = false;
+      setFutureCompletionPending(false);
     }
   }
 
@@ -199,13 +329,22 @@ export default function TodayScreen() {
         progressKnown={!isLoading && !isError}
         completed={completedCount}
         total={totalCount}
-        canGoPrevious={selectedDateKey > todayDateKey}
-        onPreviousWeek={() => {
-          const previousDateKey = addCalendarDays(selectedDateKey, -7);
-          selectCalendarDay(previousDateKey < todayDateKey ? todayDateKey : previousDateKey);
-        }}
+        canGoPrevious
+        onPreviousWeek={() => selectCalendarDay(addCalendarDays(selectedDateKey, -7))}
         onNextWeek={() => selectCalendarDay(addCalendarDays(selectedDateKey, 7))}
         onSelectDate={selectCalendarDay}
+        onOpenDatePicker={() => setDatePickerVisible(true)}
+      />
+
+      <FocusDatePicker
+        visible={datePickerVisible}
+        selectedDate={selectedDateKey}
+        todayDate={todayDateKey}
+        onClose={() => setDatePickerVisible(false)}
+        onConfirm={(date) => {
+          setDatePickerVisible(false);
+          selectCalendarDay(date);
+        }}
       />
 
       <ScrollView
@@ -268,56 +407,10 @@ export default function TodayScreen() {
         />
       )}
 
-      {/* Recovery — production coordinator owns timezone guard, query,
-          mutation, banner lifecycle and the Today-level partial notice. */}
-      {isToday && (
-        <RecoverySection
-          selectedDate={selectedDate}
-          profileTimezone={profileTimezone}
-          onTimezoneInvalid={() => router.push('/settings')}
-        />
-      )}
-
       {!isLoading && !isError && hasPlanEntries && (
         <>
-          {isToday && (currentTask || nextTask) && (
-            <><NowCard
-              task={currentTask ?? nextTask!}
-              mode={currentTask ? 'current' : 'upcoming'}
-              onComplete={(taskId) => toggleTask.mutate(taskId)}
-              onStart={handleStart}
-              onOpenTask={openTask}
-              onSaveFirstStep={async (taskId, firstStep) => updateTask.mutateAsync({ id: taskId, dto: { firstStep } })}
-              isCompleting={toggleTask.isPending}
-              isStarting={startTask.isPending}
-              isSavingFirstStep={updateTask.isPending}
-              startError={
-                startError &&
-                startError.taskId === (currentTask ?? nextTask!).id &&
-                startError.dateKey === toCanonicalDateParam(selectedDate, profileTimezone)
-                  ? startError.message
-                  : null
-              }
-            />
-            {hasCompletedOnboarding && notificationLifecycle.permission === 'not-asked' && notificationLifecycle.invitation === 'available' && (
-              <NotificationInvitation />
-            )}
-            {currentTask && nextTask && currentTask.id !== nextTask.id && (
-              <Pressable
-                testID="today-next-task-preview"
-                accessibilityRole="button"
-                accessibilityLabel={`Следующая задача: ${nextTask.title}, ${formatClockTime(new Date(nextTask.startTime!), timeFormat, { timeZone: profileTimezone })}`}
-                accessibilityHint="Открыть следующую задачу"
-                onPress={() => openTask(nextTask)}
-                style={[styles.nextTask, { backgroundColor: theme.activeSurface, borderColor: theme.activeBorder }]}
-              >
-                <Text style={[styles.nextEyebrow, { color: theme.activeBorder }]}>Дальше</Text>
-                <Text style={[styles.nextTitle, { color: theme.textPrimary }]} numberOfLines={2}>{nextTask.title}</Text>
-                <Text style={[styles.nextTime, { color: theme.textSecondary }]}>
-                  {formatClockTime(new Date(nextTask.startTime!), timeFormat, { timeZone: profileTimezone })}
-                </Text>
-              </Pressable>
-            )}</>
+          {isToday && focusedTask && hasCompletedOnboarding && notificationLifecycle.permission === 'not-asked' && notificationLifecycle.invitation === 'available' && (
+            <NotificationInvitation />
           )}
           {unscheduledTasks.length > 0 && (
             <View style={[styles.unscheduledList, { borderBottomColor: theme.borderSubtle, backgroundColor: theme.background }]}>
@@ -329,7 +422,7 @@ export default function TodayScreen() {
                   accessibilityLabel={`${task.title}${task.completedAt ? ', Выполнено' : ''}`}
                   accessibilityHint="Нажмите, чтобы изменить выполнение. Удерживайте, чтобы открыть задачу"
                   style={[styles.unscheduledItem, { backgroundColor: task.completedAt ? theme.completionSoft : theme.surfacePrimary, borderColor: task.completedAt ? theme.completionPrimary : theme.borderSubtle }]}
-                  onPress={() => toggleTask.mutate(task.id)}
+                  onPress={() => handleToggle(task.id)}
                   onLongPress={() =>
                     router.push({
                       pathname: '/task-form',
@@ -366,7 +459,7 @@ export default function TodayScreen() {
               orbits
               emoji="📅"
               title="Нет задач со временем"
-              description="Коснись таймлайна, чтобы запланировать задачу на конкретное время."
+              description="Коснись таймлайна, чтобы создать задачу. Время можно выбрать в форме."
               actionLabel={unscheduledTasks.length > 0 ? 'Запланировать из «Мыслей»' : undefined}
               onAction={
                 unscheduledTasks.length > 0
@@ -384,20 +477,134 @@ export default function TodayScreen() {
             />
           ) : (
             <Timeline
+              nowMs={nowMs}
               tasks={tasks}
-              onToggle={(id) => toggleTask.mutate(id)}
+              onToggle={handleToggle}
               onOpenTask={openTask}
-              onCreateAt={(instant) => openTimelineCapture({ instant, selectedDate, selectedDateKey })}
+              onMoveToThoughts={async (task) => {
+                await updateTask.mutateAsync({ id: task.id, dto: { startTime: null } });
+              }}
+              onDeleteTask={async (task) => {
+                await deleteTask.mutateAsync(task.id);
+              }}
+              onCreateTask={() => router.push({
+                pathname: '/task-form',
+                params: { selectedDate: selectedDate.toISOString(), selectedDateKey, prefillKind: 'TASK' },
+              })}
               shouldAutoScroll={isToday}
-              currentDate={selectedDate}
-              currentDateKey={selectedDateKey}
               profileTimezone={profileTimezone}
               currentTaskId={currentTask?.id}
+              focusedTaskId={isToday ? focusedTask?.id : undefined}
+              renderFocusedTask={isToday && focusedTask ? (task, onShowActions) => (
+                <NowCard
+                  task={task}
+                  mode={task.id === currentTask?.id ? 'current' : 'upcoming'}
+                  embeddedInTimeline
+                  onComplete={handleToggle}
+                  onStart={handleStart}
+                  onOpenTask={openTask}
+                  onShowActions={onShowActions}
+                  onSaveFirstStep={async (taskId, firstStep) => updateTask.mutateAsync({ id: taskId, dto: { firstStep } })}
+                  isCompleting={toggleTask.isPending}
+                  isStarting={startTask.isPending}
+                  isSavingFirstStep={updateTask.isPending}
+                  startError={
+                    startError &&
+                    startError.taskId === task.id &&
+                    startError.dateKey === toCanonicalDateParam(selectedDate, profileTimezone)
+                      ? startError.message
+                      : null
+                  }
+                />
+              ) : undefined}
             />
           )}
         </>
       )}
       </ScrollView>
+
+      <FocusDialog
+        visible={startConflict !== null}
+        title={startConflict ? `Сейчас выполняется «${startConflict.activeTitle}». Переключиться?` : ''}
+        onDismiss={() => {
+          if (!switchPending) setStartConflict(null);
+        }}
+        actions={[
+          {
+            text: 'Остаться',
+            style: 'cancel',
+            disabled: switchPending,
+            dismissOnPress: false,
+            onPress: () => setStartConflict(null),
+          },
+          {
+            text: switchPending ? 'Переключаем…' : 'Переключиться',
+            disabled: switchPending,
+            busy: switchPending,
+            dismissOnPress: false,
+            onPress: confirmTaskSwitch,
+          },
+        ]}
+      />
+
+      <FocusDialog
+        visible={earlyStartConfirmation !== null}
+        title={earlyStartConfirmation
+          ? `Задача запланирована на ${formatTaskActionSchedule(earlyStartConfirmation.startTime, nowMs, timeFormat, profileTimezone)}. Начать сейчас?`
+          : ''}
+        onDismiss={() => {
+          if (!earlyStartPending) setEarlyStartConfirmation(null);
+        }}
+        actions={[
+          {
+            text: 'Отмена',
+            style: 'cancel',
+            disabled: earlyStartPending,
+            dismissOnPress: false,
+            onPress: () => setEarlyStartConfirmation(null),
+          },
+          {
+            text: earlyStartPending ? 'Начинаем…' : 'Начать сейчас',
+            disabled: earlyStartPending,
+            busy: earlyStartPending,
+            dismissOnPress: false,
+            onPress: confirmEarlyTaskStart,
+          },
+        ]}
+      />
+
+      <FocusDialog
+        visible={futureCompletionConfirmation !== null}
+        title={futureCompletionConfirmation
+          ? `Задача запланирована на ${formatTaskActionSchedule(futureCompletionConfirmation.startTime, nowMs, timeFormat, profileTimezone)}. Отметить выполненной сейчас?`
+          : ''}
+        message={futureCompletionError ?? undefined}
+        onDismiss={() => {
+          if (!futureCompletionPending) {
+            setFutureCompletionConfirmation(null);
+            setFutureCompletionError(null);
+          }
+        }}
+        actions={[
+          {
+            text: 'Отмена',
+            style: 'cancel',
+            disabled: futureCompletionPending,
+            dismissOnPress: false,
+            onPress: () => {
+              setFutureCompletionConfirmation(null);
+              setFutureCompletionError(null);
+            },
+          },
+          {
+            text: futureCompletionPending ? 'Сохраняем…' : 'Выполнено',
+            disabled: futureCompletionPending,
+            busy: futureCompletionPending,
+            dismissOnPress: false,
+            onPress: confirmFutureCompletion,
+          },
+        ]}
+      />
 
     </SafeAreaView>
   );
@@ -406,7 +613,7 @@ export default function TodayScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   contentScroll: { flex: 1 },
-  scrollContent: { flexGrow: 1, paddingBottom: 24 },
+  scrollContent: { flexGrow: 1, paddingBottom: 40 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 },
   errorContainer: {
     margin: 24,
@@ -429,8 +636,4 @@ const styles = StyleSheet.create({
   unscheduledDot: { width: 8, height: 8, borderRadius: 4, marginRight: 10 },
   unscheduledText: { fontSize: 14, flex: 1 },
   unscheduledTextDone: { textDecorationLine: 'line-through' },
-  nextTask: { marginHorizontal: 20, marginBottom: 12, padding: 16, borderWidth: 1, borderRadius: 16, minHeight: 88 },
-  nextEyebrow: { fontSize: 12, lineHeight: 16, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
-  nextTitle: { marginTop: 4, fontSize: 17, lineHeight: 23, fontWeight: '700' },
-  nextTime: { marginTop: 4, fontSize: 14, lineHeight: 20 },
 });

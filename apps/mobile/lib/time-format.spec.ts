@@ -1,6 +1,7 @@
 import {
   formatClockTime,
   formatWallClock,
+  keepMeridiemTogether,
   parseClockInput,
 } from "./time-format";
 
@@ -42,6 +43,10 @@ describe("time-format contract", () => {
     expect(formatWallClock(0, 0, "H12", { locale: "en-US" })).toBe("12:00 AM");
     expect(formatWallClock(12, 0, "H12", { locale: "en-US" })).toBe("12:00 PM");
   });
+  it.each(["3:00 PM", "5:15 PM", "12:00 PM", "12:00 AM"])(
+    "keeps the meridiem suffix together in %s",
+    (label) => expect(keepMeridiemTogether(label)).toBe(label.replace(" ", "\u00A0")),
+  );
   it("supports an explicit IANA timezone", () =>
     expect(
       formatClockTime(new Date("2026-01-01T12:30Z"), "H24", {

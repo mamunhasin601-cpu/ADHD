@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Animated, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, PanResponder, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { addCalendarDays } from '../lib/timezone';
 import { useOrbitsTheme } from '../theme/orbits';
 
@@ -54,10 +54,17 @@ export function buildWeekDays(selectedDate: string, todayDate: string): WeekDayE
       dayNumber: value.getUTCDate(),
       selected: date === selectedDate,
       today,
-      disabled: date < todayDate,
+      disabled: false,
       accessibilityLabel: today ? `${fullDate}, сегодня` : fullDate,
     };
   });
+}
+
+export function adaptiveWeekDays(days: WeekDayEntry[], width: number, fontScale: number): WeekDayEntry[] {
+  if (width > 360 || fontScale < 1.8 || days.length <= 5) return days;
+  const selectedIndex = Math.max(0, days.findIndex((day) => day.selected));
+  const start = Math.max(0, Math.min(days.length - 5, selectedIndex - 2));
+  return days.slice(start, start + 5);
 }
 
 type WeekStripProps = {
@@ -78,7 +85,8 @@ export function WeekStrip({
   onSelectDate,
 }: WeekStripProps) {
   const theme = useOrbitsTheme();
-  const days = buildWeekDays(selectedDate, todayDate);
+  const { width: windowWidth, fontScale } = useWindowDimensions();
+  const days = adaptiveWeekDays(buildWeekDays(selectedDate, todayDate), windowWidth, fontScale);
   const translateX = useRef(new Animated.Value(0)).current;
   const width = useRef(0);
   const gestureCallbacks = useRef({ canGoPrevious, onPreviousWeek, onNextWeek });
@@ -193,7 +201,7 @@ export function WeekStrip({
 const styles = StyleSheet.create({
   viewport: { overflow: 'hidden', marginTop: 4 },
   row: { flexDirection: 'row', justifyContent: 'space-between' },
-  day: { flex: 1, minHeight: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2, paddingVertical: 3 },
+  day: { flex: 1, minHeight: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2, paddingVertical: 3 },
   disabledDay: { opacity: 0.35 },
   weekday: { fontSize: 12, lineHeight: 15 },
   number: { fontSize: 16, lineHeight: 19, fontWeight: '600' },

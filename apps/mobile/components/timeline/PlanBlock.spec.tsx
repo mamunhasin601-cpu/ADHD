@@ -26,13 +26,14 @@ function makeBlock(kind: 'REST' | 'BUFFER', durationMinutes: number | null = 45)
 
 it.each([
   ['REST', 'Отдых', 'Тихая пауза'],
-  ['BUFFER', 'Буфер', 'Дорога'],
-] as const)('renders %s distinctly and opens editing without a completion action', (kind, typeLabel, title) => {
+  ['BUFFER', 'Отдых', 'Дорога'],
+] as const)('renders %s as unified Rest and opens editing without a completion action', (kind, typeLabel, title) => {
   const onOpen = jest.fn();
   const task = makeBlock(kind);
   render(<PlanBlock task={task} onOpen={onOpen} timeFormat="H24" profileTimezone="Europe/Moscow" />);
 
   expect(screen.getByText(typeLabel)).toBeTruthy();
+  expect(screen.queryByText('Буфер')).toBeNull();
   expect(screen.getByText(title)).toBeTruthy();
   expect(screen.queryByLabelText(/выполн/i)).toBeNull();
   fireEvent.press(screen.getByRole('button'));

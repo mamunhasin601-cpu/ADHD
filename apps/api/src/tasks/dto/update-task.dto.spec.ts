@@ -23,4 +23,13 @@ describe('UpdateTaskDto firstStep production boundary', () => {
     await expect(pipe.transform({ startedAt: '2026-08-14T10:00:00Z' }, metadata))
       .rejects.toMatchObject({ status: 400 });
   });
+
+  it.each(['ONLY_THIS', 'THIS_AND_FUTURE', 'ENTIRE_SERIES'])('accepts recurrence edit scope %s', async (recurrenceEditScope) => {
+    await expect(pipe.transform({ recurrenceEditScope }, metadata)).resolves.toMatchObject({ recurrenceEditScope });
+  });
+
+  it('rejects an unknown recurrence edit scope', async () => {
+    await expect(pipe.transform({ recurrenceEditScope: 'FUTURE_MAGIC' }, metadata))
+      .rejects.toMatchObject({ status: 400 });
+  });
 });

@@ -18,6 +18,15 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('../lib/api/tasks', () => ({
   useInboxTasks: () => ({ ...mockInboxState, refetch: mockRefetch }),
+  useOverdueTasks: () => ({
+    data: { tasks: [], userTimezone: 'UTC' },
+    isLoading: false,
+    isError: false,
+    isRefetching: false,
+    refetch: jest.fn(),
+  }),
+  useRescheduleOverdueTasks: () => ({ mutate: jest.fn(), isPending: false, reset: jest.fn() }),
+  useUndoRecovery: () => ({ mutate: jest.fn(), isPending: false }),
 }));
 jest.mock('react-native-safe-area-context', () => {
   const { View } = require('react-native');

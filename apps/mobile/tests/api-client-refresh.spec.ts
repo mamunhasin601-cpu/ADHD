@@ -24,6 +24,7 @@ import { useAuthStore } from '../stores/auth.store';
 
 const oldTokens: AuthTokens = { accessToken: 'old-access', refreshToken: 'refresh-1' };
 const newTokens: AuthTokens = { accessToken: 'new-access', refreshToken: 'refresh-2' };
+const mockSetTokens = jest.fn(async (tokens: AuthTokens) => { setAuthTokens(tokens); });
 
 describe('api client refresh interceptor', () => {
   const mockApiClient = apiClient as unknown as jest.Mock;
@@ -38,12 +39,61 @@ describe('api client refresh interceptor', () => {
     setAuthTokens(oldTokens);
     mockGetState.mockReturnValue({
       refreshToken: oldTokens.refreshToken,
-      setTokens: jest.fn().mockResolvedValue(undefined),
+      setTokens: mockSetTokens,
       logout: jest.fn().mockResolvedValue(undefined),
     });
     mockApiClient.mockImplementation((config: Record<string, unknown>) =>
       Promise.resolve({ status: 200, config }),
     );
+  });
+
+  it('returns the successful DELETE retry response after one refresh with the new Authorization', async () => {
+    const retryResponse = { status: 200, data: { affectedOccurrenceIds: ['task-1'] } };
+    mockAxiosPost.mockResolvedValue({ data: newTokens });
+    mockApiClient.mockResolvedValue(retryResponse);
+    const originalRequest = {
+      method: 'delete',
+      url: '/tasks/task-1',
+      headers: { Authorization: 'Bearer old-access' },
+    };
+
+    const result = await responseRejected({
+      response: { status: 401 },
+      config: originalRequest,
+    });
+
+    expect(result).toBe(retryResponse);
+    expect(mockAxiosPost).toHaveBeenCalledTimes(1);
+    expect(mockSetTokens).toHaveBeenCalledWith(newTokens);
+    expect(apiClient.defaults.headers.common.Authorization).toBe('Bearer new-access');
+    expect(mockApiClient).toHaveBeenCalledTimes(1);
+    expect(mockApiClient).toHaveBeenCalledWith(expect.objectContaining({
+      method: 'delete',
+      url: '/tasks/task-1',
+      _retry: true,
+      headers: expect.objectContaining({ Authorization: 'Bearer new-access' }),
+    }));
+  });
+
+  it.each([404, 500])('returns the retry %i error without refreshing a second time', async (status) => {
+    mockAxiosPost.mockResolvedValue({ data: newTokens });
+    const retryError = { response: { status }, config: undefined as unknown };
+    mockApiClient.mockImplementation((config: Record<string, unknown>) => {
+      retryError.config = config;
+      return responseRejected(retryError);
+    });
+
+    await expect(responseRejected({
+      response: { status: 401 },
+      config: { method: 'delete', url: '/tasks/task-1', headers: {} },
+    })).rejects.toBe(retryError);
+
+    expect(mockAxiosPost).toHaveBeenCalledTimes(1);
+    expect(mockApiClient).toHaveBeenCalledTimes(1);
+    expect(retryError.config).toEqual(expect.objectContaining({
+      _retry: true,
+      headers: expect.objectContaining({ Authorization: 'Bearer new-access' }),
+    }));
   });
 
   it('uses one refresh request for three simultaneous 401 responses', async () => {

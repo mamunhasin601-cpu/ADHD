@@ -13,6 +13,7 @@ jest.mock("../stores/auth.store", () => ({
 
 import React from "react";
 import { render, fireEvent, act, screen } from "@testing-library/react-native";
+import { StyleSheet } from "react-native";
 import { RecoveryBanner } from "./RecoveryBanner";
 import { ORBITS_THEMES, OrbitsThemeProvider, type OrbitsThemeName } from "../theme/orbits";
 
@@ -104,17 +105,17 @@ describe("RecoveryBanner — banner absent/present", () => {
 
   it("banner shows count for one task", () => {
     renderBanner();
-    expect(screen.getByText(/1 незавершённая задача/)).toBeTruthy();
+    expect(screen.getByText('Продолжить · 1')).toBeTruthy();
   });
 
   it("banner shows count for multiple tasks", () => {
     renderBanner({ overdueTasks: [task1, task2] });
-    expect(screen.getByText(/2 незавершённых задачи/)).toBeTruthy();
+    expect(screen.getByText('Продолжить · 2')).toBeTruthy();
   });
 });
 
 describe("RecoveryBanner — Orbits theme surfaces", () => {
-  it("uses semantic dark tokens for the banner and sheet", () => {
+  it("uses semantic dark tokens for the banner, sheet, and backdrop", () => {
     renderBanner({}, "dark");
     const banner = screen.getByTestId("recovery-banner");
     const bannerStyle = Object.assign({}, ...banner.props.style.filter(Boolean));
@@ -122,7 +123,10 @@ describe("RecoveryBanner — Orbits theme surfaces", () => {
     expect(bannerStyle.borderColor).toBe(ORBITS_THEMES.dark.rewardPrimary);
     fireEvent.press(banner);
     const sheetStyle = Object.assign({}, ...screen.getByTestId("recovery-sheet-surface").props.style.filter(Boolean));
-    expect(sheetStyle.backgroundColor).toBe(ORBITS_THEMES.dark.surfacePrimary);
+    expect(sheetStyle.backgroundColor).toBe(ORBITS_THEMES.dark.background);
+    expect(StyleSheet.flatten(screen.getByTestId("recovery-sheet-scrim").props.style)).toEqual(
+      expect.objectContaining({ backgroundColor: ORBITS_THEMES.dark.elevationShadow }),
+    );
   });
 });
 
@@ -432,9 +436,18 @@ describe("RecoveryBanner — cancel", () => {
 
 describe("RecoveryBanner — loading / isConfirming", () => {
   it("shows spinner when isConfirming=true", () => {
-    renderBanner({ isConfirming: true });
+    renderBanner({ isConfirming: true }, "dark");
     fireEvent.press(screen.getByTestId("recovery-banner"));
     expect(screen.getByTestId("confirm-spinner")).toBeTruthy();
+    expect(StyleSheet.flatten(screen.getByTestId("cancel-btn").props.style)).toEqual(
+      expect.objectContaining({
+        backgroundColor: ORBITS_THEMES.dark.surfaceMuted,
+        borderColor: ORBITS_THEMES.dark.borderSubtle,
+      }),
+    );
+    expect(StyleSheet.flatten(screen.getByText("Отмена").props.style)).toEqual(
+      expect.objectContaining({ color: ORBITS_THEMES.dark.textSecondary }),
+    );
   });
 
   it("confirm button is disabled when isConfirming=true", () => {
@@ -566,6 +579,14 @@ describe("RecoveryBanner — confirm with subset", () => {
 });
 
 describe("RecoveryBanner — accessibility", () => {
+  it('uses calm Continue copy for the entry and sheet', () => {
+    renderBanner({ overdueTasks: [task1, task2] });
+    expect(screen.getByTestId('recovery-banner').props.accessibilityLabel).toBe('Продолжить, 2 задач, к которым можно вернуться. Нажмите, чтобы выбрать, что делать дальше.');
+    fireEvent.press(screen.getByTestId('recovery-banner'));
+    expect(screen.getByText('Продолжить')).toBeTruthy();
+    expect(screen.queryByText(/Незавершённые|Просроченные|Долги|Хвосты/i)).toBeNull();
+  });
+
   it("modal has accessibilityViewIsModal", () => {
     renderBanner();
     fireEvent.press(screen.getByTestId("recovery-banner"));

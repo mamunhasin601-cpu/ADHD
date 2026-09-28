@@ -76,11 +76,13 @@ Phase 1 реализует минимальное ядро из [PDR-001](../12-
    поверхностям, не меняя timezone, timestamps, границы дня или scheduling.
    Реализация следует [PDR-002](../12-Decisions/PDR-002-User-Controlled-Time-Format.md).
 
-6. **Task 0017 — explicit task start state — completed.** Пользователь явно
-   начинает задачу из карточки `Сейчас`; сервер сохраняет первый `startedAt`,
-   а расписание само по себе никогда не означает начало. Это историческое,
-   неэксклюзивное событие без focus session, паузы, таймера или поведения
-   помощника и соответствует принятому [PDR-001](../12-Decisions/PDR-001-Timeline-Centered-Day-Experience.md).
+6. **Task 0017 — explicit task start state — completed; single-active policy
+   refined by Task 0039.** Пользователь явно начинает задачу из карточки
+   `Сейчас`; расписание само по себе никогда не означает начало. `startedAt`
+   теперь обозначает одну реально выполняемую задачу пользователя. Запуск другой
+   требует явного подтверждения переключения; прежняя задача не завершается
+   автоматически, а возвращается в существующий lost-focus/Recovery lifecycle.
+   Focus session, пауза, таймер и поведение помощника по-прежнему не вводятся.
 
 7. **Task 0018 — persisted first step and difficult-start support — completed.**
    Пользователь может сохранить короткий наблюдаемый первый шаг и открыть спокойную
@@ -170,7 +172,7 @@ explainable rescheduling не блокируют проверку минимал
 [PDR-002](../12-Decisions/PDR-002-User-Controlled-Time-Format.md), но не становится
 автоматически Task 0015 и не ставится впереди approximate duration.
 
-### 3.6 Task 0039 — Visual Identity Foundation (planned)
+### 3.6 Task 0039 — Visual Identity Foundation (Phase B accepted)
 
 Task 0039 фиксирует approved product direction **Focus is calm but alive** и
 делится на независимые evidence gates:
@@ -178,15 +180,57 @@ Task 0039 фиксирует approved product direction **Focus is calm but aliv
 1. **Phase A — documentation/spec:** semantic palette, surfaces, typography,
    motion, accessibility/sensory rules и Today mockup; требуется product/design
    approval.
-2. **Phase B — first implementation:** shared tokens и Orbits, затем только Today
-   как первый reference screen; обязательны contrast, text scaling, screen reader,
-   reduced motion, haptic/sound opt-out и recovery/undo checks.
+2. **Phase B — first implementation:** shared tokens и Orbits начались с Today и
+   теперь применены к установленной навигации, основным маршрутам, полным и быстрым
+   формам, pre-auth flow и системным transition canvases. Пользователь выбирает
+   только `warm` или `dark`; локальный выбор не зависит от аккаунта. Production-код
+   и автоматические проверки завершены; обязательная physical Realme matrix
+   принята 2026-09-28.
 3. **Phase C — future personalization/monetization:** архитектура pack/fallback,
    Sparks и Focusiki после отдельного approval. One-time/subscription/premium-tier
    choice остаётся открытым.
 
-Это план, а не утверждение о готовых assets, runtime rollout, billing или
-entitlement.
+Phase B закрыта на уровне production-кода, автоматических проверок и обязательной
+физической приёмки на Realme. Phase C, billing, entitlement, Sparks/Focusiki, AI
+и focus-session scope не начинались.
+
+**2026-09-27 acceptance follow-up:** source defects found on Realme are repaired
+for selected-date capture, recurrence scope, elastic timeline geometry, H12,
+maximum text, Android system bars and login keyboard avoidance. The item remains
+`device acceptance pending` until the physical matrix is repeated. Push delivery
+is blocked on real Expo/EAS project identity and credentials, not substituted
+with placeholder infrastructure.
+
+**2026-09-27 second corrective package:** code now carries logical recurrence
+lineage across repeated splits, resolves timeline gutter labels by bounds,
+renders explicit-start elapsed/overtime state, releases stale focused-card
+spacing, and provides a documented combined-extreme accessibility fallback.
+Focused/full automation and Android export are implementation evidence only;
+the six-theme Realme retest remains the open acceptance gate.
+
+**2026-09-27 final corrective package:** started cards now retain scheduled
+context and one internal current-time/elapsed line; measured card bounds suppress
+the conflicting external Now beacon. Valid old explicit starts use compact
+hour/day totals, and the accepted wash now advances diagonally with one finite,
+Reduce-Motion-safe settling wave. Automation is complete for this package, but
+the short post-fix Realme smoke remains the Task 0039 acceptance gate.
+
+**2026-09-28 future-action correction:** an unstarted future task now requires
+explicit confirmation before completion or Start. Completion remains visually
+unchanged until the canonical response; early Start is also enforced by the API
+and composes in order with the existing active-task conflict. Switching leaves
+the prior task incomplete and available through the normal overdue Recovery
+flow. This does not add the separate competitive model, and Task 0039 remains
+`physical smoke pending`.
+
+**2026-09-28 physical acceptance close-out:** the required Realme theme,
+pre-auth, Quick Capture, Timeline, explicit Start/single-active, future-action,
+recurrence, large-text, Reduce Motion, system-bar, and TalkBack smoke passed.
+Task 0039 is accepted within Visual Identity Phase B and its Timeline corrective
+packages. Push-delivery smoke remains separately blocked by the missing working
+EAS `projectId`, credentials, and device push token and is not claimed as passed.
+`Сейчас по плану / конкурентная модель` is a new product iteration outside Task
+0039 and has not been implemented.
 
 ### 4. Phase 2: focus and body doubling
 

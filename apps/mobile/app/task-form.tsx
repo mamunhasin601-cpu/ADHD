@@ -6,19 +6,19 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Alert,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import type { Task, TaskKind } from "@focus/shared-types";
+import { StatusBar } from "expo-status-bar";
+import type { RecurrenceEditScope, Task, TaskKind } from "@focus/shared-types";
 import {
   useCreateTask,
   useUpdateTask,
   useDeleteTask,
 } from "../lib/api/tasks";
-import { isFreeTierLimitError } from "../lib/api-error";
+import { isFreeTierLimitError, isTaskTimeSlotOccupiedError } from "../lib/api-error";
 import { useAuthStore } from "../stores/auth.store";
 import { formatWallClock, uses12HourClock } from "../lib/time-format";
-import { TASK_DURATION_PRESETS, taskDurationLabel } from "../lib/task-duration";
+import { taskDurationLabel } from "../lib/task-duration";
 import {
   calendarDayWallTimeToInstant,
   getLocalHoursMinutes,
@@ -26,6 +26,8 @@ import {
   toCanonicalDateParam,
 } from "../lib/timezone";
 import { normalizeTaskKind } from "../lib/task-kind";
+import { FocusDialog, useFocusDialog } from "../components/FocusDialog";
+import { useOrbitsTheme, type OrbitsThemeTokens } from "../theme/orbits";
 
 const COLOR_PRESETS = [
   "#6B5BFC",
@@ -41,7 +43,19 @@ const COLOR_PRESETS = [
 const MAX_MANUAL_TASK_PARTS = 50;
 const MAX_TASK_PART_TITLE_LENGTH = 240;
 
+const DURATION_GRID_COLUMNS = [
+  [null, 45, 120],
+  [15, 60],
+  [30, 90],
+] as const;
+
 type RecurrencePreset = "none" | "daily" | "weekdays";
+
+const RECURRENCE_SCOPE_LABELS: Record<RecurrenceEditScope, string> = {
+  ONLY_THIS: "Только это повторение",
+  THIS_AND_FUTURE: "Это и все будущие",
+  ENTIRE_SERIES: "Всю серию",
+};
 
 const RECURRENCE_RULES: Record<RecurrencePreset, string | null> = {
   none: null,
@@ -86,6 +100,9 @@ function newCreateRequestId(): string {
 
 export default function TaskFormScreen() {
   const router = useRouter();
+  const theme = useOrbitsTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+  const { showDialog, dialogProps } = useFocusDialog();
   const params = useLocalSearchParams<{
     task?: string;
     prefillStartTime?: string;
@@ -156,7 +173,10 @@ export default function TaskFormScreen() {
   }, []);
 
   const isEditMode = !!existingTask;
-  const initialKind = normalizeTaskKind(existingTask?.kind ?? params.prefillKind);
+  const requestedKind = normalizeTaskKind(existingTask?.kind ?? params.prefillKind);
+  // BUFFER remains a valid persisted value for legacy records, but new UI
+  // creation exposes one unified user-facing REST type.
+  const initialKind: TaskKind = existingTask ? requestedKind : requestedKind === "BUFFER" ? "REST" : requestedKind;
 
   const callerGuard = () => saveContinuationGuardRef.current?.() ?? true;
   const createTask = useCreateTask(today, profileTimezone, callerGuard);
@@ -170,9 +190,7 @@ export default function TaskFormScreen() {
   const [firstStep, setFirstStep] = useState(existingTask?.firstStep ?? "");
 
   const initialStartTime =
-    (existingTask?.seriesId && existingTask.seriesStartTime
-      ? new Date(existingTask.seriesStartTime)
-      : existingTask?.startTime) ??
+    existingTask?.startTime ??
     (params.prefillStartTime ? new Date(params.prefillStartTime) : null);
 
   const editTimezone = existingTask?.seriesTimezone ?? profileTimezone;
@@ -183,12 +201,9 @@ export default function TaskFormScreen() {
       ? { hours: initialStartTime.getHours(), minutes: initialStartTime.getMinutes() }
       : null;
   const blankNow = new Date();
-  const blankWallClock = profileTimezone && isValidIANATimezone(profileTimezone)
-    ? getLocalHoursMinutes(blankNow, profileTimezone)
-    : { hours: blankNow.getHours(), minutes: blankNow.getMinutes() };
-  const roundedBlankMinute = roundToStep(blankWallClock.minutes, 5);
+  const roundedBlankMinute = roundToStep(blankNow.getMinutes(), 5);
   const blankDefault = {
-    hours: (blankWallClock.hours + (roundedBlankMinute === 60 ? 1 : 0)) % 24,
+    hours: (blankNow.getHours() + (roundedBlankMinute === 60 ? 1 : 0)) % 24,
     minutes: roundedBlankMinute % 60,
   };
 
@@ -214,9 +229,15 @@ export default function TaskFormScreen() {
   const [recurrencePreset, setRecurrencePreset] = useState<RecurrencePreset>(
     recurrencePresetFromRule(existingTask?.seriesRecurrenceRule ?? existingTask?.recurrenceRule ?? null),
   );
+  const [recurrenceEditScope, setRecurrenceEditScope] = useState<RecurrenceEditScope>(
+    existingTask?.seriesId ? "ONLY_THIS" : "ENTIRE_SERIES",
+  );
   const initialRecurrencePreset = recurrencePresetFromRule(
     existingTask?.seriesRecurrenceRule ?? existingTask?.recurrenceRule ?? null,
   );
+  const stopRecurrenceLabel = recurrenceEditScope === "ENTIRE_SERIES"
+    ? "Остановить весь повтор"
+    : "Остановить повтор с этого события";
 
   const draftIdRef = useRef(0);
   const [partsDraft, setPartsDraft] = useState<PartDraft[]>(() =>
@@ -236,9 +257,9 @@ export default function TaskFormScreen() {
   const isBlock = kind !== "TASK";
   const blockValidationMessage = isBlock
     ? !hasTime
-      ? "Для отдыха или буфера укажите время."
+      ? "Для отдыха укажите время."
       : durationMinutes === null || durationMinutes <= 0
-        ? "Для отдыха или буфера выберите длительность."
+        ? "Для отдыха выберите длительность."
         : null
     : null;
 
@@ -269,7 +290,8 @@ export default function TaskFormScreen() {
     draftTaskIdentityRef.current = nextIdentity;
     draftIdRef.current = 0;
     setTitle(existingTask?.title ?? params.prefillTitle ?? "");
-    setKind(normalizeTaskKind(existingTask?.kind ?? params.prefillKind));
+    const nextRequestedKind = normalizeTaskKind(existingTask?.kind ?? params.prefillKind);
+    setKind(existingTask ? nextRequestedKind : nextRequestedKind === "BUFFER" ? "REST" : nextRequestedKind);
     setFirstStep(existingTask?.firstStep ?? "");
     setHasTime(!!initialStartTime);
     setWallClockEdited(false);
@@ -278,6 +300,7 @@ export default function TaskFormScreen() {
     setDurationMinutes(existingTask ? existingTask.durationMinutes : prefillDuration);
     setColor(existingTask?.color ?? COLOR_PRESETS[0]);
     setRecurrencePreset(initialRecurrencePreset);
+    setRecurrenceEditScope(existingTask?.seriesId ? "ONLY_THIS" : "ENTIRE_SERIES");
     setPartsDraft((existingTask?.subTasks ?? []).map((part) => ({
       id: part.id,
       draftId: part.id,
@@ -292,10 +315,10 @@ export default function TaskFormScreen() {
   function selectKind(nextKind: TaskKind) {
     if (nextKind === kind) return;
     if (isEditMode && (kind === "TASK" || nextKind === "TASK")) {
-      Alert.alert(
-        "Тип нельзя изменить",
-        "В этой версии задачу нельзя преобразовать в отдых или буфер, и наоборот.",
-      );
+      showDialog({
+        title: "Тип нельзя изменить",
+        message: "В этой версии задачу нельзя преобразовать в отдых и наоборот.",
+      });
       return;
     }
     const hasTaskOwnedDraftData = firstStep.trim() ||
@@ -304,10 +327,10 @@ export default function TaskFormScreen() {
       partsDraft.length > 0 ||
       subtaskInput.trim();
     if (nextKind !== "TASK" && kind === "TASK" && hasTaskOwnedDraftData) {
-      Alert.alert(
-        "Сначала уберите данные задачи",
-        "Первый шаг, цвет, повтор и части доступны только задаче. Мы не удаляем их автоматически.",
-      );
+      showDialog({
+        title: "Сначала уберите данные задачи",
+        message: "Первый шаг, цвет, повтор и части доступны только задаче. Мы не удаляем их автоматически.",
+      });
       return;
     }
     setKind(nextKind);
@@ -380,11 +403,19 @@ export default function TaskFormScreen() {
     const recurrenceAnchorKey = existingTask?.seriesStartTime
       ? toCanonicalDateParam(new Date(existingTask.seriesStartTime), existingTask.seriesTimezone)
       : selectedDateKey;
+    const occurrenceDateKey = existingTask?.recurrenceDateKey ?? selectedDateKey;
+    const editedDateKey = existingTask?.seriesId && recurrenceEditScope === "ENTIRE_SERIES"
+      ? recurrenceAnchorKey
+      : occurrenceDateKey;
+    const unchangedStartTime = existingTask?.seriesId &&
+      recurrenceEditScope === "ENTIRE_SERIES" && existingTask.seriesStartTime
+      ? new Date(existingTask.seriesStartTime)
+      : initialStartTime;
     const startTimeIso = hasTime
-      ? initialStartTime && !wallClockEdited
-        ? initialStartTime.toISOString()
+      ? unchangedStartTime && !wallClockEdited
+        ? unchangedStartTime.toISOString()
         : calendarDayWallTimeToInstant(
-            existingTask?.seriesId ? recurrenceAnchorKey : selectedDateKey,
+            existingTask?.seriesId ? editedDateKey : selectedDateKey,
             hour, minute, existingTask?.seriesTimezone ?? profileTimezone,
           ).toISOString()
       : null;
@@ -408,6 +439,7 @@ export default function TaskFormScreen() {
           deviceTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           editRecurrenceAnchor: !!existingTask?.seriesId && wallClockEdited,
           editRecurrencePattern: !!existingTask?.seriesId && recurrencePreset !== initialRecurrencePreset,
+          ...(existingTask?.seriesId && { recurrenceEditScope }),
           ...(recurrencePreset === "none" && {
             subTasks: partsDraft.map(({ id, title: partTitle, completed }) => ({
               ...(id ? { id } : {}),
@@ -437,11 +469,17 @@ export default function TaskFormScreen() {
     } catch (err) {
       if (!isCurrent()) return;
       if (isFreeTierLimitError(err)) router.replace("/paywall");
+      else if (isTaskTimeSlotOccupiedError(err)) {
+        showDialog({
+          title: "Это время уже занято",
+          message: "Выберите другое время или измените длительность.",
+        });
+      }
       else {
-        Alert.alert(
-          "Не удалось сохранить",
-          "Проверьте соединение и попробуйте снова",
-        );
+        showDialog({
+          title: "Не удалось сохранить",
+          message: "Проверьте соединение и попробуйте снова",
+        });
       }
     } finally {
       if (isCurrent()) {
@@ -454,56 +492,79 @@ export default function TaskFormScreen() {
   function handleDelete() {
     if (!existingTask) return;
     const wholeSeries = !!existingTask.seriesId || existingTask.isRecurring;
-    const deleteLabel = isBlock ? (kind === "REST" ? "Удалить отдых?" : "Удалить буфер?") : "Удалить задачу?";
-    Alert.alert(wholeSeries ? "Удалить весь повтор?" : deleteLabel, wholeSeries
-      ? "Будут удалены все задачи этого повтора."
-      : existingTask.title, [
-      { text: "Отмена", style: "cancel" },
-      {
-        text: "Удалить",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await deleteTask.mutateAsync(existingTask.id);
-            router.back();
-          } catch {
-            Alert.alert("Не удалось удалить", "Попробуйте снова");
-          }
+    const deleteLabel = isBlock ? "Удалить отдых?" : "Удалить задачу?";
+    showDialog({
+      title: wholeSeries ? "Удалить весь повтор?" : deleteLabel,
+      message: wholeSeries
+        ? "Будут удалены все задачи этого повтора."
+        : existingTask.title,
+      actions: [
+        { text: "Отмена", style: "cancel" },
+        {
+          text: "Удалить",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteTask.mutateAsync(existingTask.id);
+              router.back();
+            } catch {
+              showDialog({ title: "Не удалось удалить", message: "Попробуйте снова" });
+            }
+          },
         },
-      },
-    ]);
+      ],
+    });
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.sectionLabel}>Тип записи</Text>
-      <View accessibilityRole="radiogroup" style={styles.row}>
-        {([
-          ["TASK", "Задача"],
-          ["REST", "Отдых"],
-          ["BUFFER", "Буфер"],
-        ] as const).map(([value, label]) => {
-          const incompatibleEdit = isEditMode && (kind === "TASK" ? value !== "TASK" : value === "TASK");
-          return (
-            <Pressable
-              key={value}
-              accessibilityRole="radio"
-              accessibilityLabel={label}
-              accessibilityState={{ selected: kind === value, disabled: incompatibleEdit || saving }}
-              disabled={incompatibleEdit || saving}
-              style={[styles.toggleChip, kind === value && styles.toggleChipActive, incompatibleEdit && styles.disabledChip]}
-              onPress={() => selectKind(value)}
-            >
-              <Text style={[styles.toggleChipText, kind === value && styles.toggleChipTextActive]}>{label}</Text>
-            </Pressable>
-          );
-        })}
+    <>
+    <StatusBar style={theme.name === "dark" ? "light" : "dark"} />
+    <ScrollView
+      testID="task-form-screen"
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+      contentInsetAdjustmentBehavior="automatic"
+      automaticallyAdjustKeyboardInsets
+    >
+      <View testID="task-kind-section" style={styles.kindSection}>
+        <Text style={[styles.sectionLabel, styles.kindSectionLabel]}>Тип записи</Text>
+        <View testID="task-kind-group" accessibilityRole="radiogroup" style={styles.row}>
+          {([
+            ["TASK", "Задача"],
+            ["REST", "Отдых"],
+          ] as const).map(([value, label]) => {
+            const incompatibleEdit = isEditMode && (kind === "TASK" ? value !== "TASK" : value === "TASK");
+            const selected = value === "TASK" ? kind === "TASK" : isBlock;
+            return (
+              <Pressable
+                key={value}
+                testID={`task-kind-${value.toLowerCase()}`}
+                accessibilityRole="radio"
+                accessibilityLabel={label}
+                accessibilityState={{ selected, disabled: incompatibleEdit || saving }}
+                disabled={incompatibleEdit || saving}
+                style={({ pressed }) => [
+                  styles.toggleChip,
+                  selected && styles.toggleChipActive,
+                  pressed && styles.controlPressed,
+                  (incompatibleEdit || saving) && styles.disabledChip,
+                ]}
+                onPress={() => selectKind(value === "REST" && kind === "BUFFER" ? "BUFFER" : value)}
+              >
+                <Text style={[styles.toggleChipText, selected && styles.toggleChipTextActive]}>{label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
 
       <TextInput
+        testID="task-title-input"
         style={styles.titleInput}
         placeholder={isBlock ? "Название блока" : "Название задачи"}
-        placeholderTextColor="#9CA3AF"
+        placeholderTextColor={theme.textSecondary}
+        selectionColor={theme.brand}
         value={title}
         onChangeText={setTitle}
         autoFocus={!isEditMode}
@@ -513,11 +574,13 @@ export default function TaskFormScreen() {
         <Text style={styles.sectionLabel}>Первый маленький шаг</Text>
         <Text style={styles.supportingText}>Одно конкретное действие, с которого можно начать, а не вся задача.</Text>
         <TextInput
+          testID="task-first-step-input"
           style={styles.firstStepInput}
           value={firstStep}
           onChangeText={setFirstStep}
           placeholder="Например: открыть документ"
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={theme.textSecondary}
+          selectionColor={theme.brand}
           maxLength={240}
           accessibilityLabel="Первый маленький шаг"
           editable={!saving}
@@ -529,15 +592,21 @@ export default function TaskFormScreen() {
       <Text style={styles.sectionLabel}>Время</Text>
       <View style={styles.row}>
         <Pressable
+          testID="task-time-untimed"
           accessibilityRole="radio"
           accessibilityLabel="Без времени"
           accessibilityState={{ selected: !hasTime, disabled: isBlock || saving }}
           disabled={isBlock || saving}
-          style={[styles.toggleChip, !hasTime && styles.toggleChipActive, isBlock && styles.disabledChip]}
+          style={({ pressed }) => [
+            styles.toggleChip,
+            !hasTime && styles.toggleChipActive,
+            pressed && styles.controlPressed,
+            (isBlock || saving) && styles.disabledChip,
+          ]}
           onPress={() => {
             if (recurrencePreset !== "none") {
               setRecurrencePreset("none");
-              Alert.alert("Повтор выключен", "Для повторяющейся задачи нужно указать время.");
+              showDialog({ title: "Повтор выключен", message: "Для повторяющейся задачи нужно указать время." });
             }
             setHasTime(false);
           }}
@@ -552,10 +621,11 @@ export default function TaskFormScreen() {
           </Text>
         </Pressable>
         <Pressable
+          testID="task-time-timed"
           accessibilityRole="radio"
           accessibilityLabel="Указать время"
           accessibilityState={{ selected: hasTime }}
-          style={[styles.toggleChip, hasTime && styles.toggleChipActive]}
+          style={({ pressed }) => [styles.toggleChip, hasTime && styles.toggleChipActive, pressed && styles.controlPressed]}
           onPress={() => setHasTime(true)}
         >
           <Text style={[styles.toggleChipText, hasTime && styles.toggleChipTextActive]}>
@@ -563,48 +633,60 @@ export default function TaskFormScreen() {
           </Text>
         </Pressable>
       </View>
-      {isBlock && <Text style={styles.supportingText}>Отдых и буфер занимают выбранное время и требуют известной длительности.</Text>}
+      {isBlock && <Text style={styles.supportingText}>Отдых занимает выбранное время и требует известной длительности.</Text>}
 
       {hasTime && (
         <View>
           <Text testID="task-time-display" style={styles.timePreview}>{formatWallClock(hour, minute, timeFormat)}</Text>
           <View style={styles.timeStepperRow}>
             <View style={styles.stepper}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Уменьшить час" accessibilityState={{ disabled: saving }} disabled={saving} onPress={() => adjustHour(-1)} style={styles.stepperButton}><Text style={styles.stepperButtonText}>−</Text></Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Уменьшить час" accessibilityState={{ disabled: saving }} disabled={saving} onPress={() => adjustHour(-1)} style={({ pressed }) => [styles.stepperButton, pressed && styles.controlPressed, saving && styles.disabledChip]}><Text style={styles.stepperButtonText}>−</Text></Pressable>
               <Text testID="task-hour-value" accessibilityLabel={`Час ${displayHour}`} style={styles.stepperValue}>{uses12Hour ? displayHour : String(displayHour).padStart(2, '0')}</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Увеличить час" accessibilityState={{ disabled: saving }} disabled={saving} onPress={() => adjustHour(1)} style={styles.stepperButton}><Text style={styles.stepperButtonText}>+</Text></Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Увеличить час" accessibilityState={{ disabled: saving }} disabled={saving} onPress={() => adjustHour(1)} style={({ pressed }) => [styles.stepperButton, pressed && styles.controlPressed, saving && styles.disabledChip]}><Text style={styles.stepperButtonText}>+</Text></Pressable>
             </View>
             <Text style={styles.timeColon}>:</Text>
             <View style={styles.stepper}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Уменьшить минуты" accessibilityState={{ disabled: saving }} disabled={saving} onPress={() => adjustMinute(-5)} style={styles.stepperButton}><Text style={styles.stepperButtonText}>−</Text></Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Уменьшить минуты" accessibilityState={{ disabled: saving }} disabled={saving} onPress={() => adjustMinute(-5)} style={({ pressed }) => [styles.stepperButton, pressed && styles.controlPressed, saving && styles.disabledChip]}><Text style={styles.stepperButtonText}>−</Text></Pressable>
               <Text testID="task-minute-value" accessibilityLabel={`Минуты ${minute}`} style={styles.stepperValue}>{String(minute).padStart(2, '0')}</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Увеличить минуты" accessibilityState={{ disabled: saving }} disabled={saving} onPress={() => adjustMinute(5)} style={styles.stepperButton}><Text style={styles.stepperButtonText}>+</Text></Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Увеличить минуты" accessibilityState={{ disabled: saving }} disabled={saving} onPress={() => adjustMinute(5)} style={({ pressed }) => [styles.stepperButton, pressed && styles.controlPressed, saving && styles.disabledChip]}><Text style={styles.stepperButtonText}>+</Text></Pressable>
             </View>
-            {uses12Hour && <View accessibilityRole="radiogroup" style={styles.meridiemGroup}>{(['AM','PM'] as const).map(value => <Pressable key={value} accessibilityRole="radio" accessibilityLabel={`Выбрать ${value}`} accessibilityState={{ selected: meridiem === value, disabled: saving }} disabled={saving || meridiem === value} onPress={toggleMeridiem} style={[styles.meridiemButton, meridiem === value && styles.meridiemButtonActive]}><Text style={[styles.meridiemText, meridiem === value && styles.meridiemTextActive]}>{value}</Text></Pressable>)}</View>}
+            {uses12Hour && <View accessibilityRole="radiogroup" style={styles.meridiemGroup}>{(['AM','PM'] as const).map(value => <Pressable key={value} accessibilityRole="radio" accessibilityLabel={`Выбрать ${value}`} accessibilityState={{ selected: meridiem === value, disabled: saving }} disabled={saving || meridiem === value} onPress={toggleMeridiem} style={({ pressed }) => [styles.meridiemButton, meridiem === value && styles.meridiemButtonActive, pressed && styles.controlPressed, saving && styles.disabledChip]}><Text style={[styles.meridiemText, meridiem === value && styles.meridiemTextActive]}>{value}</Text></Pressable>)}</View>}
           </View>
         </View>
       )}
 
       {/* Длительность */}
       <Text style={styles.sectionLabel}>Длительность</Text>
-      <View style={styles.chipsWrap}>
-        {TASK_DURATION_PRESETS.filter((mins) => !isBlock || mins !== null).map((mins) => (
-          <Pressable
-            key={mins ?? "unknown"}
-            accessibilityRole="button"
-            accessibilityState={{ selected: durationMinutes === mins }}
-            style={[styles.chip, durationMinutes === mins && styles.chipActive]}
-            onPress={() => setDurationMinutes(mins)}
-          >
-            <Text
-              style={[
-                styles.chipText,
-                durationMinutes === mins && styles.chipTextActive,
-              ]}
-            >
-              {taskDurationLabel(mins)}
-            </Text>
-          </Pressable>
+      <View testID="duration-grid" style={styles.durationGrid}>
+        {DURATION_GRID_COLUMNS.map((column, columnIndex) => (
+          <View key={columnIndex} testID={`duration-column-${columnIndex + 1}`} style={styles.durationColumn}>
+            {column.filter((mins) => !isBlock || mins !== null).map((mins) => (
+              <Pressable
+                key={mins ?? "unknown"}
+                testID={`duration-chip-${mins ?? "unknown"}`}
+                accessibilityRole="button"
+                accessibilityLabel={taskDurationLabel(mins)}
+                accessibilityState={{ selected: durationMinutes === mins }}
+                style={({ pressed }) => [
+                  styles.chip,
+                  styles.durationChip,
+                  durationMinutes === mins && styles.chipActive,
+                  pressed && styles.controlPressed,
+                ]}
+                onPress={() => setDurationMinutes(mins)}
+              >
+                <Text
+                  style={[
+                    styles.chipText,
+                    styles.durationChipText,
+                    durationMinutes === mins && styles.chipTextActive,
+                  ]}
+                >
+                  {taskDurationLabel(mins)}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
         ))}
       </View>
       {!!blockValidationMessage && (
@@ -618,6 +700,7 @@ export default function TaskFormScreen() {
         {COLOR_PRESETS.map((c) => (
           <Pressable
             key={c}
+            testID={`color-swatch-${c}`}
             accessibilityRole="radio"
             accessibilityLabel={`Цвет ${c}`}
             accessibilityState={{ selected: color === c }}
@@ -631,24 +714,64 @@ export default function TaskFormScreen() {
         ))}
       </View>
 
+      {isEditMode && existingTask?.seriesId && (
+        <>
+          <Text style={styles.sectionLabel}>Область изменения</Text>
+          <View accessibilityRole="radiogroup" style={styles.scopeGroup}>
+            {(Object.keys(RECURRENCE_SCOPE_LABELS) as RecurrenceEditScope[]).map((scope) => (
+              <Pressable
+                key={scope}
+                testID={`recurrence-scope-${scope.toLowerCase()}`}
+                accessibilityRole="radio"
+                accessibilityLabel={RECURRENCE_SCOPE_LABELS[scope]}
+                accessibilityState={{ selected: recurrenceEditScope === scope, disabled: saving }}
+                disabled={saving}
+                style={({ pressed }) => [
+                  styles.scopeChip,
+                  recurrenceEditScope === scope && styles.chipActive,
+                  pressed && styles.controlPressed,
+                ]}
+                onPress={() => setRecurrenceEditScope(scope)}
+              >
+                <Text style={[styles.chipText, recurrenceEditScope === scope && styles.chipTextActive]}>
+                  {RECURRENCE_SCOPE_LABELS[scope]}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={styles.supportingText}>
+            {recurrenceEditScope === "ONLY_THIS"
+              ? "Название, время и длительность изменятся только у выбранного события."
+              : recurrenceEditScope === "THIS_AND_FUTURE"
+                ? "Прошлые события сохранятся, а с выбранной даты начнётся обновлённый повтор."
+                : "Изменения применятся ко всему повтору, кроме уже начатых и завершённых событий."}
+          </Text>
+        </>
+      )}
+
       {/* Повтор */}
       <Text style={styles.sectionLabel}>Повтор</Text>
       <View style={styles.chipsWrap}>
         {(Object.keys(RECURRENCE_LABELS) as RecurrencePreset[]).map((preset) => (
           <Pressable
             key={preset}
+            testID={`recurrence-chip-${preset}`}
             accessibilityRole="radio"
-            accessibilityLabel={preset === "none" && existingTask?.seriesId ? "Остановить повтор с сегодняшнего дня" : RECURRENCE_LABELS[preset]}
+            accessibilityLabel={preset === "none" && existingTask?.seriesId ? stopRecurrenceLabel : RECURRENCE_LABELS[preset]}
             accessibilityState={{ selected: recurrencePreset === preset }}
-            style={[styles.chip, recurrencePreset === preset && styles.chipActive]}
+            style={({ pressed }) => [styles.chip, recurrencePreset === preset && styles.chipActive, pressed && styles.controlPressed]}
             onPress={() => {
               if (preset !== "none" && !hasTime) {
-                Alert.alert("Укажите время", "Повтору нужно конкретное время начала.");
+                showDialog({ title: "Укажите время", message: "Повтору нужно конкретное время начала." });
                 return;
               }
               if (preset !== "none" && partsDraft.length) {
-                Alert.alert("Сначала уберите части", "Части задачи недоступны для повторяющихся задач.");
+                showDialog({ title: "Сначала уберите части", message: "Части задачи недоступны для повторяющихся задач." });
                 return;
+              }
+              if (existingTask?.seriesId && recurrenceEditScope === "ONLY_THIS" &&
+                preset !== initialRecurrencePreset) {
+                setRecurrenceEditScope("THIS_AND_FUTURE");
               }
               setRecurrencePreset(preset);
             }}
@@ -656,12 +779,12 @@ export default function TaskFormScreen() {
             <Text
               style={[styles.chipText, recurrencePreset === preset && styles.chipTextActive]}
             >
-              {preset === "none" && existingTask?.seriesId ? "Остановить повтор с сегодняшнего дня" : RECURRENCE_LABELS[preset]}
+              {preset === "none" && existingTask?.seriesId ? stopRecurrenceLabel : RECURRENCE_LABELS[preset]}
             </Text>
           </Pressable>
         ))}
       </View>
-      {isEditMode && (existingTask?.seriesId || existingTask?.isRecurring) && (
+      {isEditMode && existingTask?.isRecurring && !existingTask?.seriesId && (
         <Text style={styles.supportingText}>
           Изменения применятся ко всему повтору, включая будущие задачи.
         </Text>
@@ -683,7 +806,7 @@ export default function TaskFormScreen() {
             onPress={() => togglePart(part.draftId)}
             style={styles.partCheck}
           >
-            <Text style={styles.partCheckText}>{part.completed ? "✓" : ""}</Text>
+            <Text style={[styles.partCheckText, part.completed && styles.partCheckTextCompleted]}>{part.completed ? "✓" : ""}</Text>
           </Pressable>
           <TextInput
             accessibilityLabel={`Название части: ${part.title}`}
@@ -693,14 +816,15 @@ export default function TaskFormScreen() {
                 ? `Название части должно быть не длиннее ${MAX_TASK_PART_TITLE_LENGTH} символов`
                 : undefined}
             editable={!saving}
+            selectionColor={theme.brand}
             value={part.title}
             onChangeText={(value) => updatePart(part.draftId, value)}
             maxLength={MAX_TASK_PART_TITLE_LENGTH}
             style={[
               styles.subtaskInput,
               styles.partTitleInput,
-              (part.title.trim().length === 0 || part.title.trim().length > MAX_TASK_PART_TITLE_LENGTH) && styles.invalidInput,
               part.completed && styles.partCompletedText,
+              (part.title.trim().length === 0 || part.title.trim().length > MAX_TASK_PART_TITLE_LENGTH) && styles.invalidInput,
             ]}
           />
           <Pressable
@@ -709,7 +833,7 @@ export default function TaskFormScreen() {
             accessibilityState={{ disabled: saving }}
             disabled={saving}
             onPress={() => removePart(part.draftId)}
-            style={styles.subtaskRemoveButton}
+            style={({ pressed }) => [styles.subtaskRemoveButton, pressed && styles.deleteButtonPressed]}
           >
             <Text style={styles.subtaskRemove}>×</Text>
           </Pressable>
@@ -720,7 +844,8 @@ export default function TaskFormScreen() {
         <TextInput
           style={styles.subtaskInput}
           placeholder="Добавить часть"
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={theme.textSecondary}
+          selectionColor={theme.brand}
           value={subtaskInput}
           onChangeText={setSubtaskInput}
           onSubmitEditing={addSubtaskFromInput}
@@ -733,8 +858,9 @@ export default function TaskFormScreen() {
           returnKeyType="done"
         />
         <Pressable
+          testID="subtask-add-button"
           onPress={addSubtaskFromInput}
-          style={styles.subtaskAddButton}
+          style={({ pressed }) => [styles.subtaskAddButton, pressed && styles.controlPressed, addPartDisabled && styles.disabledChip]}
           accessibilityRole="button"
           accessibilityLabel="Добавить часть задачи"
           accessibilityHint={partsAtLimit ? `Достигнут предел: ${MAX_MANUAL_TASK_PARTS} частей` : undefined}
@@ -752,77 +878,106 @@ export default function TaskFormScreen() {
 
       {/* Действия */}
       <Pressable
+        testID="task-save-button"
         accessibilityRole="button"
-        accessibilityLabel={isBlock ? `Сохранить ${kind === "REST" ? "отдых" : "буфер"}` : "Сохранить задачу"}
+        accessibilityLabel={isBlock ? "Сохранить отдых" : "Сохранить задачу"}
         accessibilityHint={blockValidationMessage ?? partsValidationMessage ?? undefined}
         accessibilityState={{ busy: saving, disabled: saveDisabled }}
-        style={[
+        style={({ pressed }) => [
           styles.saveButton,
+          pressed && !saveDisabled && styles.saveButtonPressed,
           saveDisabled && styles.saveButtonDisabled,
         ]}
         onPress={handleSave}
         disabled={saveDisabled}
       >
-        <Text style={styles.saveButtonText}>
+        <Text style={[styles.saveButtonText, saveDisabled && styles.saveButtonTextDisabled]}>
           {saving ? "Сохранение…" : "Сохранить"}
         </Text>
       </Pressable>
 
       {isEditMode && (
-        <Pressable style={styles.deleteButton} onPress={handleDelete}>
+        <Pressable
+          testID="task-delete-button"
+          style={({ pressed }) => [styles.deleteButton, pressed && styles.deleteButtonPressed]}
+          onPress={handleDelete}
+        >
           <Text style={styles.deleteButtonText}>
             {existingTask?.seriesId || existingTask?.isRecurring
               ? "Удалить весь повтор"
               : isBlock
-                ? `Удалить ${kind === "REST" ? "отдых" : "буфер"}`
+                ? "Удалить отдых"
                 : "Удалить задачу"}
           </Text>
         </Pressable>
       )}
     </ScrollView>
+    <FocusDialog {...dialogProps} />
+    </>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FFFFFF" },
-  content: { padding: 20, paddingBottom: 48 },
+function createStyles(theme: OrbitsThemeTokens) {
+  return StyleSheet.create({
+  container: { flex: 1, backgroundColor: theme.background },
+  content: { padding: 20, paddingBottom: 48, backgroundColor: theme.background },
   titleInput: {
     fontSize: 20,
     fontWeight: "600",
-    color: "#111827",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+    color: theme.textPrimary,
+    backgroundColor: theme.surfacePrimary,
+    borderWidth: 1,
+    borderColor: theme.borderSubtle,
+    borderRadius: 10,
+    paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 20,
   },
   sectionLabel: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#6B7280",
+    color: theme.textSecondary,
     marginTop: 16,
     marginBottom: 8,
     textTransform: "uppercase",
   },
-  supportingText: { fontSize: 13, lineHeight: 18, color: "#6B7280", marginBottom: 8 },
+  kindSection: { marginTop: 4, marginBottom: 16 },
+  kindSectionLabel: { marginTop: 0 },
+  supportingText: { fontSize: 13, lineHeight: 18, color: theme.textSecondary, marginBottom: 8 },
+  scopeGroup: { gap: 8, marginBottom: 8 },
+  scopeChip: {
+    minHeight: 48,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: theme.borderSubtle,
+    backgroundColor: theme.surfacePrimary,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    justifyContent: "center",
+  },
   disabledChip: { opacity: 0.45 },
+  controlPressed: { backgroundColor: theme.activeSurface, borderColor: theme.activeBorder },
   firstStepInput: {
-    borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10,
-    paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: "#111827",
+    borderWidth: 1, borderColor: theme.borderSubtle, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: theme.textPrimary,
+    backgroundColor: theme.surfacePrimary,
   },
   row: { flexDirection: "row", gap: 8 },
   toggleChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: theme.surfaceMuted,
+    borderWidth: 1,
+    borderColor: theme.borderSubtle,
   },
-  toggleChipActive: { backgroundColor: "#6B5BFC" },
-  toggleChipText: { fontSize: 13, color: "#6B7280", fontWeight: "600" },
-  toggleChipTextActive: { color: "#FFFFFF" },
+  toggleChipActive: { backgroundColor: theme.activeSurface, borderColor: theme.activeBorder },
+  toggleChipText: { fontSize: 13, color: theme.textSecondary, fontWeight: "600" },
+  toggleChipTextActive: { color: theme.activeSurfaceText },
   timePreview: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#374151",
+    color: theme.textPrimary,
     marginBottom: 8,
   },
   meridiemGroup: { gap: 4, marginLeft: 8 },
@@ -830,11 +985,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 8,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: theme.surfaceMuted,
+    borderWidth: 1,
+    borderColor: theme.borderSubtle,
   },
-  meridiemButtonActive: { backgroundColor: "#6B5BFC" },
-  meridiemText: { color: "#374151", fontWeight: "600" },
-  meridiemTextActive: { color: "#FFFFFF" },
+  meridiemButtonActive: { backgroundColor: theme.activeSurface, borderColor: theme.activeBorder },
+  meridiemText: { color: theme.textPrimary, fontWeight: "600" },
+  meridiemTextActive: { color: theme.activeSurfaceText },
   timeStepperRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -846,59 +1003,74 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: theme.surfaceMuted,
+    borderWidth: 1,
+    borderColor: theme.borderSubtle,
     alignItems: "center",
     justifyContent: "center",
   },
-  stepperButtonText: { fontSize: 18, color: "#111827", fontWeight: "600" },
+  stepperButtonText: { fontSize: 18, color: theme.textPrimary, fontWeight: "600" },
   stepperValue: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#111827",
+    color: theme.textPrimary,
     width: 44,
     textAlign: "center",
   },
   timeColon: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#111827",
+    color: theme.textPrimary,
     marginHorizontal: 4,
   },
   chipsWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  durationGrid: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  durationColumn: { flex: 1, gap: 8 },
   chip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: theme.surfaceMuted,
+    borderWidth: 1,
+    borderColor: theme.borderSubtle,
   },
-  chipActive: { backgroundColor: "#6B5BFC" },
-  chipText: { fontSize: 13, color: "#6B7280", fontWeight: "600" },
-  chipTextActive: { color: "#FFFFFF" },
+  durationChip: {
+    alignSelf: "stretch",
+    minHeight: 44,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chipActive: { backgroundColor: theme.activeSurface, borderColor: theme.activeBorder },
+  chipText: { fontSize: 13, color: theme.textSecondary, fontWeight: "600" },
+  durationChipText: { flexShrink: 1, textAlign: "center" },
+  chipTextActive: { color: theme.activeSurfaceText },
   colorSwatch: {
     width: 36,
     height: 36,
     borderRadius: 18,
     borderWidth: 2,
-    borderColor: "transparent",
+    borderColor: theme.background,
   },
-  colorSwatchActive: { borderColor: "#111827" },
+  colorSwatchActive: { borderColor: theme.activeBorder },
   presetChip: {
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#6B5BFC",
+    borderColor: theme.activeBorder,
   },
-  presetChipText: { fontSize: 13, color: "#6B5BFC", fontWeight: "600" },
+  presetChipText: { fontSize: 13, color: theme.brand, fontWeight: "600" },
   subtaskRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: theme.borderSubtle,
   },
-  subtaskText: { fontSize: 14, color: "#111827" },
+  subtaskText: { fontSize: 14, color: theme.textPrimary },
   partCheck: {
     width: 44,
     height: 44,
@@ -910,22 +1082,28 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderWidth: 1,
-    borderColor: "#6B7280",
+    borderColor: theme.borderSubtle,
     borderRadius: 5,
     textAlign: "center",
     lineHeight: 22,
-    color: "#6B5BFC",
+    color: theme.textSecondary,
+    backgroundColor: theme.surfacePrimary,
     fontWeight: "700",
   },
+  partCheckTextCompleted: {
+    color: theme.completionPrimary,
+    backgroundColor: theme.completionSoft,
+    borderColor: theme.completionPrimary,
+  },
   partTitleInput: { paddingVertical: 8 },
-  partCompletedText: { textDecorationLine: "line-through", color: "#6B7280" },
+  partCompletedText: { textDecorationLine: "line-through", color: theme.completionPrimary, backgroundColor: theme.completionSoft },
   subtaskRemoveButton: {
     width: 44,
     height: 44,
     alignItems: "center",
     justifyContent: "center",
   },
-  subtaskRemove: { fontSize: 18, color: "#9CA3AF", paddingHorizontal: 8 },
+  subtaskRemove: { fontSize: 18, color: theme.textSecondary, paddingHorizontal: 8 },
   subtaskInputRow: {
     flexDirection: "row",
     gap: 8,
@@ -935,33 +1113,40 @@ const styles = StyleSheet.create({
   subtaskInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: theme.borderSubtle,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
-    color: "#111827",
+    color: theme.textPrimary,
+    backgroundColor: theme.surfacePrimary,
   },
-  invalidInput: { borderColor: "#DC2626" },
-  validationText: { color: "#B91C1C", fontSize: 13, lineHeight: 18, marginTop: 6 },
+  invalidInput: { borderColor: theme.errorPrimary, backgroundColor: theme.errorSoft },
+  validationText: { color: theme.errorPrimary, fontSize: 13, lineHeight: 18, marginTop: 6 },
   subtaskAddButton: {
     width: 44,
     height: 44,
     borderRadius: 10,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: theme.surfaceMuted,
+    borderWidth: 1,
+    borderColor: theme.borderSubtle,
     alignItems: "center",
     justifyContent: "center",
   },
-  subtaskAddButtonText: { fontSize: 20, color: "#111827" },
+  subtaskAddButtonText: { fontSize: 20, color: theme.textPrimary },
   saveButton: {
     marginTop: 28,
-    backgroundColor: "#6B5BFC",
+    backgroundColor: theme.brand,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
   },
-  saveButtonDisabled: { opacity: 0.5 },
-  saveButtonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
-  deleteButton: { marginTop: 16, paddingVertical: 12, alignItems: "center" },
-  deleteButtonText: { color: "#EF4444", fontSize: 14, fontWeight: "600" },
+  saveButtonPressed: { backgroundColor: theme.brandPressed },
+  saveButtonDisabled: { backgroundColor: theme.surfaceMuted, borderWidth: 1, borderColor: theme.borderSubtle },
+  saveButtonText: { color: theme.retryText, fontSize: 16, fontWeight: "700" },
+  saveButtonTextDisabled: { color: theme.textSecondary },
+  deleteButton: { marginTop: 16, paddingVertical: 12, alignItems: "center", borderRadius: 12 },
+  deleteButtonPressed: { backgroundColor: theme.errorSoft },
+  deleteButtonText: { color: theme.errorPrimary, fontSize: 14, fontWeight: "600" },
 });
+}

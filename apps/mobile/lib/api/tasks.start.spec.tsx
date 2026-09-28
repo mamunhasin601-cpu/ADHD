@@ -1,7 +1,7 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
-import { useStartTask } from './tasks';
+import { getActiveTaskConflict, getEarlyStartConflict, useStartTask } from './tasks';
 import { apiClient } from '../api-client';
 import { cancelLocalReminder } from '../local-notifications';
 
@@ -65,5 +65,75 @@ describe('useStartTask', () => {
     const invalidate = jest.spyOn(ctx.client, 'invalidateQueries');
     await act(async () => { await expect(ctx.result.current.mutateAsync('task-1')).rejects.toMatchObject({ response: { status: 409 } }); });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tasks', '2026-08-15'] }); ctx.cleanup();
+  });
+
+  it('switches with an explicit body, heals the conflicted row without reopening completed history, and invalidates all task views', async () => {
+    const staleOptimisticCompletion = {
+      ...task('old', new Date('2026-08-14T09:00:00Z')),
+      completedAt: new Date('2026-08-14T10:01:00Z'),
+    };
+    const completedHistory = {
+      ...task('done', new Date('2026-08-14T08:00:00Z')),
+      completedAt: new Date('2026-08-14T08:30:00Z'),
+    };
+    const server = task('target', canonicalStart);
+    (apiClient.patch as jest.Mock).mockResolvedValue({ data: server });
+    const ctx = setup();
+    const invalidate = jest.spyOn(ctx.client, 'invalidateQueries');
+    ctx.client.setQueryData(['tasks', '2026-08-14'], [staleOptimisticCompletion, completedHistory, task('target')]);
+    await act(async () => {
+      await ctx.result.current.mutateAsync({ id: 'target', activeTaskId: 'old', confirmSwitch: true });
+    });
+    expect(apiClient.patch).toHaveBeenCalledWith('/tasks/target/start', { confirmSwitch: true });
+    expect(ctx.client.getQueryData<any[]>(['tasks', '2026-08-14'])).toEqual([
+      expect.objectContaining({ id: 'old', startedAt: null, completedAt: null }),
+      completedHistory,
+      server,
+    ]);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tasks'] });
+    ctx.cleanup();
+  });
+
+  it('sends independent early-start confirmation and both confirmations together', async () => {
+    const server = task('target', canonicalStart);
+    (apiClient.patch as jest.Mock).mockResolvedValue({ data: server });
+    const ctx = setup();
+    await act(async () => {
+      await ctx.result.current.mutateAsync({ id: 'target', confirmEarlyStart: true });
+      await ctx.result.current.mutateAsync({
+        id: 'target',
+        confirmEarlyStart: true,
+        confirmSwitch: true,
+      });
+    });
+    expect(apiClient.patch).toHaveBeenNthCalledWith(
+      1,
+      '/tasks/target/start',
+      { confirmEarlyStart: true },
+    );
+    expect(apiClient.patch).toHaveBeenNthCalledWith(
+      2,
+      '/tasks/target/start',
+      { confirmSwitch: true, confirmEarlyStart: true },
+    );
+    ctx.cleanup();
+  });
+
+  it('parses only the typed active-task conflict', () => {
+    const conflict = { code: 'ACTIVE_TASK_CONFLICT', message: 'conflict', activeTask: { id: 'old', title: 'Old', startedAt: canonicalStart } };
+    expect(getActiveTaskConflict({ response: { status: 409, data: conflict } })).toEqual(conflict);
+    expect(getActiveTaskConflict({ response: { status: 409, data: { message: 'completed' } } })).toBeNull();
+    expect(getActiveTaskConflict({ response: { status: 500, data: conflict } })).toBeNull();
+  });
+
+  it('parses only the typed early-start conflict with scheduled metadata', () => {
+    const conflict = {
+      code: 'EARLY_START_CONFIRMATION_REQUIRED',
+      message: 'early',
+      scheduledTask: { id: 'future', title: 'Future', startTime: '2026-09-28T23:15:00.000Z' },
+    };
+    expect(getEarlyStartConflict({ response: { status: 409, data: conflict } })).toEqual(conflict);
+    expect(getEarlyStartConflict({ response: { status: 409, data: { ...conflict, scheduledTask: { id: 'future' } } } })).toBeNull();
+    expect(getEarlyStartConflict({ response: { status: 500, data: conflict } })).toBeNull();
   });
 });

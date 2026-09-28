@@ -1,10 +1,11 @@
-import { Alert } from 'react-native';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { getOAuthProviderAvailability } from '../lib/api/auth';
 import { useAuthStore } from '../stores/auth.store';
 import AuthProviderSelectScreen from '../app/auth-provider-select';
+import { StyleSheet } from 'react-native';
+import { ORBITS_THEMES, OrbitsThemeProvider } from '../theme/orbits';
 
 jest.mock('../lib/api/auth', () => ({ getOAuthProviderAvailability: jest.fn() }));
 jest.mock('../stores/auth.store', () => ({ useAuthStore: jest.fn() }));
@@ -14,6 +15,7 @@ jest.mock('expo-web-browser', () => ({
   openAuthSessionAsync: jest.fn(),
 }));
 jest.mock('expo-linking', () => ({ addEventListener: jest.fn(() => ({ remove: jest.fn() })) }));
+jest.mock('expo-status-bar', () => { const React = require('react'); const { View } = require('react-native'); return { StatusBar: (props: any) => React.createElement(View, { testID: 'provider-status-bar', ...props }) }; });
 
 const mockGetAvailability = getOAuthProviderAvailability as jest.MockedFunction<typeof getOAuthProviderAvailability>;
 const mockOpenAuth = WebBrowser.openAuthSessionAsync as jest.MockedFunction<typeof WebBrowser.openAuthSessionAsync>;
@@ -79,8 +81,12 @@ describe('AuthProviderSelectScreen', () => {
     const screen = render(<AuthProviderSelectScreen />);
     await waitFor(() => expect(screen.getByTestId('oauth-provider-yandex')).toBeTruthy());
     expect(screen.queryByTestId('oauth-provider-vk')).toBeNull();
-    fireEvent.press(screen.getByTestId('oauth-provider-yandex'));
-    fireEvent.press(screen.getByTestId('oauth-provider-yandex'));
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('oauth-provider-yandex'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('oauth-provider-yandex'));
+    });
     expect(mockOpenAuth).toHaveBeenCalledTimes(1);
     resolveAuth({ type: 'cancel' } as never);
   });
@@ -112,12 +118,23 @@ describe('AuthProviderSelectScreen', () => {
   });
 
   it('shows a calm cancellation message', async () => {
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     mockGetAvailability.mockResolvedValue({ yandex: true, vk: false, mailru: false });
     const screen = render(<AuthProviderSelectScreen />);
     await waitFor(() => expect(screen.getByTestId('oauth-provider-yandex')).toBeTruthy());
-    fireEvent.press(screen.getByTestId('oauth-provider-yandex'));
-    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Отменено', 'Вход через выбранный сервис был отменён'));
-    alertSpy.mockRestore();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('oauth-provider-yandex'));
+    });
+    expect(await screen.findByText('Отменено')).toBeTruthy();
+    expect(screen.getByText('Вход через выбранный сервис был отменён')).toBeTruthy();
+  });
+
+  it.each(['warm', 'dark'] as const)('uses %s tokens while preserving provider brand borders', async (name) => {
+    mockGetAvailability.mockResolvedValue({ yandex: true, vk: false, mailru: false });
+    const view = render(<OrbitsThemeProvider theme={name}><AuthProviderSelectScreen /></OrbitsThemeProvider>);
+    await waitFor(() => expect(view.getByTestId('oauth-provider-yandex')).toBeTruthy());
+    const theme = ORBITS_THEMES[name];
+    expect(StyleSheet.flatten(view.getByTestId('auth-provider-screen').props.style).backgroundColor).toBe(theme.background);
+    expect(StyleSheet.flatten(view.getByTestId('oauth-provider-yandex').props.style)).toMatchObject({ backgroundColor: theme.surfacePrimary, borderColor: '#FC3F1D' });
+    expect(view.getByTestId('provider-status-bar').props.style).toBe(name === 'dark' ? 'light' : 'dark');
   });
 });

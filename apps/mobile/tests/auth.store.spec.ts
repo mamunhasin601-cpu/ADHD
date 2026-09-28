@@ -20,6 +20,7 @@ import { clearTokens, loadTokens, saveTokens } from '../lib/secure-storage';
 import { getMe } from '../lib/api/auth';
 
 const tokens: AuthTokens = { accessToken: 'access-1', refreshToken: 'refresh-1' };
+const rotatedTokens: AuthTokens = { accessToken: 'access-2', refreshToken: 'refresh-2' };
 const user: User = {
   id: 'user-1',
   email: 'user@example.com',
@@ -41,6 +42,7 @@ describe('auth store', () => {
       refreshToken: null,
       isAuthenticated: false,
       isLoading: true,
+      sessionGeneration: 0,
     });
     (clearTokens as jest.Mock).mockResolvedValue(undefined);
     (saveTokens as jest.Mock).mockResolvedValue(undefined);
@@ -58,6 +60,7 @@ describe('auth store', () => {
       refreshToken: null,
       isAuthenticated: false,
       isLoading: false,
+      sessionGeneration: 1,
     });
     expect(setAuthTokens).toHaveBeenCalledWith(null);
     expect(getMe).not.toHaveBeenCalled();
@@ -76,6 +79,7 @@ describe('auth store', () => {
       refreshToken: tokens.refreshToken,
       isAuthenticated: true,
       isLoading: false,
+      sessionGeneration: 1,
     });
   });
 
@@ -92,6 +96,30 @@ describe('auth store', () => {
       refreshToken: null,
       isAuthenticated: false,
       isLoading: false,
+      sessionGeneration: 1,
+    });
+  });
+
+  it('rotates tokens in an authenticated session without changing its generation', async () => {
+    useAuthStore.setState({
+      user,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      isAuthenticated: true,
+      isLoading: false,
+      sessionGeneration: 7,
+    });
+
+    await useAuthStore.getState().setTokens(rotatedTokens);
+
+    expect(saveTokens).toHaveBeenCalledWith(rotatedTokens);
+    expect(setAuthTokens).toHaveBeenCalledWith(rotatedTokens);
+    expect(useAuthStore.getState()).toMatchObject({
+      user,
+      accessToken: rotatedTokens.accessToken,
+      refreshToken: rotatedTokens.refreshToken,
+      isAuthenticated: true,
+      sessionGeneration: 7,
     });
   });
 
@@ -111,7 +139,11 @@ describe('auth store', () => {
 
     resolveUser(user);
     await pending;
-    expect(useAuthStore.getState()).toMatchObject({ user, isAuthenticated: true });
+    expect(useAuthStore.getState()).toMatchObject({
+      user,
+      isAuthenticated: true,
+      sessionGeneration: 1,
+    });
   });
 
   it('clears state synchronously when logout begins', async () => {
@@ -121,6 +153,7 @@ describe('auth store', () => {
       refreshToken: tokens.refreshToken,
       isAuthenticated: true,
       isLoading: false,
+      sessionGeneration: 4,
     });
 
     const pending = useAuthStore.getState().logout();
@@ -130,6 +163,7 @@ describe('auth store', () => {
       accessToken: null,
       refreshToken: null,
       isAuthenticated: false,
+      sessionGeneration: 5,
     });
     await pending;
   });

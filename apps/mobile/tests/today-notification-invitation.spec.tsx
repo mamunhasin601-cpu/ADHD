@@ -7,20 +7,35 @@ let mockOnboarding = true;
 let mockPermission: 'not-asked' | 'granted' | 'denied' = 'not-asked';
 let mockInvitation: 'available' | 'deferred' = 'available';
 
-jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }), useFocusEffect: jest.fn() }));
 jest.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ refetchQueries: jest.fn() }) }));
 jest.mock('../lib/notification-lifecycle', () => ({ useNotificationLifecycle: () => ({ permission: mockPermission, invitation: mockInvitation, busy: false, error: null, requestPermission: mockRequestPermission, deferInvitation: jest.fn(), openSettings: jest.fn() }) }));
 jest.mock('../lib/api/tasks', () => ({
+  getActiveTaskConflict: () => null,
   useTasksForDate: () => ({ data: mockTasks, isLoading: mockLoading, isError: mockError, refetch: jest.fn(), isRefetching: false }),
   useCreateTask: () => ({ mutateAsync: jest.fn(), isPending: false }),
   useUpdateTask: () => ({ mutateAsync: jest.fn(), isPending: false }),
   useToggleTask: () => ({ mutate: jest.fn(), isPending: false }),
   useStartTask: () => ({ mutateAsync: jest.fn(), isPending: false }),
+  useDeleteTask: () => ({ mutateAsync: jest.fn(), isPending: false }),
 }));
 jest.mock('../stores/auth.store', () => ({ useAuthStore: (selector: any) => selector({ user: { timezone: 'UTC', timeFormat: 'H24', hasCompletedOnboarding: mockOnboarding } }) }));
 jest.mock('../components/RecoverySection', () => ({ RecoverySection: () => null }));
 jest.mock('../components/ProgressRing', () => ({ ProgressRing: () => null }));
-jest.mock('../components/timeline/Timeline', () => ({ Timeline: () => null }));
+jest.mock('../components/timeline/Timeline', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return {
+    Timeline: ({ tasks, focusedTaskId, renderFocusedTask }: any) => {
+      const focusedTask = tasks.find((task: any) => task.id === focusedTaskId);
+      return React.createElement(
+        View,
+        { testID: 'timeline' },
+        focusedTask && renderFocusedTask ? renderFocusedTask(focusedTask) : null,
+      );
+    },
+  };
+});
 jest.mock('../components/EmptyState', () => ({ EmptyState: () => null }));
 jest.mock('expo-status-bar', () => ({ StatusBar: () => null }));
 jest.mock('react-native-safe-area-context', () => { const { View } = require('react-native'); return { SafeAreaView: View }; });

@@ -27,7 +27,7 @@ jest.mock('../stores/auth.store', () => ({
 }));
 
 import React from 'react';
-import { Alert, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import TaskFormScreen from '../app/task-form';
 
@@ -83,7 +83,6 @@ describe('TaskFormScreen atomic manual parts draft', () => {
 
   it('reuses one create identity for an unchanged failed draft and rotates it after a persisted edit', async () => {
     mockParams = { selectedDateKey: '2026-08-17' };
-    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     mockCreate.mockRejectedValueOnce(new Error('offline')).mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValueOnce({ id: 'saved' });
     render(<TaskFormScreen />);
@@ -93,13 +92,14 @@ describe('TaskFormScreen atomic manual parts draft', () => {
 
     fireEvent.press(screen.getByRole('button', { name: 'Сохранить задачу' }));
     await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(alert).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('Не удалось сохранить')).toBeTruthy();
     const firstIdentity = mockCreate.mock.calls[0][0].createRequestId;
     expect(firstIdentity).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
 
+    fireEvent.press(screen.getByRole('button', { name: 'ОК' }));
     fireEvent.press(screen.getByRole('button', { name: 'Сохранить задачу' }));
     await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(alert).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('Не удалось сохранить')).toBeTruthy();
     expect(mockCreate.mock.calls[1][0].createRequestId).toBe(firstIdentity);
 
     fireEvent.changeText(screen.getByPlaceholderText('Название задачи'), 'Changed parent');
@@ -107,7 +107,6 @@ describe('TaskFormScreen atomic manual parts draft', () => {
     await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(3));
     expect(mockCreate.mock.calls[2][0].createRequestId).not.toBe(firstIdentity);
     expect(mockBack).toHaveBeenCalledTimes(1);
-    alert.mockRestore();
   });
 
   it('keeps remove and add local and performs no write on unmount', () => {
@@ -122,7 +121,6 @@ describe('TaskFormScreen atomic manual parts draft', () => {
   });
 
   it('preserves every field and the identical parts draft after failure for retry', async () => {
-    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     mockUpdate.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ id: 'parent' });
     render(<TaskFormScreen />);
     fireEvent.changeText(screen.getByPlaceholderText('Название задачи'), 'Edited parent');
@@ -130,17 +128,17 @@ describe('TaskFormScreen atomic manual parts draft', () => {
     fireEvent.changeText(screen.getByPlaceholderText('Добавить часть'), 'Retry part');
     fireEvent.press(screen.getByRole('button', { name: 'Добавить часть задачи' }));
     fireEvent.press(screen.getByRole('button', { name: 'Сохранить задачу' }));
-    await waitFor(() => expect(alert).toHaveBeenCalled());
+    expect(await screen.findByText('Не удалось сохранить')).toBeTruthy();
 
     expect(screen.getByDisplayValue('Edited parent')).toBeTruthy();
     expect(screen.getByDisplayValue('Retained draft')).toBeTruthy();
     expect(screen.getByDisplayValue('Retry part')).toBeTruthy();
     const firstDto = mockUpdate.mock.calls[0][0];
+    fireEvent.press(screen.getByRole('button', { name: 'ОК' }));
     fireEvent.press(screen.getByRole('button', { name: 'Сохранить задачу' }));
     await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(2));
     expect(mockUpdate.mock.calls[1][0]).toEqual(firstDto);
     expect(mockBack).toHaveBeenCalledTimes(1);
-    alert.mockRestore();
   });
 
   it('blocks a rapid double submit synchronously and exposes busy state', async () => {
@@ -163,16 +161,14 @@ describe('TaskFormScreen atomic manual parts draft', () => {
     await act(async () => success.resolve({ id: 'parent' }));
     expect(mockBack).not.toHaveBeenCalled();
 
-    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     const failure = deferred<any>(); mockUpdate.mockReturnValueOnce(failure.promise);
     const second = render(<TaskFormScreen />);
     fireEvent.press(screen.getByRole('button', { name: 'Сохранить задачу' }));
     mockAuth = { ...mockAuth, sessionGeneration: 2 };
     second.rerender(<TaskFormScreen />);
     await act(async () => failure.reject(new Error('stale')));
-    expect(alert).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('focus-dialog')).toBeNull();
     expect(mockBack).not.toHaveBeenCalled();
-    alert.mockRestore();
   });
 
   it('guards caches and replacement drafts after task and owner identity changes', async () => {

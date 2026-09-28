@@ -14,11 +14,12 @@
 import React from 'react';
 import { render, fireEvent, screen, waitFor, act } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { RecoverySection } from './RecoverySection';
+import { RecoverySection, TODAY_UNDO_NOTICE_MS } from './RecoverySection';
 import { apiClient } from '../lib/api-client';
 import { getLocalDateString, toCanonicalDateParam } from '../lib/timezone';
 import { useAuthStore } from '../stores/auth.store';
 import { ORBITS_THEMES, OrbitsThemeProvider, type OrbitsThemeName } from '../theme/orbits';
+import { useRecoveryUndoHistory } from '../lib/recovery-undo-history';
 
 // ── Boundary mocks ───────────────────────────────────────────────────────────
 
@@ -160,6 +161,7 @@ beforeEach(() => {
   capturedTimeOnChange = null;
   mockGet.mockResolvedValue(recoveryResponse([task1, task2]));
   useAuthStore.setState({ user: { ...task1, id: 'user-a' } as any, sessionGeneration: 1 });
+  useRecoveryUndoHistory.setState({ entries: [], hydratedUsers: {} });
 });
 
 afterEach(async () => {
@@ -196,6 +198,29 @@ describe('RecoverySection — theme surfaces', () => {
 });
 
 describe('RecoverySection — banner presence', () => {
+  it('keeps the section calm while loading, without fabricating an empty list or count', async () => {
+    let resolve!: (response: ReturnType<typeof recoveryResponse>) => void;
+    mockGet.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+    renderSection();
+    expect(screen.getByText('Загружаем задачи…')).toBeTruthy();
+    expect(screen.getByTestId('recovery-section-title')).toHaveTextContent('Продолжить');
+    expect(screen.queryByTestId('recovery-section-empty')).toBeNull();
+    await act(async () => resolve(recoveryResponse([task1])));
+    expect(await screen.findByTestId('recovery-banner')).toBeTruthy();
+    expect(screen.getByTestId('recovery-section-title')).toHaveTextContent('Продолжить · 1');
+  });
+
+  it('offers a retry after a query error, rather than presenting a false empty state', async () => {
+    mockGet.mockRejectedValueOnce(new Error('offline'));
+    renderSection();
+    expect(await screen.findByText('Не удалось загрузить задачи.')).toBeTruthy();
+    expect(screen.queryByTestId('recovery-section-empty')).toBeNull();
+    mockGet.mockResolvedValue(recoveryResponse([task1]));
+    fireEvent.press(screen.getByLabelText('Повторить загрузку задач прошлых дней'));
+    expect(await screen.findByTestId('recovery-banner')).toBeTruthy();
+    expect(screen.getByTestId('recovery-section-title')).toHaveTextContent('Продолжить · 1');
+  });
+
   it('does not render the banner when there are no overdue tasks', async () => {
     mockGet.mockResolvedValue(recoveryResponse([]));
     renderSection();
@@ -207,12 +232,15 @@ describe('RecoverySection — banner presence', () => {
     await flushPendingQueryWork();
 
     expect(screen.queryByTestId('recovery-banner')).toBeNull();
+    expect(screen.getByTestId('recovery-section-title')).toHaveTextContent('Продолжить');
+    expect(screen.getByTestId('recovery-section-empty')).toHaveTextContent('Здесь пока ничего нет');
   });
 
   it('renders the banner when overdue tasks exist', async () => {
     renderSection();
     // findBy* already waits for the post-resolution render.
     expect(await screen.findByTestId('recovery-banner')).toBeTruthy();
+    expect(screen.getByTestId('recovery-section-title')).toHaveTextContent('Продолжить · 2');
   });
 
   it('queries recovery with the profile-timezone date param', async () => {
@@ -274,6 +302,22 @@ describe('RecoverySection — ok response', () => {
     const keys = invalidateSpy.mock.calls.map((call) => JSON.stringify(call[0]?.queryKey));
     expect(keys).toContain(JSON.stringify(['tasks', 'inbox']));
     expect(keys).toContain(JSON.stringify(['tasks']));
+  });
+
+  it('keeps the Today confirmation brief but stores Undo in Plan history', async () => {
+    mockPost.mockResolvedValue({
+      data: { updatedCount: 1, taskUpdateStatus: 'ok', reminderSyncStatus: 'ok', undoId: 'undo-plan', undoExpiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString() },
+    });
+    renderSection();
+    fireEvent.press(await screen.findByTestId('recovery-banner'));
+    selectForInbox(task1.id);
+    fireEvent.press(screen.getByTestId('confirm-btn'));
+
+    expect(await screen.findByText('Задача перенесена. Отменить изменение можно в «Плане».')).toBeTruthy();
+    expect(useRecoveryUndoHistory.getState().entries).toEqual([
+      expect.objectContaining({ id: 'undo-plan', userId: 'user-a', taskCount: 1 }),
+    ]);
+    expect(TODAY_UNDO_NOTICE_MS).toBe(10_000);
   });
 
   it('resets submitted state and shows no partial notice', async () => {

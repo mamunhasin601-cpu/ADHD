@@ -2,20 +2,28 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Tabs } from 'expo-router';
 import { GlobalCaptureProvider, useGlobalCapture } from '../../components/GlobalCapture';
 import { OrbitsNavigation } from '../../components/navigation/OrbitsNavigation';
+import { useOverdueTasks } from '../../lib/api/tasks';
+import { useAuthStore } from '../../stores/auth.store';
+import { isValidIANATimezone } from '../../lib/timezone';
 import {
   destinationForRuntimeRoute,
   runtimeRouteForDestination,
 } from '../../lib/orbits-tabs';
 
-function OrbitsTabBar({ state, navigation }: BottomTabBarProps) {
+function OrbitsTabBar({ state, navigation, insets }: BottomTabBarProps) {
   const { openGlobalCapture } = useGlobalCapture();
   const activeRoute = state.routes[state.index]?.name ?? 'today';
+  const profileTimezone = useAuthStore((s) => s.user?.timezone);
+  const timezoneValid = Boolean(profileTimezone && isValidIANATimezone(profileTimezone));
+  const { data: recoveryData } = useOverdueTasks(new Date(), timezoneValid, timezoneValid ? profileTimezone : undefined);
 
   return (
     <OrbitsNavigation
       activeDestination={destinationForRuntimeRoute(activeRoute)}
       onSelect={(destination) => navigation.navigate(runtimeRouteForDestination(destination))}
       onAdd={openGlobalCapture}
+      recoveryCount={timezoneValid ? (recoveryData?.tasks.length ?? 0) : 0}
+      bottomInset={insets.bottom}
     />
   );
 }

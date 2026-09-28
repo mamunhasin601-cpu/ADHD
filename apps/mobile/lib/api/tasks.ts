@@ -17,6 +17,9 @@ import type {
   RescheduleRecoveryRequest,
   RescheduleRecoveryResponse,
   UndoRecoveryResponse,
+  ActiveTaskConflict,
+  EarlyStartConflict,
+  StartTaskRequest,
 } from '@focus/shared-types';
 import { useAuthStore } from '../../stores/auth.store';
 
@@ -79,22 +82,63 @@ export function useStartTask(date: Date, userTimezone?: string | null) {
   const queryClient = useQueryClient();
   const dateParam = toDateParam(date, userTimezone);
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { data } = await apiClient.patch<Task>(`/tasks/${id}/start`);
+    mutationFn: async (input: string | ({ id: string; activeTaskId?: string } & StartTaskRequest)) => {
+      const id = typeof input === 'string' ? input : input.id;
+      const confirmations = typeof input === 'string' ? null : {
+        ...(input.confirmSwitch === true && { confirmSwitch: true }),
+        ...(input.confirmEarlyStart === true && { confirmEarlyStart: true }),
+      };
+      const { data } = confirmations && Object.keys(confirmations).length > 0
+        ? await apiClient.patch<Task>(`/tasks/${id}/start`, confirmations)
+        : await apiClient.patch<Task>(`/tasks/${id}/start`);
       return data;
     },
-    onSuccess: (task) => {
+    onSuccess: (task, input) => {
+      const switched = typeof input !== 'string' && input.confirmSwitch === true;
+      const switchedActiveTaskId = typeof input !== 'string' ? input.activeTaskId : undefined;
       queryClient.setQueryData<Task[]>(tasksKey(dateParam), (old: Task[] | undefined) =>
-        old?.map((item: Task) => item.id === task.id ? task : item),
+        old?.map((item: Task) => item.id === task.id
+          ? task
+          : switched && (
+              item.id === switchedActiveTaskId ||
+              (item.startedAt && !item.completedAt)
+            )
+            ? { ...item, startedAt: null, completedAt: null }
+            : item),
       );
       cancelLocalReminder(task.id).catch(() => {});
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
     },
-    onError: (error: unknown) => {
+    onError: (error: unknown, input) => {
+      if (typeof input !== 'string' && input.confirmSwitch) {
+        queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        return;
+      }
       if ((error as { response?: { status?: number } }).response?.status === 409) {
         queryClient.invalidateQueries({ queryKey: tasksKey(dateParam) });
       }
     },
   });
+}
+
+export function getActiveTaskConflict(error: unknown): ActiveTaskConflict | null {
+  const response = (error as { response?: { status?: number; data?: unknown } })?.response;
+  if (response?.status !== 409 || !response.data || typeof response.data !== 'object') return null;
+  const data = response.data as Partial<ActiveTaskConflict>;
+  if (data.code !== 'ACTIVE_TASK_CONFLICT' || !data.activeTask ||
+    typeof data.activeTask.id !== 'string' || typeof data.activeTask.title !== 'string') return null;
+  return data as ActiveTaskConflict;
+}
+
+export function getEarlyStartConflict(error: unknown): EarlyStartConflict | null {
+  const response = (error as { response?: { status?: number; data?: unknown } })?.response;
+  if (response?.status !== 409 || !response.data || typeof response.data !== 'object') return null;
+  const data = response.data as Partial<EarlyStartConflict>;
+  const scheduledTask = data.scheduledTask;
+  if (data.code !== 'EARLY_START_CONFIRMATION_REQUIRED' || !scheduledTask ||
+    typeof scheduledTask.id !== 'string' || typeof scheduledTask.title !== 'string' ||
+    !(typeof scheduledTask.startTime === 'string' || scheduledTask.startTime instanceof Date)) return null;
+  return data as EarlyStartConflict;
 }
 
 /**
@@ -173,6 +217,12 @@ export function useUpdateTask(
       const guard = () => lifecycleGuard() && (callerGuard?.() ?? true);
       await cleanAffectedLocalReminders([...(data?.affectedOccurrenceIds ?? []), ...(data?.newOccurrenceIds ?? [])], guard);
       if (!guard()) return;
+      // Paint the canonical server position immediately. LayoutAnimation on
+      // Today can then move/remove the card while the background refetch
+      // reconciles this day and any destination day.
+      queryClient.setQueryData<Task[]>(tasksKey(dateParam), (old: Task[] | undefined) =>
+        old?.map((task: Task) => task.id === data.id ? data : task),
+      );
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: inboxKey() });
       if (data.affectedOccurrenceIds?.length || data.newOccurrenceIds?.length) await reconcileAfterSeriesMutation(guard).catch(() => undefined);
@@ -196,28 +246,36 @@ export function useToggleTask(date: Date, userTimezone?: string | null) {
   const dateParam = toDateParam(date, userTimezone);
 
   return useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (input: string | { id: string; optimistic?: boolean }) => {
+      const id = typeof input === 'string' ? input : input.id;
       const { data } = await apiClient.patch<Task>(`/tasks/${id}/toggle`);
       return data;
     },
-    onMutate: async (id: string) => {
+    onMutate: async (input: string | { id: string; optimistic?: boolean }) => {
+      const id = typeof input === 'string' ? input : input.id;
+      const optimistic = typeof input === 'string' || input.optimistic !== false;
       await queryClient.cancelQueries({ queryKey: tasksKey(dateParam) });
       const previous = queryClient.getQueryData<Task[]>(tasksKey(dateParam));
 
-            queryClient.setQueryData<Task[]>(tasksKey(dateParam), (old: Task[] | undefined) =>
-        old?.map((t: Task) =>
-          t.id === id ? { ...t, completedAt: t.completedAt ? null : new Date() } : t,
-        ),
-      );
+      if (optimistic) {
+        queryClient.setQueryData<Task[]>(tasksKey(dateParam), (old: Task[] | undefined) =>
+          old?.map((t: Task) =>
+            t.id === id ? { ...t, completedAt: t.completedAt ? null : new Date() } : t,
+          ),
+        );
+      }
 
-      return { previous };
+      return { previous, optimistic };
     },
     onError: (_err, _id, context) => {
-      if (context?.previous) {
+      if (context?.optimistic && context.previous) {
         queryClient.setQueryData(tasksKey(dateParam), context.previous);
       }
     },
     onSuccess: (data) => {
+      queryClient.setQueryData<Task[]>(tasksKey(dateParam), (old: Task[] | undefined) =>
+        old?.map((task: Task) => task.id === data.id ? data : task),
+      );
       // Secondary effect: cancel reminder when completed; reschedule when uncompleted.
       if (data.completedAt) {
         cancelLocalReminder(data.id).catch(() => {});
@@ -226,7 +284,7 @@ export function useToggleTask(date: Date, userTimezone?: string | null) {
       }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: tasksKey(dateParam) });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
     },
   });
 }

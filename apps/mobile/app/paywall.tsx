@@ -4,9 +4,13 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { usePlanInfo } from '../lib/api/plan';
 import { FREE_TIER_LIMITS } from '@focus/shared-types';
+import { useMemo } from 'react';
+import { type OrbitsThemeTokens, useOrbitsTheme } from '../theme/orbits';
 
 /** Honest limit screen: purchasing and production entitlement activation are not implemented. */
 export default function PaywallScreen() {
+  const theme = useOrbitsTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const router = useRouter();
   const { data: planInfo, isLoading, isError } = usePlanInfo();
   const limit = FREE_TIER_LIMITS.maxActiveTasks;
@@ -14,8 +18,8 @@ export default function PaywallScreen() {
   const usagePercent = activeTasks === undefined ? 0 : Math.min((activeTasks / limit) * 100, 100);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style="auto" />
+    <SafeAreaView testID="paywall-screen" style={styles.container}>
+      <StatusBar style={theme.name === 'dark' ? 'light' : 'dark'} />
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.header}>
           <Text style={styles.emoji} accessibilityElementsHidden>🌿</Text>
@@ -25,10 +29,10 @@ export default function PaywallScreen() {
           </Text>
         </View>
 
-        <View style={styles.card}>
+        <View testID="paywall-card" style={styles.card}>
           {isLoading ? (
             <View style={styles.status} accessibilityRole="progressbar">
-              <ActivityIndicator color="#6B5BFC" />
+              <ActivityIndicator color={theme.brand} />
               <Text style={styles.statusText}>Проверяем количество задач…</Text>
             </View>
           ) : isError ? (
@@ -63,20 +67,22 @@ export default function PaywallScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F9FAFB' },
+function createStyles(theme: OrbitsThemeTokens) {
+return StyleSheet.create({
+  container: { flex: 1, backgroundColor: theme.background },
   scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 32 },
   header: { alignItems: 'center', marginBottom: 24 },
   emoji: { fontSize: 56, marginBottom: 16 },
-  title: { fontSize: 30, fontWeight: '700', color: '#111827', marginBottom: 12, textAlign: 'center' },
-  subtitle: { fontSize: 16, color: '#6B7280', textAlign: 'center', lineHeight: 24 },
-  card: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 20, borderWidth: 1, borderColor: '#E5E7EB' },
+  title: { fontSize: 30, fontWeight: '700', color: theme.textPrimary, marginBottom: 12, textAlign: 'center' },
+  subtitle: { fontSize: 16, color: theme.textSecondary, textAlign: 'center', lineHeight: 24 },
+  card: { backgroundColor: theme.surfacePrimary, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: theme.borderSubtle },
   status: { alignItems: 'center', gap: 10 },
-  statusText: { fontSize: 14, color: '#6B7280', textAlign: 'center', lineHeight: 21 },
-  usageBar: { height: 8, backgroundColor: '#E5E7EB', borderRadius: 4, overflow: 'hidden', marginBottom: 8 },
-  usageFill: { height: '100%', backgroundColor: '#6B5BFC', borderRadius: 4 },
-  usageText: { fontSize: 13, color: '#6B7280', textAlign: 'center' },
-  guidance: { fontSize: 16, color: '#374151', textAlign: 'center', lineHeight: 24, marginTop: 24 },
-  backButton: { backgroundColor: '#6B5BFC', borderRadius: 14, paddingVertical: 17, alignItems: 'center', marginTop: 24 },
-  backButtonText: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' },
+  statusText: { fontSize: 14, color: theme.textSecondary, textAlign: 'center', lineHeight: 21 },
+  usageBar: { height: 8, backgroundColor: theme.surfaceMuted, borderRadius: 4, overflow: 'hidden', marginBottom: 8 },
+  usageFill: { height: '100%', backgroundColor: theme.brand, borderRadius: 4 },
+  usageText: { fontSize: 13, color: theme.textSecondary, textAlign: 'center' },
+  guidance: { fontSize: 16, color: theme.textPrimary, textAlign: 'center', lineHeight: 24, marginTop: 24 },
+  backButton: { backgroundColor: theme.brand, borderRadius: 14, paddingVertical: 17, alignItems: 'center', marginTop: 24 },
+  backButtonText: { color: theme.retryText, fontSize: 17, fontWeight: '700' },
 });
+}

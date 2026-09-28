@@ -1,6 +1,6 @@
 # Task 0039 Phase B.5 — Orbits product decisions and physical-device evidence
 
-**Status:** compact Today header and Plan → Thoughts are implemented and physically verified; remaining Phase B.5 scope stays open
+**Status:** Phase B production/code scope complete; expanded physical-device acceptance remains open
 **Branch:** `codex/verify-orbits-phase-b5-android-accessibility`
 **Code checkpoint:** `7ba66b2a64c982c977fd872adda4f8c38b5de6a8`
 **Recorded:** 2026-09-02
@@ -136,7 +136,9 @@ Both disclosure controls require:
 - large-text behavior without clipping;
 - persistence across app restart.
 
-These compact controls are accepted product decisions but are not implemented by this documentation change.
+These compact controls are implemented in Profile with truthful collapsed/
+expanded accessibility state; physical TalkBack and maximum-text verification
+remain open.
 
 ### Global Add interaction and classification
 
@@ -309,6 +311,28 @@ Development connectivity evidence:
 - the phone could reach `http://192.168.1.84:3000` and received the expected 404 for an undefined root route;
 - the physical-device API URL needed the computer LAN address rather than Android-emulator alias `10.0.2.2`.
 
+## Phase B implementation closure — 2026-09-26
+
+Implemented in the current production tree and covered by focused tests:
+
+- five-destination Orbits navigation, compact Today and Plan access to Thoughts;
+- Recovery embedded in Plan with its badge on the Plan orbit and no duplicated
+  `Продолжить · N` heading;
+- warm/dark tokens across main, nested, task-form, Quick Capture, pre-auth,
+  provider, onboarding, paywall, index/loading and notification surfaces;
+- device-local theme continuity across logout;
+- compact Appearance and Time Format disclosures;
+- Quick Capture in-memory draft preservation for swipe, Android Back and
+  backdrop, with clearing on Cancel, success and session/identity boundary;
+- one product-facing `Отдых` type. Legacy BUFFER records render/edit as Rest and
+  retain their stored compatibility value; no destructive migration is made.
+
+Android status and navigation bars now follow the active warm/dark theme in
+application code. The compatible Expo SDK 51 `expo-navigation-bar` integration
+is installed without an SDK upgrade. This removes the known source-level gap,
+but the Realme light/dark icon contrast and transition behavior still require a
+physical retest and are not marked accepted here.
+
 ## Not yet verified or approved
 
 This record does not claim completion of:
@@ -323,8 +347,8 @@ This record does not claim completion of:
 - reduced-motion behavior;
 - sound or haptic opt-out;
 - notification permission re-check after resume;
-- compact Appearance and Time Format disclosures;
-- swipe-to-dismiss, draft protection, and Add classification behavior;
+- physical compact Appearance and Time Format disclosure behavior;
+- physical swipe-to-dismiss and draft protection behavior;
 - dynamic Add destination copy and Quick Add simplification;
 - Break after task behavior;
 - notification action or internal buffer behavior;
@@ -336,12 +360,49 @@ Plan and Success may remain honest preview screens until their separately scoped
 
 ## Next bounded work
 
-The first two bounded items below are now implemented and physically verified:
-
-1. compact Today header and bounded week navigation — complete;
-2. existing Thoughts inbox entry from Plan with truthful states — complete;
-3. implement compact Appearance and Time Format disclosures;
-4. separately scope Add dismissal, draft protection, classification, and progressive details;
-5. repeat physical-device verification at increased font sizes and with TalkBack.
+Implementation items 1–4 are complete in code and automated regression scope.
+The next bounded work is evidence-only for Phase B: repeat physical-device
+verification in warm/dark, cover pre-auth and Quick Capture draft lifecycle,
+inspect StatusBar/navigation bar, and run increased-font/TalkBack checks. Any
+functional follow-up found there requires a separately scoped change.
 
 Notification permissions, real Plan aggregation, Success metrics, and AI planning should each receive a separate read-only audit and explicit implementation approval.
+
+## Acceptance defect repair checkpoint — 2026-09-27
+
+The production/code follow-up implements the Realme findings for selected-date
+capture, recurrence edit scope, dense timeline layout, H12 labels, maximum-text
+navigation/header/forms, Android system bars, and login keyboard avoidance.
+Recurring edits expose `Только это повторение`, `Это и все будущие`, and `Всю серию`;
+the split scope uses the selected occurrence's local date, preserves protected
+history and identity, and replaces only the unstarted/incomplete future
+projection. Deletion semantics were intentionally not expanded.
+
+Automated checks may close a code defect but do not close the physical evidence
+gate. A repeated Realme matrix is still pending. End-to-end push setup is also
+blocked by missing real Expo/EAS `projectId` and credentials, so no fabricated
+identifier or token has been added.
+
+### Recurrence edit decision
+
+Editing an occurrence requires an explicit scope: only the selected materialized
+occurrence, a new branch beginning on the selected occurrence's profile-local
+date, or the entire series from its original anchor. A future-branch edit ends
+the old series on the preceding local date and creates a new series using the
+same IANA timezone and local wall clock. Unstarted/incomplete projected rows in
+the replaced range are deleted and regenerated; started/completed rows retain
+their UUID and state and are re-parented to the new series. Recovery references
+and reminder jobs for removed rows are cleaned up. This is implemented with the
+existing series/occurrence storage; no schema migration is needed.
+
+### Elastic timeline decision
+
+Today remains a time-oriented view, not a list. Each non-overlapping chronological
+cluster contributes any extra height needed by its content to an accumulated
+piecewise displacement. Tasks, Rest blocks, completed cards, focused NowCard,
+ticks, the current-time marker, free windows and auto-scroll consume the same
+`displayY(realTime)` transform. Real overlaps retain their calendar columns.
+Task cards use a 72px readable minimum, Rest uses 80px, and focused NowCard uses
+220px, with a 4px safe gap before the next chronological cluster. Tap-to-create
+does not infer a false time from stretched pixels; it opens the selected date
+with time unset.

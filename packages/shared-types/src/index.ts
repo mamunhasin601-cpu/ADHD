@@ -10,6 +10,7 @@
 export type Plan = 'FREE' | 'PRO';
 export type TimeFormat = 'SYSTEM' | 'H24' | 'H12';
 export type TaskKind = 'TASK' | 'REST' | 'BUFFER';
+export type RecurrenceEditScope = 'ONLY_THIS' | 'THIS_AND_FUTURE' | 'ENTIRE_SERIES';
 
 export const FREE_TIER_LIMITS = {
   /** Максимальное количество активных задач для Free пользователей */
@@ -21,8 +22,8 @@ export interface User {
   email: string | null;
   phone: string | null;
   timezone: string;
-  /** Null/omitted only for profiles not yet confirmed by the mobile lifecycle. */
-  timezoneSyncedAt?: Date | null;
+  /** Last authoritative smartphone timezone sync returned by the API. */
+  timezoneSyncedAt?: Date | string | null;
   timeFormat: TimeFormat;
   hasCompletedOnboarding: boolean;
   plan: Plan;
@@ -47,6 +48,8 @@ export interface Task {
   recurrenceRule: string | null; // iCal RRULE, напр. "FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR"
   /** Present only on a concrete occurrence; the stable id of its series. */
   seriesId?: string | null;
+  /** Stable logical family identity shared by every technical series segment. */
+  recurrenceRootId?: string | null;
   /** Profile-local YYYY-MM-DD occurrence identity. */
   recurrenceDateKey?: string | null;
   recurrenceEndedAt?: Date | null;
@@ -56,7 +59,7 @@ export interface Task {
   seriesRecurrenceRule?: string | null;
   parentTaskId: string | null;   // для подзадач
   completedAt: Date | null;
-  /** First explicit user start; a historical event rather than a timer. */
+  /** Server-confirmed start of the currently active task; cleared on lost focus. */
   startedAt: Date | null;
   /** Optional user-authored, observable entry action; not a subtask or start state. */
   firstStep: string | null;
@@ -65,6 +68,23 @@ export interface Task {
   subTasks?: Task[];
   affectedOccurrenceIds?: string[];
   newOccurrenceIds?: string[];
+}
+
+export interface StartTaskRequest {
+  confirmSwitch?: boolean;
+  confirmEarlyStart?: boolean;
+}
+
+export interface ActiveTaskConflict {
+  code: 'ACTIVE_TASK_CONFLICT';
+  message: string;
+  activeTask: Pick<Task, 'id' | 'title' | 'startedAt'>;
+}
+
+export interface EarlyStartConflict {
+  code: 'EARLY_START_CONFIRMATION_REQUIRED';
+  message: string;
+  scheduledTask: Pick<Task, 'id' | 'title' | 'startTime'>;
 }
 
 export interface CreateTaskDto {
@@ -88,6 +108,8 @@ export interface CreateTaskDto {
 
 export interface UpdateTaskDto extends Partial<Omit<CreateTaskDto, 'createRequestId'>> {
   completedAt?: string | null;
+  /** Required by new clients when editing a concrete recurring occurrence. */
+  recurrenceEditScope?: RecurrenceEditScope;
 }
 
 export interface TaskPartWrite {

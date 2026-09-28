@@ -1,6 +1,7 @@
 const mockPush = jest.fn();
 const mockRefetch = jest.fn();
 const mockToggle = jest.fn();
+const mockRecoverySection = jest.fn(() => null);
 let mockQueryState: {
   data: any[];
   isLoading: boolean;
@@ -9,7 +10,7 @@ let mockQueryState: {
   error?: unknown;
 };
 
-jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }), useFocusEffect: jest.fn() }));
 jest.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ refetchQueries: jest.fn() }),
 }));
@@ -26,11 +27,13 @@ jest.mock('../lib/notification-lifecycle', () => ({
   }),
 }));
 jest.mock('../lib/api/tasks', () => ({
+  getActiveTaskConflict: () => null,
   useTasksForDate: () => ({ ...mockQueryState, refetch: mockRefetch }),
   useCreateTask: () => ({ mutateAsync: jest.fn(), isPending: false }),
   useUpdateTask: () => ({ mutateAsync: jest.fn(), isPending: false }),
   useToggleTask: () => ({ mutate: mockToggle, isPending: false }),
   useStartTask: () => ({ mutateAsync: jest.fn(), isPending: false }),
+  useDeleteTask: () => ({ mutateAsync: jest.fn(), isPending: false }),
 }));
 jest.mock('../stores/auth.store', () => ({
   useAuthStore: (selector: any) => selector({
@@ -41,14 +44,23 @@ jest.mock('../stores/auth.store', () => ({
     },
   }),
 }));
-jest.mock('../components/RecoverySection', () => ({ RecoverySection: () => null }));
+jest.mock('../components/RecoverySection', () => ({ RecoverySection: () => mockRecoverySection() }));
 jest.mock('../components/NowCard', () => {
   const { View } = require('react-native');
   return { NowCard: () => <View testID="now-card" /> };
 });
 jest.mock('../components/timeline/Timeline', () => {
-  const { View } = require('react-native');
-  return { Timeline: () => <View testID="timeline" /> };
+  const React = require('react');
+  const { Text, View } = require('react-native');
+  return {
+    Timeline: ({ tasks, focusedTaskId, renderFocusedTask }: any) => (
+      <View testID="timeline">
+        {tasks.map((task: any) => task.id === focusedTaskId && renderFocusedTask
+          ? <React.Fragment key={task.id}>{renderFocusedTask(task)}</React.Fragment>
+          : <Text key={task.id}>{task.title}</Text>)}
+      </View>
+    ),
+  };
 });
 jest.mock('expo-status-bar', () => {
   const React = require('react');
@@ -157,7 +169,19 @@ describe('Today query states', () => {
 });
 
 describe('Today physical-device reachability regression', () => {
-  it('keeps current, next and timeline content inside the scrollable body', () => {
+  it('does not mount Recovery or reserve an extra block before the timeline', () => {
+    mockQueryState.data = [
+      { ...unscheduledTask(false), id: 'next', startTime: '2026-08-15T11:00:00.000Z' },
+    ];
+    render(<TodayScreen />);
+    expect(mockRecoverySection).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('recovery-section')).toBeNull();
+    const content = screen.getByTestId('today-content-scroll');
+    expect(React.Children.toArray(content.props.children)).toHaveLength(1);
+    expect(screen.getByTestId('timeline')).toBeTruthy();
+  });
+
+  it('embeds the focused task and the next task inside the timeline body', () => {
     mockQueryState.data = [
       { ...unscheduledTask(false), id: 'current', title: 'Текущая', startTime: '2026-08-15T09:00:00.000Z' },
       { ...unscheduledTask(false), id: 'next', title: 'Следующая', startTime: '2026-08-15T11:00:00.000Z' },
@@ -165,7 +189,7 @@ describe('Today physical-device reachability regression', () => {
     render(<TodayScreen />);
     expect(screen.getByTestId('today-content-scroll')).toBeTruthy();
     expect(screen.getByTestId('now-card')).toBeTruthy();
-    expect(screen.getByTestId('today-next-task-preview')).toBeTruthy();
+    expect(screen.queryByTestId('today-next-task-preview')).toBeNull();
     expect(screen.getByText('Следующая')).toBeTruthy();
     expect(screen.getByTestId('timeline')).toBeTruthy();
   });

@@ -12,6 +12,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { useInboxTasks, useToggleInboxTask } from '../../lib/api/tasks';
 import type { Task } from '@focus/shared-types';
+import { useOrbitsTheme } from '../../theme/orbits';
 
 /**
  * Пользовательская зона «Мысли» — технически Inbox-задачи без времени.
@@ -25,6 +26,7 @@ import type { Task } from '@focus/shared-types';
  * - После recovery Today, Inbox и recovery-список обновляются без перезапуска приложения.
  */
 export default function InboxScreen() {
+  const theme = useOrbitsTheme();
   const router = useRouter();
   const { data: tasks, isLoading, isError, refetch } = useInboxTasks();
   const toggleTask = useToggleInboxTask();
@@ -43,20 +45,21 @@ export default function InboxScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style="auto" />
+    <SafeAreaView testID="inbox-screen" style={[styles.container, { backgroundColor: theme.background }]}>
+      <StatusBar style={theme.name === 'dark' ? 'light' : 'dark'} />
 
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Мысли</Text>
-        <Text style={styles.headerSubtitle}>Запиши, чтобы не держать в голове</Text>
+      <View testID="inbox-header" style={[styles.header, { backgroundColor: theme.surfacePrimary, borderBottomColor: theme.borderSubtle }]}>
+        <Text testID="inbox-header-title" style={[styles.headerTitle, { color: theme.brand }]}>Мысли</Text>
+        <Text testID="inbox-header-subtitle" style={[styles.headerSubtitle, { color: theme.textSecondary }]}>Запиши, чтобы не держать в голове</Text>
       </View>
 
       {/* Loading */}
       {isLoading && (
         <View style={styles.centered} accessibilityLiveRegion="polite">
           <ActivityIndicator
-            color="#6B5BFC"
+            testID="inbox-loading"
+            color={theme.brand}
             accessibilityLabel="Загрузка мыслей"
           />
         </View>
@@ -65,17 +68,21 @@ export default function InboxScreen() {
       {/* Error + Retry */}
       {isError && !isLoading && (
         <View style={styles.centered}>
-          <Text style={styles.errorText}>
+          <Text testID="inbox-error" style={[styles.errorText, { color: theme.errorPrimary }]}>
             Не удалось загрузить мысли. Проверьте соединение.
           </Text>
           <Pressable
-            style={styles.retryButton}
+            testID="inbox-retry"
+            style={({ pressed }) => [
+              styles.retryButton,
+              { backgroundColor: pressed ? theme.brandPressed : theme.brand },
+            ]}
             onPress={() => refetch()}
             accessible
             accessibilityRole="button"
             accessibilityLabel="Повторить загрузку"
           >
-            <Text style={styles.retryText}>Повторить</Text>
+            <Text style={[styles.retryText, { color: theme.retryText }]}>Повторить</Text>
           </Pressable>
         </View>
       )}
@@ -84,8 +91,8 @@ export default function InboxScreen() {
       {!isLoading && !isError && (tasks?.length ?? 0) === 0 && (
         <View style={styles.centered}>
           <Text style={styles.emptyEmoji}>💭</Text>
-          <Text style={styles.emptyTitle}>Здесь пока спокойно</Text>
-          <Text style={styles.emptyText}>
+          <Text testID="inbox-empty-title" style={[styles.emptyTitle, { color: theme.textPrimary }]}>Здесь пока спокойно</Text>
+          <Text testID="inbox-empty-text" style={[styles.emptyText, { color: theme.textSecondary }]}>
             Записывай сюда то, что не хочется держать в голове.{'\n'}
             Планировать время можно позже.
           </Text>
@@ -100,7 +107,11 @@ export default function InboxScreen() {
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => (
             <Pressable
-              style={styles.taskRow}
+              testID={`inbox-task-${item.id}`}
+              style={[
+                styles.taskRow,
+                { backgroundColor: item.completedAt ? theme.completionSoft : theme.surfacePrimary },
+              ]}
               onPress={() => openTask(item)}
               onLongPress={() => toggleTask.mutate(item.id)}
               accessible
@@ -112,15 +123,18 @@ export default function InboxScreen() {
               }
             >
               <View
+                testID={`inbox-task-dot-${item.id}`}
                 style={[
                   styles.taskDot,
-                  { backgroundColor: item.completedAt ? '#E5E7EB' : item.color },
+                  { backgroundColor: item.completedAt ? theme.completionPrimary : item.color },
                 ]}
               />
               <View style={styles.taskContent}>
                 <Text
+                  testID={`inbox-task-title-${item.id}`}
                   style={[
                     styles.taskTitle,
+                    { color: item.completedAt ? theme.completionPrimary : theme.textPrimary },
                     !!item.completedAt && styles.taskTitleDone,
                   ]}
                   numberOfLines={2}
@@ -128,15 +142,18 @@ export default function InboxScreen() {
                   {item.title}
                 </Text>
                 {item.subTasks && item.subTasks.length > 0 && (
-                  <Text style={styles.subtaskCount}>
+                  <Text
+                    testID={`inbox-task-subtasks-${item.id}`}
+                    style={[styles.subtaskCount, { color: item.completedAt ? theme.completionPrimary : theme.textSecondary }]}
+                  >
                     {item.subTasks.length} подзадач
                   </Text>
                 )}
               </View>
-              <Text style={styles.chevron}>›</Text>
+              <Text testID={`inbox-task-chevron-${item.id}`} style={[styles.chevron, { color: theme.textSecondary }]}>›</Text>
             </Pressable>
           )}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ItemSeparatorComponent={() => <View testID="inbox-divider" style={[styles.separator, { backgroundColor: theme.borderSubtle }]} />}
         />
       )}
     </SafeAreaView>
@@ -144,24 +161,20 @@ export default function InboxScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F9FAFB' },
+  container: { flex: 1 },
 
   header: {
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
   },
   headerTitle: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#6B5BFC',
     marginBottom: 2,
   },
   headerSubtitle: {
     fontSize: 13,
-    color: '#6B7280',
   },
 
   centered: {
@@ -171,7 +184,6 @@ const styles = StyleSheet.create({
     padding: 32,
   },
   errorText: {
-    color: '#6B7280',
     textAlign: 'center',
     marginBottom: 16,
     fontSize: 14,
@@ -179,11 +191,9 @@ const styles = StyleSheet.create({
   retryButton: {
     paddingHorizontal: 20,
     paddingVertical: 10,
-    backgroundColor: '#EDE9FE',
     borderRadius: 8,
   },
   retryText: {
-    color: '#6B5BFC',
     fontWeight: '600',
     fontSize: 14,
   },
@@ -192,12 +202,10 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#111827',
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 14,
-    color: '#6B7280',
     textAlign: 'center',
     lineHeight: 22,
   },
@@ -208,7 +216,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 14,
-    backgroundColor: '#FFFFFF',
     gap: 12,
   },
   taskDot: {
@@ -221,26 +228,21 @@ const styles = StyleSheet.create({
   taskTitle: {
     fontSize: 15,
     fontWeight: '500',
-    color: '#111827',
     lineHeight: 20,
   },
   taskTitleDone: {
     textDecorationLine: 'line-through',
-    color: '#9CA3AF',
   },
   subtaskCount: {
     fontSize: 12,
-    color: '#9CA3AF',
     marginTop: 2,
   },
   chevron: {
     fontSize: 20,
-    color: '#D1D5DB',
     fontWeight: '600',
   },
   separator: {
     height: 1,
-    backgroundColor: '#F3F4F6',
     marginLeft: 42,
   },
 });

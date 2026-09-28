@@ -8,6 +8,6 @@
 export const TIMELINE_CONFIG = {
   dayStartHour: 6,
   dayEndHour: 24,
-  hourHeight: 64, // px на 1 час шкалы
+  hourHeight: 56, // compact proportional scale; exact time stays on each card
   minBlockHeight: 32, // минимальная высота блока задачи — чтобы короткие задачи оставались читаемыми
 };

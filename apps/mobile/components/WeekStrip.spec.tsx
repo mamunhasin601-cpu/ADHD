@@ -1,6 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { buildWeekDays, resolveWeekSwipe, WeekStrip } from './WeekStrip';
+import { adaptiveWeekDays, buildWeekDays, resolveWeekSwipe, WeekStrip } from './WeekStrip';
 import { localMidnightToInstant, toCanonicalDateParam } from '../lib/timezone';
 
 describe('WeekStrip', () => {
@@ -10,6 +10,15 @@ describe('WeekStrip', () => {
     expect(december.map((day) => day.date)).toEqual([
       '2025-12-29', '2025-12-30', '2025-12-31', '2026-01-01', '2026-01-02', '2026-01-03', '2026-01-04',
     ]);
+  });
+
+  it('uses a five-day functional fallback only for combined extreme scale', () => {
+    const days = buildWeekDays('2025-12-31', '2025-12-31');
+    expect(adaptiveWeekDays(days, 320, 2).map((day) => day.date)).toEqual([
+      '2025-12-29', '2025-12-30', '2025-12-31', '2026-01-01', '2026-01-02',
+    ]);
+    expect(adaptiveWeekDays(days, 320, 1.6)).toHaveLength(7);
+    expect(adaptiveWeekDays(days, 400, 2)).toHaveLength(7);
   });
 
   it('keeps selection distinct from the calm today marker and changes canonical day', () => {
@@ -32,7 +41,7 @@ describe('WeekStrip', () => {
     expect(onSelectDate).toHaveBeenCalledWith('2026-08-16');
   });
 
-  it('disables dates before today and keeps today selectable', () => {
+  it('keeps past dates selectable for timeline history', () => {
     const onSelectDate = jest.fn();
     render(
       <WeekStrip
@@ -45,19 +54,17 @@ describe('WeekStrip', () => {
       />,
     );
 
-    expect(screen.getByTestId('week-day-2026-08-14').props.accessibilityState.disabled).toBe(true);
+    expect(screen.getByTestId('week-day-2026-08-14').props.accessibilityState.disabled).toBe(false);
     fireEvent.press(screen.getByTestId('week-day-2026-08-14'));
-    expect(onSelectDate).not.toHaveBeenCalled();
+    expect(onSelectDate).toHaveBeenCalledWith('2026-08-14');
     fireEvent.press(screen.getByTestId('week-day-2026-08-15'));
     expect(onSelectDate).toHaveBeenCalledWith('2026-08-15');
   });
 
-  it('resolves horizontal week swipes and blocks swiping into the past', () => {
+  it('resolves horizontal week swipes in both directions', () => {
     expect(resolveWeekSwipe(-60, 0, false)).toBe('next');
     expect(resolveWeekSwipe(60, 0, true)).toBe('previous');
-    expect(resolveWeekSwipe(60, 0, false)).toBeNull();
     expect(resolveWeekSwipe(20, 0.6, true)).toBe('previous');
-    expect(resolveWeekSwipe(20, 0.6, false)).toBeNull();
     expect(resolveWeekSwipe(20, 0.2, true)).toBeNull();
   });
 

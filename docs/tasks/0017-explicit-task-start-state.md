@@ -11,27 +11,32 @@ user command before presenting a task as started.
 
 ## Persisted meaning and transitions
 
-`Task.startedAt: DateTime?` is the server-recorded time of the first explicit
+`Task.startedAt: DateTime?` is the server-recorded time of the current explicit
 start. Its default is `null`, the nullable forward migration leaves every
 existing row `null`, and the field is not exposed in create/update DTOs or the
-Task Form. It is historical evidence of one choice—not a timer, continuous
-attention claim, focus session, or exclusive active-task lease. Several tasks
-may retain it. Scheduling, editing, recovery, completion, and reopening neither
-populate nor erase it.
+Task Form. It is not a timer, continuous-attention claim, or focus session.
+Since the Task 0039 Realme corrective package, it is also the canonical active
+lease: at most one incomplete task per user may retain it. A confirmed switch
+clears it from the previous task without completing, deleting, rescheduling, or
+changing recurrence identity.
 
 Transitions are `unstarted + incomplete -> started + incomplete` through the
 start command; a retry stays at the original timestamp; completion remains
-valid with or without a prior start; reopening preserves `startedAt`; a
-completed unstarted task rejects start with HTTP 409.
+valid with or without a prior start; and a completed unstarted task rejects
+start with HTTP 409. Starting another task first returns a typed conflict; only
+an explicit confirmed switch atomically clears every other legacy active start
+and records the target's actual server start instant.
 
 ## API and reminders
 
 Authenticated `PATCH /tasks/:id/start` uses the standard UUID pipe and ownership
-check and returns the normal Task response. The server performs an atomic
-conditional `updateMany` constrained by `id`, `userId`, `startedAt: null`, and
-`completedAt: null`, then reads the canonical row. Thus simultaneous retries
-cannot replace the first timestamp. Missing and inaccessible tasks retain the
-existing 404/403 behavior and completed tasks receive a calm conflict.
+check and returns the normal Task response. With another active task, the
+ordinary request returns `ACTIVE_TASK_CONFLICT` plus the minimal active-task
+identity. Retrying with `{ "confirmSwitch": true }` runs the lost-focus writes
+and target start in one serializable transaction with retry on serialization
+conflict. Thus simultaneous requests cannot commit two active tasks. Missing
+and inaccessible tasks retain the existing 404/403 behavior and completed tasks
+receive a calm conflict.
 
 After persistence the backend safely cancels the task reminder. Cancellation
 failure is logged but cannot roll back or falsely fail the command. Generic
@@ -74,9 +79,10 @@ and both diff checks. Complete results: API 15 suites / 238 tests and mobile 26 
 all passing. Focused results: service 1/26, controller 1/1, Now Card 1/5,
 and mobile mutation 1/2, all passing.
 
-Residual limitations are intentional: no pause/resume, timer, focus session,
-assistant, decomposition, or global active-task exclusivity exists. Migration
-application awaits an explicitly disposable database.
+Residual limitations are intentional: there is no pause/resume, timer, focus
+session, assistant, or decomposition. Single-active exclusivity is scoped per
+user, not globally across users. Migration application awaits an explicitly
+disposable database.
 
 ## Review follow-up verification
 
@@ -105,3 +111,49 @@ start mutation and Today start suites produce no warning or open-handle output.
 Both TypeScript checks and Prisma validate/generate pass. The non-connected
 placeholder database URL was used only for static Prisma tooling; migration
 application remains unverified because no disposable running database exists.
+
+## Future-action confirmation corrective package — 2026-09-28
+
+Source diagnosis separates Start/Switch from completion. The transactional
+switch path writes only `startedAt = null` to prior incomplete active tasks and
+never writes `completedAt`; its service regression proves the previous row
+remains incomplete. The only completion writer is the explicit toggle command.
+Before this correction, the completion circle called that command directly and
+the dated mobile cache optimistically synthesized `completedAt`, immediately
+painting a check, strike-through, and incremented daily progress before the
+server response. A confirmed switch now also reconciles the exact active-task
+id named by the conflict, clearing a stale optimistic completion without
+reopening unrelated legitimately completed history.
+
+An unstarted future occurrence now requires a calm confirmation before either
+completion or Start. Future completion uses `Задача запланирована на
+<дата/время>. Отметить выполненной сейчас?`; Cancel, Android Back, and backdrop
+dismissal do not mutate, and the completion cache remains unchanged until the
+canonical response. A failed response leaves the source task open and the
+dialog retryable. Same-day copy uses time only; another profile-local day uses
+localized date and time, honoring H12/H24.
+
+Future Start uses `Задача запланирована на <дата/время>. Начать сейчас?`. The
+server independently enforces this boundary with typed
+`EARLY_START_CONFIRMATION_REQUIRED` and accepts optional
+`confirmEarlyStart`. Confirmation preserves scheduled `startTime` and records
+actual server `startedAt`. If another task is active, the protocol is ordered:
+early confirmation, then `ACTIVE_TASK_CONFLICT`, then a retry carrying both
+`confirmEarlyStart` and `confirmSwitch`; no mutation occurs before both are
+confirmed. Recurring templates and task parts remain invalid Start targets;
+only concrete occurrences participate.
+
+The package adds no timer, session, parallel competitive model, schema, or
+migration. Task 0039 remains **physical smoke pending**.
+
+## Task 0039 physical close-out — 2026-09-28
+
+The dated corrective-package note above records the gate before the final
+device retest. The required Realme smoke now passes: one active started task,
+Stay/Switch behavior, no implicit completion or counter change, next-profile-day
+Recovery eligibility, early-Start confirmation, and future-completion
+confirmation were physically verified. Task 0039 is accepted within its Phase B
+and Timeline corrective scope. Push delivery remains a separate external blocker
+because a working EAS `projectId`, credentials, and device push token are not
+available. `Сейчас по плану / конкурентная модель` is a later product iteration,
+not part of Task 0017 or Task 0039.

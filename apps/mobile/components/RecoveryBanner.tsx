@@ -298,7 +298,7 @@ export function RecoveryBanner({
         accessible
         accessibilityRole="button"
         accessibilityLabel={
-          `Незавершённые задачи: ${overdueTasks.length}. ` +
+          `Продолжить, ${overdueTasks.length} задач, к которым можно вернуться. ` +
           `Нажмите, чтобы выбрать, что делать дальше.`
         }
       >
@@ -306,9 +306,7 @@ export function RecoveryBanner({
           <Text style={[styles.bannerIcon, { color: theme.rewardPrimary }]}>↩</Text>
           <View style={styles.bannerTextCol}>
             <Text style={[styles.bannerTitle, { color: theme.rewardPrimary }]}>
-              {overdueTasks.length === 1
-                ? "1 незавершённая задача"
-                : `${overdueTasks.length} незавершённых задачи`}
+              {`Продолжить · ${overdueTasks.length}`}
             </Text>
             <Text style={[styles.bannerSubtitle, { color: theme.textPrimary }]}>
               Нажмите, чтобы выбрать, что делать дальше
@@ -328,7 +326,12 @@ export function RecoveryBanner({
         accessibilityViewIsModal
       >
         <SafeAreaView style={styles.overlay}>
-          <View testID="recovery-sheet-surface" style={[styles.sheet, { backgroundColor: theme.surfacePrimary }]}>
+          <View
+            testID="recovery-sheet-scrim"
+            pointerEvents="none"
+            style={[styles.scrim, { backgroundColor: theme.elevationShadow }]}
+          />
+          <View testID="recovery-sheet-surface" style={[styles.sheet, { backgroundColor: theme.background }]}>
             {/* Invalid timezone — neutral retryable error */}
             {!timezoneValid ? (
               <View style={styles.timezoneError} testID="timezone-error-state">
@@ -350,7 +353,7 @@ export function RecoveryBanner({
             ) : (
               <>
                 <View style={styles.sheetHeader}>
-                  <Text style={[styles.sheetTitle, { color: theme.textPrimary }]}>Незавершённые задачи</Text>
+                  <Text style={[styles.sheetTitle, { color: theme.textPrimary }]}>Продолжить</Text>
                   <Text style={[styles.sheetSubtitle, { color: theme.textSecondary }]}>
                     Выберите задачи и куда их перенести. Неотмеченные задачи
                     останутся без изменений.
@@ -521,14 +524,20 @@ export function RecoveryBanner({
                 <View style={styles.actions}>
                   <Pressable
                     testID="cancel-btn"
-                    style={[styles.cancelButton, { backgroundColor: theme.activeSurface, borderColor: theme.activeBorder }]}
+                    style={[
+                      styles.cancelButton,
+                      {
+                        backgroundColor: isConfirming ? theme.surfaceMuted : theme.activeSurface,
+                        borderColor: isConfirming ? theme.borderSubtle : theme.activeBorder,
+                      },
+                    ]}
                     onPress={closeSheet}
                     disabled={isConfirming}
                     accessible
                     accessibilityRole="button"
                     accessibilityLabel="Отмена — никаких изменений"
                   >
-                    <Text style={[styles.cancelButtonText, { color: theme.activeSurfaceText }]}>Отмена</Text>
+                    <Text style={[styles.cancelButtonText, { color: isConfirming ? theme.textSecondary : theme.activeSurfaceText }]}>Отмена</Text>
                   </Pressable>
 
                   <Pressable
@@ -593,11 +602,13 @@ const styles = StyleSheet.create({
 
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "flex-end",
   },
+  scrim: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.58,
+  },
   sheet: {
-    backgroundColor: "#FFFFFF",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingTop: 20,
@@ -608,10 +619,9 @@ const styles = StyleSheet.create({
   sheetTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#111827",
     marginBottom: 6,
   },
-  sheetSubtitle: { fontSize: 13, color: "#6B7280", lineHeight: 18 },
+  sheetSubtitle: { fontSize: 13, lineHeight: 18 },
 
   timezoneError: {
     padding: 24,
@@ -619,7 +629,6 @@ const styles = StyleSheet.create({
   },
   timezoneErrorText: {
     fontSize: 14,
-    color: "#374151",
     textAlign: "center",
     lineHeight: 20,
     marginBottom: 16,
@@ -627,13 +636,12 @@ const styles = StyleSheet.create({
   timezoneErrorClose: {
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: "#F3F4F6",
     borderWidth: 1,
     borderRadius: 8,
     minHeight: 44,
     justifyContent: "center",
   },
-  timezoneErrorCloseText: { fontSize: 15, color: "#374151", fontWeight: "600" },
+  timezoneErrorCloseText: { fontSize: 15, fontWeight: "600" },
 
   taskList: { flexGrow: 0, maxHeight: "55%" },
   taskListContent: { paddingHorizontal: 24, paddingBottom: 8 },
@@ -642,7 +650,6 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
     gap: 12,
   },
   checkbox: {
@@ -650,15 +657,11 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 8,
     borderWidth: 2,
-    borderColor: "#D1D5DB",
-    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
-  checkboxChecked: { backgroundColor: "#6B5BFC", borderColor: "#6B5BFC" },
   checkmark: {
-    color: "#FFFFFF",
     fontSize: 18,
     fontWeight: "700",
     lineHeight: 22,
@@ -668,16 +671,13 @@ const styles = StyleSheet.create({
   taskTitle: {
     fontSize: 15,
     fontWeight: "500",
-    color: "#111827",
     lineHeight: 20,
   },
-  taskTitleUnselected: { color: "#6B7280" },
-  taskDate: { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
+  taskDate: { fontSize: 12, marginTop: 2 },
 
   destinationArea: { marginTop: 10 },
   destinationLabel: {
     fontSize: 12,
-    color: "#374151",
     fontWeight: "500",
     marginBottom: 8,
   },
@@ -687,37 +687,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
-    backgroundColor: "#F3F4F6",
     borderWidth: 1,
-    borderColor: "#E5E7EB",
     alignItems: "center",
     justifyContent: "center",
   },
-  destButtonActive: { backgroundColor: "#EDE9FE", borderColor: "#6B5BFC" },
-  destButtonPicking: { backgroundColor: "#F5F3FF", borderColor: "#8B5CF6" },
-  destButtonText: { fontSize: 14, color: "#374151", fontWeight: "500" },
-  destButtonTextActive: { color: "#6B5BFC", fontWeight: "600" },
+  destButtonText: { fontSize: 14, fontWeight: "500" },
 
   destinationPreview: {
     fontSize: 13,
-    color: "#6B5BFC",
     marginTop: 8,
     fontStyle: "italic",
   },
-  destinationPreviewWarn: { color: "#DC2626", fontStyle: "normal" },
-  destinationPreviewEmpty: { color: "#9CA3AF", fontStyle: "normal" },
 
   errorBanner: {
     marginHorizontal: 24,
     marginTop: 8,
     marginBottom: 4,
     padding: 10,
-    backgroundColor: "#FEF2F2",
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#FECACA",
   },
-  errorText: { fontSize: 13, color: "#DC2626" },
+  errorText: { fontSize: 13 },
 
   actions: {
     flexDirection: "row",
@@ -731,21 +721,18 @@ const styles = StyleSheet.create({
     minHeight: 48,
     paddingVertical: 12,
     borderRadius: 10,
-    backgroundColor: "#F3F4F6",
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  cancelButtonText: { fontSize: 15, color: "#374151", fontWeight: "600" },
+  cancelButtonText: { fontSize: 15, fontWeight: "600" },
   confirmButton: {
     flex: 2,
     minHeight: 48,
     paddingVertical: 12,
     borderRadius: 10,
-    backgroundColor: "#6B5BFC",
     alignItems: "center",
     justifyContent: "center",
   },
-  confirmButtonDisabled: { backgroundColor: "#D1D5DB" },
-  confirmButtonText: { fontSize: 15, color: "#FFFFFF", fontWeight: "600" },
+  confirmButtonText: { fontSize: 15, fontWeight: "600" },
 });

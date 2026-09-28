@@ -7,9 +7,10 @@ import * as Notifications from 'expo-notifications';
 import { NotificationPermissionBanner } from '../components/NotificationPermissionBanner';
 import { NotificationLifecycleProvider, useNotificationLifecycle } from '../lib/notification-lifecycle';
 import { resolveAuthRedirect } from '../lib/auth-routing';
-import { OrbitsThemeProvider } from '../theme/orbits';
+import { ORBITS_THEMES, OrbitsThemeProvider } from '../theme/orbits';
 import { useOrbitsThemeStore } from '../stores/orbits-theme.store';
 import { DeviceTimezoneSync } from '../lib/device-timezone-sync';
+import { SystemBars } from '../components/SystemBars';
 
 // Настройка обработчика уведомлений
 Notifications.setNotificationHandler({
@@ -33,6 +34,7 @@ export default function RootLayout() {
   const bootstrap = useAuthStore((s) => s.bootstrap);
   const bootstrapTheme = useOrbitsThemeStore((s) => s.bootstrap);
   const themeName = useOrbitsThemeStore((s) => s.themeName);
+  const theme = ORBITS_THEMES[themeName];
   const themeHydrated = useOrbitsThemeStore((s) => s.hydrated);
   const user = useAuthStore((s) => s.user);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -97,10 +99,11 @@ export default function RootLayout() {
     <QueryClientProvider client={queryClient}>
       <OrbitsThemeProvider theme={themeName}>
       <NotificationLifecycleProvider userId={user?.id}>
-      <View style={styles.rootContainer}>
+      <View style={[styles.rootContainer, { backgroundColor: theme.background }]}>
+        <SystemBars theme={theme} />
         <DeviceTimezoneSync />
         <PermissionBanner authenticated={Boolean(user)} />
-        <Stack screenOptions={{ headerShown: false }}>
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.background } }}>
           <Stack.Screen name="login" />
           <Stack.Screen name="register" />
           <Stack.Screen name="auth-provider-select" />
@@ -113,17 +116,32 @@ export default function RootLayout() {
               presentation: 'modal',
               headerShown: true,
               title: 'Задача',
+              headerStyle: { backgroundColor: theme.background },
+              headerTintColor: theme.textPrimary,
+              headerTitleStyle: { color: theme.textPrimary },
+              headerShadowVisible: false,
+              headerBackground: () => (
+                <View
+                  style={{
+                    flex: 1,
+                    backgroundColor: theme.background,
+                    borderBottomColor: theme.borderSubtle,
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                  }}
+                />
+              ),
+              contentStyle: { backgroundColor: theme.background },
             }}
           />
         </Stack>
         {isAuthGateVisible && (
-          <View style={styles.loadingContainer} testID="auth-bootstrap-loading">
-            <ActivityIndicator color="#6B5BFC" />
+          <View style={[styles.loadingContainer, { backgroundColor: theme.background }]} testID="auth-bootstrap-loading">
+            <ActivityIndicator color={theme.brand} />
           </View>
         )}
         {!themeHydrated && (
-          <View style={styles.themeLoadingContainer} testID="theme-bootstrap-loading">
-            <ActivityIndicator color="#6B5BFC" />
+          <View style={[styles.themeLoadingContainer, { backgroundColor: theme.background }]} testID="theme-bootstrap-loading">
+            <ActivityIndicator color={theme.brand} />
           </View>
         )}
       </View>
@@ -146,14 +164,12 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
     zIndex: 1,
   },
   themeLoadingContainer: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FCF9F6',
     zIndex: 2,
   },
 });

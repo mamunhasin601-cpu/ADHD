@@ -1,9 +1,9 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
-import { OrbitsNavigation } from './OrbitsNavigation';
+import { OrbitsNavigation, orbitsLabelScalePolicy } from './OrbitsNavigation';
 import { ORBITS_NAVIGATION_ASSETS } from './orbits-assets';
-import { ORBITS_THEMES } from '../../theme/orbits';
+import { contrastRatio, ORBITS_THEMES, OrbitsThemeProvider } from '../../theme/orbits';
 
 const destinations = ['today', 'plan', 'progress', 'profile'] as const;
 
@@ -15,6 +15,53 @@ function setup(overrides: Partial<React.ComponentProps<typeof OrbitsNavigation>>
 }
 
 describe('OrbitsNavigation', () => {
+  it('caps only the combined extreme display fallback', () => {
+    expect(orbitsLabelScalePolicy(320, 2)).toEqual({ maximum: 1.2, fit: true });
+    expect(orbitsLabelScalePolicy(320, 1.6)).toEqual({ maximum: 1.6, fit: false });
+    expect(orbitsLabelScalePolicy(400, 2)).toEqual({ maximum: 1.6, fit: false });
+  });
+  it.each([0, 1, 5, 9, 10, 27])('renders only the Plan badge for count %s with the full accessible count', (count) => {
+    const { onSelect } = setup({ recoveryCount: count });
+    const badge = screen.queryByTestId('orbits-plan-recovery-badge', { includeHiddenElements: true });
+    expect(screen.getByTestId('orbits-plan').props.accessibilityLabel).toBe(count ? `План, ${count} задач, к которым можно вернуться` : 'План');
+    if (count) {
+      expect(badge).toBeTruthy();
+      expect(badge!.props.pointerEvents).toBe('none');
+      expect(badge!.props.accessible).toBe(false);
+      expect(StyleSheet.flatten(badge!.props.style).position).toBe('absolute');
+      expect(screen.getByText(count > 9 ? '9+' : String(count), { includeHiddenElements: true })).toBeTruthy();
+      fireEvent.press(badge!);
+    } else expect(badge).toBeNull();
+    if (!count) fireEvent.press(screen.getByTestId('orbits-plan'));
+    expect(onSelect.mock.calls).toEqual([['plan']]);
+    for (const [key, label] of [['today', 'Сегодня'], ['progress', 'Успех'], ['profile', 'Профиль']]) {
+      expect(screen.getByTestId(`orbits-${key}`).props.accessibilityLabel).toBe(label);
+      expect(screen.queryByTestId(`orbits-${key}-recovery-badge`, { includeHiddenElements: true })).toBeNull();
+    }
+  });
+
+  it('updates the Recovery accent with the theme and removes a zero badge without changing targets or artwork', () => {
+    const onSelect = jest.fn();
+    const onAdd = jest.fn();
+    const tree = (theme: 'warm' | 'dark', count: number) => <OrbitsThemeProvider theme={theme}><OrbitsNavigation activeDestination="plan" onSelect={onSelect} onAdd={onAdd} recoveryCount={count} /></OrbitsThemeProvider>;
+    const { rerender } = render(tree('warm', 3));
+    const targetStyle = StyleSheet.flatten(screen.getByTestId('orbits-plan').props.style);
+    const artworkStyle = StyleSheet.flatten(screen.getByTestId('orbits-plan-artwork').props.style);
+    for (const theme of ['warm', 'dark'] as const) {
+      rerender(tree(theme, 3));
+      expect(StyleSheet.flatten(screen.getByTestId('orbits-plan-recovery-badge', { includeHiddenElements: true }).props.style)).toMatchObject({ backgroundColor: ORBITS_THEMES[theme].rewardSoft, borderColor: ORBITS_THEMES[theme].rewardPrimary });
+      expect(StyleSheet.flatten(screen.getByText('3', { includeHiddenElements: true }).props.style).color).toBe(ORBITS_THEMES[theme].rewardPrimary);
+      expect(contrastRatio(ORBITS_THEMES[theme].rewardPrimary, ORBITS_THEMES[theme].rewardSoft)).toBeGreaterThanOrEqual(4.5);
+      const { backgroundColor, borderColor, ...geometry } = StyleSheet.flatten(screen.getByTestId('orbits-plan').props.style);
+      const { backgroundColor: initialBackground, borderColor: initialBorder, ...initialGeometry } = targetStyle;
+      expect(geometry).toEqual(initialGeometry);
+      expect(StyleSheet.flatten(screen.getByTestId('orbits-plan-artwork').props.style)).toEqual(artworkStyle);
+    }
+    rerender(tree('dark', 0));
+    expect(screen.queryByTestId('orbits-plan-recovery-badge', { includeHiddenElements: true })).toBeNull();
+    expect(screen.getByTestId('orbits-plan').props.accessibilityLabel).toBe('План');
+  });
+
   it('renders the permanent visible order and approved artwork', () => {
     setup();
     const tree = screen.getByTestId('orbits-navigation');
@@ -66,6 +113,32 @@ describe('OrbitsNavigation', () => {
       expect(StyleSheet.flatten(screen.getByTestId(`orbits-${key}`).props.style).minWidth).toBe(44);
     }
     expect(StyleSheet.flatten(screen.getByTestId('orbits-add-artwork').props.style)).toMatchObject({ width: 64, height: 64 });
+  });
+
+  it('keeps every destination label whole and lets the bar grow for large text and safe area', () => {
+    render(<OrbitsNavigation activeDestination="today" onSelect={jest.fn()} onAdd={jest.fn()} bottomInset={28} />);
+    for (const label of ['Сегодня', 'План', 'Добавить', 'Успех', 'Профиль']) {
+      expect(screen.getByText(label).props).toMatchObject({
+        numberOfLines: 1,
+        maxFontSizeMultiplier: 1.6,
+        android_hyphenationFrequency: 'none',
+      });
+    }
+    expect(StyleSheet.flatten(screen.getByTestId('orbits-navigation').props.style).paddingBottom).toBe(34);
+    expect(StyleSheet.flatten(screen.getByTestId('orbits-navigation').props.style).height).toBeUndefined();
+  });
+
+  it('keeps every destination label whole and lets the bar grow for large text and safe area', () => {
+    render(<OrbitsNavigation activeDestination="today" onSelect={jest.fn()} onAdd={jest.fn()} bottomInset={28} />);
+    for (const label of ['Сегодня', 'План', 'Добавить', 'Успех', 'Профиль']) {
+      expect(screen.getByText(label).props).toMatchObject({
+        numberOfLines: 1,
+        maxFontSizeMultiplier: 1.6,
+        android_hyphenationFrequency: 'none',
+      });
+    }
+    expect(StyleSheet.flatten(screen.getByTestId('orbits-navigation').props.style).paddingBottom).toBe(34);
+    expect(StyleSheet.flatten(screen.getByTestId('orbits-navigation').props.style).height).toBeUndefined();
   });
 
   it('keeps meaning stable across theme rerenders', () => {

@@ -8,13 +8,31 @@ describe('TasksController start command', () => {
     const tasks = { start: jest.fn().mockResolvedValue(returned) } as any;
     const controller = new TasksController(tasks, {} as any);
     await expect(controller.start({ id: 'owner' } as any, 'task')).resolves.toBe(returned);
-    expect(tasks.start).toHaveBeenCalledWith('owner', 'task');
+    expect(tasks.start).toHaveBeenCalledWith('owner', 'task', false, false);
     expect(Reflect.getMetadata(PATH_METADATA, controller.start)).toBe(':id/start');
     expect(Reflect.getMetadata(METHOD_METADATA, controller.start)).toBe(RequestMethod.PATCH);
     expect(Reflect.getMetadata(HTTP_CODE_METADATA, controller.start)).toBe(HttpStatus.OK);
     const pipes = Reflect.getMetadata('__routeArguments__', TasksController, 'start');
     const idArgument = Object.values(pipes).find((argument: any) => argument.data === 'id') as any;
     expect(idArgument.pipes[0]).toBe(ParseUUIDPipe);
+  });
+
+  it('delegates explicit switch confirmation', async () => {
+    const tasks = { start: jest.fn().mockResolvedValue({ id: 'target' }) } as any;
+    const controller = new TasksController(tasks, {} as any);
+    await controller.start({ id: 'owner' } as any, 'target', { confirmSwitch: true });
+    expect(tasks.start).toHaveBeenCalledWith('owner', 'target', true, false);
+  });
+
+  it('delegates independent early-start and switch confirmations', async () => {
+    const tasks = { start: jest.fn().mockResolvedValue({ id: 'target' }) } as any;
+    const controller = new TasksController(tasks, {} as any);
+    await controller.start(
+      { id: 'owner' } as any,
+      'target',
+      { confirmSwitch: true, confirmEarlyStart: true },
+    );
+    expect(tasks.start).toHaveBeenCalledWith('owner', 'target', true, true);
   });
 
   it('propagates the service conflict as HTTP 409', async () => {

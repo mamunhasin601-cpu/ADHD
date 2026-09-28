@@ -6,9 +6,12 @@ import { useOverdueTasks, useRescheduleOverdueTasks, useUndoRecovery } from '../
 import { useAuthStore } from '../stores/auth.store';
 import { isValidIANATimezone, toCanonicalDateParam } from '../lib/timezone';
 import { useOrbitsTheme } from '../theme/orbits';
+import { useRecoveryUndoHistory } from '../lib/recovery-undo-history';
+
+export const TODAY_UNDO_NOTICE_MS = 10_000;
 
 interface Props {
-  /** The calendar date currently shown on Today. */
+  /** Current date for the shared recovery cache and mutation invalidation. */
   selectedDate: Date;
   /**
    * Raw profile IANA timezone. May be undefined/null before the profile loads
@@ -18,6 +21,8 @@ interface Props {
   profileTimezone: string | null | undefined;
   /** Optional callback so Today can react to timezone validity. */
   onTimezoneInvalid?: () => void;
+  /** Removes section chrome when the coordinator is embedded in another layout. */
+  presentationMode?: 'section' | 'embedded';
 }
 
 /**
@@ -37,6 +42,7 @@ export function RecoverySection({
   selectedDate,
   profileTimezone,
   onTimezoneInvalid,
+  presentationMode = 'section',
 }: Props) {
   const theme = useOrbitsTheme();
 
@@ -63,7 +69,7 @@ export function RecoverySection({
   );
 
   // Recovery query is disabled unless the timezone is valid AND we are on today.
-  const { data: recoveryData, isLoading: isRecoveryLoading } = useOverdueTasks(
+  const { data: recoveryData, isLoading: isRecoveryLoading, isError: isRecoveryError, refetch, isRefetching } = useOverdueTasks(
     selectedDate,
     timezoneValid && isToday,
     timezoneValid ? tz : undefined,
@@ -74,6 +80,8 @@ export function RecoverySection({
     timezoneValid ? tz : undefined,
   );
   const undo = useUndoRecovery(selectedDate, timezoneValid ? tz : undefined);
+  const recordUndo = useRecoveryUndoHistory((state) => state.record);
+  const removeUndo = useRecoveryUndoHistory((state) => state.remove);
   const owner = useAuthStore((state) => state.user?.id);
   const sessionGeneration = useAuthStore((state) => state.sessionGeneration);
   const mounted = useRef(true);
@@ -93,7 +101,7 @@ export function RecoverySection({
   // state so a task removed by query invalidation cannot be resubmitted.
   const [bannerResetKey, setBannerResetKey] = useState(0);
   const [undoNotice, setUndoNotice] = useState<{
-    id: string; expiresAt: number; status: 'ready' | 'success' | 'expired' | 'stale' | 'error'; partial: boolean;
+    id: string; hideAt: number; status: 'ready' | 'success' | 'expired' | 'stale' | 'error'; partial: boolean;
   } | null>(null);
   const authIdentity = useRef({ owner, sessionGeneration });
   useEffect(() => {
@@ -110,10 +118,10 @@ export function RecoverySection({
   }, [owner, sessionGeneration]);
   useEffect(() => {
     if (!undoNotice || undoNotice.status !== 'ready') return;
-    const delay = Math.max(0, undoNotice.expiresAt - Date.now());
-    const timer = setTimeout(() => setUndoNotice((value) => value?.id === undoNotice.id ? { ...value, status: 'expired' } : value), delay);
+    const delay = Math.max(0, undoNotice.hideAt - Date.now());
+    const timer = setTimeout(() => setUndoNotice((value) => value?.id === undoNotice.id ? null : value), delay);
     return () => clearTimeout(timer);
-  }, [undoNotice?.id, undoNotice?.status, undoNotice?.expiresAt]);
+  }, [undoNotice?.id, undoNotice?.hideAt]);
 
   const handleConfirm = useCallback(
     (selections: RecoveryItemSelection[]) => {
@@ -141,7 +149,18 @@ export function RecoverySection({
             setBannerResetKey((k) => k + 1);
             setPartialVisible(data.reminderSyncStatus === 'partial');
             if (data.undoId && data.undoExpiresAt) {
-              setUndoNotice({ id: data.undoId, expiresAt: new Date(data.undoExpiresAt).getTime(), status: 'ready', partial: data.reminderSyncStatus === 'partial' });
+              const createdAt = Date.now();
+              const expiresAt = new Date(data.undoExpiresAt).getTime();
+              setUndoNotice({ id: data.undoId, hideAt: createdAt + TODAY_UNDO_NOTICE_MS, status: 'ready', partial: data.reminderSyncStatus === 'partial' });
+              if (operationOwner) {
+                recordUndo({
+                  id: data.undoId,
+                  userId: operationOwner,
+                  taskCount: selections.length,
+                  createdAt,
+                  expiresAt,
+                });
+              }
             }
           },
           onError: (err: unknown) => {
@@ -160,7 +179,7 @@ export function RecoverySection({
         },
       );
     },
-    [reschedule, recoveryData, owner, sessionGeneration],
+    [reschedule, recoveryData, owner, sessionGeneration, recordUndo],
   );
 
   const handleUndo = useCallback(() => {
@@ -177,6 +196,7 @@ export function RecoverySection({
       onSuccess: (data) => {
         undoSubmissionPending.current = false;
         if (!owns()) return;
+        if (operationOwner) removeUndo(operationOwner, id);
         setUndoNotice((value) => value?.id === id ? { ...value, status: 'success', partial: data.reminderSyncStatus === 'partial' } : value);
         setPartialVisible(data.reminderSyncStatus === 'partial');
       },
@@ -185,13 +205,15 @@ export function RecoverySection({
         if (!owns()) return;
         const code = (error as { response?: { data?: { code?: string } } }).response?.data?.code;
         const status = code === 'RECOVERY_UNDO_EXPIRED' ? 'expired' : code === 'RECOVERY_UNDO_STALE' ? 'stale' : 'error';
+        if (operationOwner && (status === 'expired' || status === 'stale')) removeUndo(operationOwner, id);
         setUndoNotice((value) => value?.id === id ? { ...value, status } : value);
       },
     });
-  }, [undo, undoNotice, owner, sessionGeneration]);
+  }, [undo, undoNotice, owner, sessionGeneration, removeUndo]);
 
   const overdueTasks = recoveryData?.tasks ?? [];
   const hasOverdueTasks = isToday && overdueTasks.length > 0;
+  const isEmbedded = presentationMode === 'embedded';
 
   // ── Today-only guard: MUST come before the timezone state ─────────────────
   // Recovery is a Today-only affordance. Historical and future dates render
@@ -208,7 +230,7 @@ export function RecoverySection({
       <View testID="recovery-timezone-unavailable" style={[styles.tzState, { backgroundColor: theme.surfacePrimary, borderColor: theme.borderSubtle }]}>
         <Text style={[styles.tzTitle, { color: theme.textPrimary }]}>Часовой пояс не определён</Text>
         <Text style={[styles.tzBody, { color: theme.textSecondary }]}>
-          Незавершённые задачи не показаны, потому что не удалось определить ваш
+          Задачи прошлых дней не показаны, потому что не удалось определить ваш
           часовой пояс. Проверьте его в настройках профиля.
         </Text>
         {onTimezoneInvalid && (
@@ -227,8 +249,38 @@ export function RecoverySection({
     );
   }
 
+  if (
+    isEmbedded &&
+    !isRecoveryLoading &&
+    !isRecoveryError &&
+    recoveryData &&
+    !hasOverdueTasks &&
+    !partialVisible &&
+    !undoNotice
+  ) {
+    return null;
+  }
+
   return (
-    <>
+    <View testID="recovery-section" style={isEmbedded ? undefined : styles.section}>
+      {!isEmbedded && (
+        <Text testID="recovery-section-title" accessibilityRole="header" style={[styles.sectionTitle, { color: theme.textPrimary }]}>
+          {hasOverdueTasks ? `Продолжить · ${overdueTasks.length}` : 'Продолжить'}
+        </Text>
+      )}
+      {isRecoveryLoading && <Text style={[styles.sectionCopy, { color: theme.textSecondary }]}>Загружаем задачи…</Text>}
+      {isRecoveryError && (
+        <View style={styles.sectionCopy}>
+          <Text style={{ color: theme.textSecondary }}>Не удалось загрузить задачи.</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Повторить загрузку задач прошлых дней" disabled={isRefetching}
+            onPress={() => void refetch()} style={[styles.tzAction, { backgroundColor: theme.activeSurface, borderColor: theme.activeBorder }]}>
+            <Text style={[styles.tzActionText, { color: theme.activeSurfaceText }]}>Повторить</Text>
+          </Pressable>
+        </View>
+      )}
+      {!isEmbedded && !isRecoveryLoading && !isRecoveryError && recoveryData && !hasOverdueTasks && (
+        <Text testID="recovery-section-empty" style={[styles.sectionCopy, { color: theme.textSecondary }]}>Здесь пока ничего нет</Text>
+      )}
       {/* Today-level notice — survives RecoveryBanner unmount */}
       {partialVisible && (
         <PartialReminderNotice onDismiss={() => setPartialVisible(false)} />
@@ -237,7 +289,7 @@ export function RecoverySection({
       {undoNotice && (
         <View testID="recovery-undo-confirmation" style={[styles.undoNotice, { backgroundColor: theme.completionSoft, borderColor: theme.completionPrimary }]} accessible accessibilityRole="alert" accessibilityLiveRegion="polite">
           <Text style={[styles.undoText, { color: theme.textPrimary }]}>
-            {undoNotice.status === 'ready' && 'Задачи перенесены. Можно спокойно отменить изменение.'}
+            {undoNotice.status === 'ready' && 'Задача перенесена. Отменить изменение можно в «Плане».'}
             {undoNotice.status === 'success' && 'Перенос отменён. Задачи возвращены на прежнее место.'}
             {undoNotice.status === 'expired' && 'Время отмены закончилось. Текущие задачи не изменены.'}
             {undoNotice.status === 'stale' && 'Задача уже изменилась, поэтому отмена не применена.'}
@@ -263,11 +315,14 @@ export function RecoverySection({
           mutationError={mutationError}
         />
       )}
-    </>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  section: { marginTop: 18 },
+  sectionTitle: { marginHorizontal: 20, fontSize: 20, lineHeight: 26, fontWeight: '700' },
+  sectionCopy: { marginHorizontal: 20, marginTop: 6, fontSize: 15, lineHeight: 22 },
   tzState: {
     marginHorizontal: 20,
     marginVertical: 8,

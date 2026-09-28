@@ -1,5 +1,6 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { TodayHeader } from './TodayHeader';
 
 const baseProps = {
@@ -15,6 +16,7 @@ const baseProps = {
   onPreviousWeek: jest.fn(),
   onNextWeek: jest.fn(),
   onSelectDate: jest.fn(),
+  onOpenDatePicker: jest.fn(),
 };
 
 describe('TodayHeader progress state', () => {
@@ -50,5 +52,19 @@ describe('TodayHeader progress state', () => {
     expect(screen.queryByLabelText('Следующий день')).toBeNull();
     expect(screen.queryByText('Сегодня')).toBeNull();
     expect(screen.queryByText('Ваш день')).toBeNull();
+  });
+
+  it('places an accessible date-picker action beside progress', () => {
+    const onOpenDatePicker = jest.fn();
+    render(<TodayHeader {...baseProps} progressKnown onOpenDatePicker={onOpenDatePicker} />);
+
+    fireEvent.press(screen.getByLabelText('Выбрать дату'));
+    expect(onOpenDatePicker).toHaveBeenCalledTimes(1);
+  });
+
+  it('has content-driven height so a large wrapped date moves the timeline below it', () => {
+    render(<TodayHeader {...baseProps} progressKnown dateLabel="среда, 30 сентября — выбранная будущая дата" />);
+    expect(StyleSheet.flatten(screen.getByTestId('today-header').props.style).height).toBeUndefined();
+    expect(screen.getByTestId('today-date-label').props.numberOfLines).toBeUndefined();
   });
 });

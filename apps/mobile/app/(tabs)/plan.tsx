@@ -4,6 +4,9 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { useInboxTasks } from '../../lib/api/tasks';
 import { useOrbitsTheme } from '../../theme/orbits';
+import { PlanUndoHistory } from '../../components/PlanUndoHistory';
+import { RecoverySection } from '../../components/RecoverySection';
+import { useAuthStore } from '../../stores/auth.store';
 
 function thoughtCountLabel(count: number): string {
   const remainder100 = count % 100;
@@ -17,6 +20,7 @@ function thoughtCountLabel(count: number): string {
 export default function PlanScreen() {
   const theme = useOrbitsTheme();
   const router = useRouter();
+  const profileTimezone = useAuthStore((s) => s.user?.timezone);
   const { data: thoughts = [], isLoading, isError, refetch } = useInboxTasks();
 
   const status = isLoading
@@ -30,7 +34,7 @@ export default function PlanScreen() {
   return (
     <SafeAreaView testID="plan-preview-screen" style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar style={theme.name === 'dark' ? 'light' : 'dark'} />
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView testID="plan-content-scroll" contentContainerStyle={styles.content}>
         <Text style={[styles.eyebrow, { color: theme.activeBorder }]}>Орбита дня</Text>
         <Text style={[styles.title, { color: theme.textPrimary }]}>План</Text>
         <Text style={[styles.copy, { color: theme.textSecondary }]}>
@@ -86,11 +90,19 @@ export default function PlanScreen() {
         ) : null}
 
         <View style={[styles.preview, { backgroundColor: theme.surfacePrimary, borderColor: theme.borderSubtle }]}>
-          <Text style={[styles.previewTitle, { color: theme.textPrimary }]}>Ближайшее, рутины и AI-план</Text>
+          <Text style={[styles.previewTitle, { color: theme.textPrimary }]}>Подсказки AI</Text>
           <Text style={[styles.previewCopy, { color: theme.textSecondary }]}>
             Эти разделы пока не показывают выдуманные данные. Добавим их отдельными проверяемыми этапами.
           </Text>
         </View>
+
+        <RecoverySection
+          selectedDate={new Date()}
+          profileTimezone={profileTimezone}
+          onTimezoneInvalid={() => router.push('/settings')}
+          presentationMode="embedded"
+        />
+        <PlanUndoHistory />
       </ScrollView>
     </SafeAreaView>
   );
