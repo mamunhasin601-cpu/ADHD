@@ -6,7 +6,7 @@ jest.mock('../lib/api/tasks', () => ({
 }));
 jest.mock('../lib/api-client', () => ({ apiClient: { patch: jest.fn() } }));
 jest.mock('../stores/auth.store', () => ({ useAuthStore: jest.fn() }));
-jest.mock('expo-status-bar', () => ({ StatusBar: () => null }));
+jest.mock('expo-status-bar', () => { const React = require('react'); const { View } = require('react-native'); return { StatusBar: (props: any) => React.createElement(View, { testID: 'onboarding-status-bar', ...props }) }; });
 jest.mock('react-native-safe-area-context', () => {
   const { View } = require('react-native');
   return { SafeAreaView: ({ children, ...props }: any) => <View {...props}>{children}</View> };
@@ -18,6 +18,8 @@ import OnboardingScreen from '../app/onboarding';
 import { apiClient } from '../lib/api-client';
 import { useCreateTask } from '../lib/api/tasks';
 import { useAuthStore } from '../stores/auth.store';
+import { StyleSheet } from 'react-native';
+import { ORBITS_THEMES, OrbitsThemeProvider } from '../theme/orbits';
 
 const canonicalTask = {
   id: 'task-1', title: 'Позвонить маме', startTime: '2026-08-15T23:30:00.000Z',
@@ -219,5 +221,16 @@ describe('OnboardingScreen', () => {
     expect(mockMutateAsync.mock.calls[0][0].startTime).toBe('2026-08-15T12:30:00.000Z');
     expect(useCreateTask).toHaveBeenCalledWith(expect.any(Date), 'Pacific/Auckland');
     jest.useRealTimers();
+  });
+
+  it.each(['warm', 'dark'] as const)('uses %s tokens in welcome, input, error-capable canvas, and StatusBar', (name) => {
+    const view = render(<OrbitsThemeProvider theme={name}><OnboardingScreen /></OrbitsThemeProvider>);
+    const theme = ORBITS_THEMES[name];
+    expect(StyleSheet.flatten(view.getByTestId('onboarding-screen').props.style).backgroundColor).toBe(theme.background);
+    expect(view.getByTestId('onboarding-status-bar').props.style).toBe(name === 'dark' ? 'light' : 'dark');
+    fireEvent.press(view.getByText('Продолжить'));
+    const input = view.getByLabelText('Название первой задачи');
+    expect(StyleSheet.flatten(input.props.style)).toMatchObject({ backgroundColor: theme.surfacePrimary, borderColor: theme.borderSubtle, color: theme.textPrimary });
+    expect(input.props.placeholderTextColor).toBe(theme.textSecondary);
   });
 });

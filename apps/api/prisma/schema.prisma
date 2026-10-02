@@ -46,6 +46,7 @@ model User {
   phone                   String?  @unique
   passwordHash            String
   timezone                String   @default("Europe/Moscow")
+  timezoneSyncedAt        DateTime?
   timeFormat              TimeFormat @default(SYSTEM)
   hasCompletedOnboarding  Boolean  @default(false)
   plan   Plan     @default(FREE)
@@ -140,6 +141,7 @@ model Task {
   recurrenceDateKey String?
   recurrenceGeneratedThrough String?
   recurrenceEndedAt DateTime?
+  recurrenceRootId  String?   // stable logical family id shared by every split and occurrence
   seriesId        String?
   series          Task?     @relation("TaskOccurrences", fields: [seriesId], references: [id], onDelete: Cascade)
   occurrences     Task[]    @relation("TaskOccurrences")
@@ -158,6 +160,7 @@ model Task {
   @@index([userId])
   @@index([userId, startTime])
   @@index([seriesId])
+  @@index([userId, recurrenceRootId])
   @@unique([seriesId, recurrenceDateKey])
   @@map("tasks")
 }

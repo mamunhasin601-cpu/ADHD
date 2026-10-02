@@ -122,3 +122,126 @@ Task 0039 идёт через Phase A (spec), Phase B (Today-first implementatio
 - Kept the evidence boundary explicit: no physical-device, TalkBack, VoiceOver,
   large-text, reduced-motion, haptic or physical timeline touch-target approval
   is claimed; no post-fix empty-state emulator screenshot was obtained.
+
+## 2026-09-26 — Task 0039 Phase B code closure
+
+- Recorded the installed five-destination Orbits navigation and Recovery's Plan
+  placement/badge ownership.
+- Replaced the historical warm/gray/dark user model with warm/dark; legacy gray
+  safely falls back to warm and logout does not reset the device-local choice.
+- Extended Orbits tokens to pre-auth/provider/onboarding/paywall, index/loading
+  canvases, the hidden Focus placeholder and notification permission banner.
+- Documented Quick Capture's preserve-on-implicit-dismiss and
+  clear-on-Cancel/success/session-boundary policy.
+- Unified product-facing BUFFER with REST as `Отдых` while retaining stored/API
+  compatibility and deferring destructive migration.
+- Marked Phase B code and automated regression scope complete while keeping
+  Realme, system navigation bar, TalkBack/VoiceOver and large-text acceptance
+  explicitly open.
+
+## 2026-09-27 — Task 0039 physical acceptance defect repair
+
+- Propagated the Today-selected date through global Add while keeping Thoughts
+  deliberately undated.
+- Added explicit occurrence, future-branch and whole-series recurrence edit
+  scopes with local-date/DST-safe projection replacement and protected history.
+- Adopted one elastic timeline transform for cards, ticks, Now, gaps and scroll;
+  added readable Rest metadata and non-breaking H12 labels.
+- Made the five-item navigation, Today header, forms and login responsive to
+  large text, safe areas and the keyboard; added warm/dark Android system-bar
+  control on the existing Expo SDK.
+- Kept physical Realme acceptance open and recorded push as blocked by missing
+  real Expo/EAS project identity/credentials. No placeholder infrastructure was
+  introduced.
+
+## 2026-09-27 — Task 0039 second physical corrective package
+
+- Added `recurrenceRootId` and a forward backfill migration so whole-series
+  update/delete spans multiple technical splits while legacy rows degrade safely.
+- Added geometry-based gutter collision priority and explicit started-task
+  elapsed/overtime presentation with minute refresh and TalkBack labels.
+- Made elastic focus height state-specific and added content-scaled cards plus
+  the five-day/local-nav-cap fallback for combined extreme accessibility scale.
+- Preserved prior accepted behaviors and kept the six-theme Realme retest and
+  real Expo/EAS push identity/credentials as external evidence blockers.
+
+## 2026-09-27 — Task 0039 final physical corrective package
+
+- Recorded the latest Realme passes without rewriting earlier checkpoints and
+  kept final acceptance pending a short post-fix device smoke.
+- Kept scheduled time/duration visible after explicit Start, moved the current
+  time into one stable internal elapsed line, and confined the external Now
+  beacon and its orbit to non-conflicting measured gutter bounds.
+- Confirmed by read-only inspection that extreme elapsed totals are valid old
+  explicit starts; preserved those records and compacted display into
+  minute/hour/day units with separate total and overrun semantics.
+- Replaced the vertical progress wash with an area-linear diagonal wash and one
+  finite settling wave, including Reduce Motion, background/off-screen and
+  TalkBack behavior, without adding a production dependency.
+
+## 2026-09-28 — Task 0039 Realme clock and active-task correction
+
+- Recorded the Realme video defect where system time advanced one minute ahead
+  of the Timeline's internal current-time row and task-state transition.
+- Adopted one Today-owned wall clock aligned to real minute boundaries, with
+  immediate foreground, focus, timezone, and late-wake resynchronization.
+- Adopted a server-authoritative one-active-task rule with typed conflict,
+  explicit Stay/Switch dialog, atomic confirmed switch, and legacy multiple-start
+  cleanup without automatic completion or recurrence mutation.
+- Preserved the earlier TalkBack Realme pass and kept Task 0039 physical smoke
+  pending for the focused clock-boundary and task-switching retest.
+
+## 2026-09-28 — Future completion and early-start correction
+
+- Recorded the source separation between Start/Switch and the optimistic
+  completion toggle; strengthened switch reconciliation so the exact prior
+  active task remains incomplete without reopening legitimate completed history.
+- Added future-completion confirmation with no pre-confirmation or pending
+  optimistic paint, canonical success reconciliation, retryable failure, and
+  no-op Cancel/Back/backdrop behavior.
+- Added profile-timezone-aware early-Start confirmation plus the typed server
+  protocol and ordered composition with the existing active-task conflict.
+- Preserved prior Realme passes, avoided the separate competitive-model package,
+  and kept Task 0039 `physical smoke pending`.
+
+## 2026-09-28 — Task 0039 physical acceptance close-out
+
+- Recorded completion of production code and automation and the passing Realme
+  theme, Quick Capture, Timeline, lifecycle, recurrence, system-bar, large-text,
+  Reduce Motion, and TalkBack acceptance matrix.
+- Accepted Task 0039 within Visual Identity Phase B and the subsequent Timeline
+  corrective packages without rewriting the earlier dated checkpoints.
+- Kept push-delivery smoke explicitly blocked by the missing working EAS
+  `projectId`, credentials, and device push token; no push pass is claimed.
+- Recorded `Сейчас по плану / конкурентная модель` as a new product iteration
+  outside Task 0039; its later delivery is tracked independently in Task 0041.
+
+## 2026-09-30 — Task 0041 planned-now state
+
+- Added derived `Сейчас по плану` and neutral `Не начато` presentation without a
+  persisted status, schema change, migration, automatic Start, or completion.
+- Kept `Выполняется`, elapsed/fill/wave, single-active, Stay/Switch, early Start,
+  future completion, and Recovery tied to the existing explicit lifecycle.
+- Unified NowCard and Timeline on one wall-clock state model and added one
+  accessible `Задачи пересекаются` cue per legacy overlap group without
+  weakening conflict validation.
+- Changed scheduled-start notification copy to the honest invitation
+  `По плану сейчас: «Название задачи»`; delivery revalidates canonical task
+  state and routes to the correct profile day/card while Redis stays title-free.
+- Kept Task 0039 Accepted and retained live push as an external evidence gate.
+
+## 2026-10-02 — Task 0041 physical acceptance close-out
+
+- Marked Task 0041 **Accepted from 2026-10-02** after the Realme smoke confirmed
+  the planned/current/missed transitions, explicit-only running state, and the
+  absence of inferred elapsed/fill/wave before Start.
+- Recorded minute-boundary and background/resume resynchronization, preservation
+  of the running task, readable maximum font/display scale, and TalkBack state
+  and Start-action semantics.
+- Recorded the physical Stay/Switch evidence: one running task, no false
+  completion, no second wave or duplicate CTA, and no completion-counter change.
+- Kept the legacy overlap label as automated-only evidence because no suitable
+  legacy pair was available for device smoke.
+- Kept real push delivery blocked on working EAS project identity, credentials,
+  and device token without making that external evidence gate a condition of
+  Task 0041 acceptance. Task 0039 remains Accepted from 2026-09-28.

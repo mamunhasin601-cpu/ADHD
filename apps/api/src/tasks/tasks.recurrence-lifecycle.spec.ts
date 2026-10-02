@@ -7,12 +7,14 @@ const base = (overrides: any = {}) => ({ id: 'task', userId: 'owner', title: 'Ta
 
 function harness(initial: any, occurrences: any[] = []) {
   let template = structuredClone(initial); let rows = structuredClone(occurrences);
+  const matchesSeries = (seriesId: string | null, condition: any) => !condition ||
+    (condition.in ? condition.in.includes(seriesId) : seriesId === condition);
   const task: any = {
     findUnique: jest.fn(({ where }: any) => Promise.resolve(where.id === template.id ? template : rows.find((x) => x.id === where.id))),
     count: jest.fn().mockResolvedValue(0),
     update: jest.fn(({ where, data }: any) => { if (where.id === template.id) template = { ...template, ...data }; return Promise.resolve(template); }),
     findMany: jest.fn(({ where, select }: any) => Promise.resolve(rows.filter((x) => {
-      if (where?.seriesId && x.seriesId !== where.seriesId) return false;
+      if (!matchesSeries(x.seriesId, where?.seriesId)) return false;
       if (where?.recurrenceDateKey?.gt && x.recurrenceDateKey <= where.recurrenceDateKey.gt) return false;
       if (where?.recurrenceDateKey?.gte && x.recurrenceDateKey < where.recurrenceDateKey.gte) return false;
       if (where?.startedAt === null && x.startedAt !== null) return false;
@@ -20,7 +22,7 @@ function harness(initial: any, occurrences: any[] = []) {
       if (where?.id?.in && !where.id.in.includes(x.id)) return false;
       return true;
     }).map((x) => select?.id ? { id: x.id } : x))),
-    deleteMany: jest.fn(({ where }: any) => { const before = rows.length; rows = rows.filter((x) => !(x.seriesId === where.seriesId &&
+    deleteMany: jest.fn(({ where }: any) => { const before = rows.length; rows = rows.filter((x) => !(matchesSeries(x.seriesId, where.seriesId) &&
       (!where.recurrenceDateKey?.gt || x.recurrenceDateKey > where.recurrenceDateKey.gt) &&
       (!where.recurrenceDateKey?.gte || x.recurrenceDateKey >= where.recurrenceDateKey.gte) && x.startedAt === null && x.completedAt === null));
       return Promise.resolve({ count: before - rows.length }); }),

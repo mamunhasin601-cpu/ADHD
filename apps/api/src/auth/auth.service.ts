@@ -67,6 +67,7 @@ export class AuthService {
             phone: contacts.find((contact) => contact.channel === ContactVerificationChannelDto.PHONE)?.destination ?? null,
             passwordHash,
             timezone: dto.timezone ?? 'Europe/Moscow',
+            timezoneSyncedAt: dto.timezone ? new Date() : null,
             emailVerifiedAt: consumed.EMAIL ? new Date() : null,
             phoneVerifiedAt: consumed.PHONE ? new Date() : null,
           },

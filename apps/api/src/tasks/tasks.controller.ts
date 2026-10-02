@@ -21,6 +21,7 @@ import { GetRecoveryQueryDto } from './dto/get-recovery-query.dto';
 import { RescheduleRecoveryDto } from './dto/reschedule-recovery.dto';
 import { ExtendRecurrenceDto } from './dto/extend-recurrence.dto';
 import { UndoRecoveryDto } from './dto/undo-recovery.dto';
+import { StartTaskDto } from './dto/start-task.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { User } from '@prisma/client';
@@ -117,8 +118,14 @@ export class TasksController {
   start(
     @CurrentUser() user: User,
     @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto?: StartTaskDto,
   ) {
-    return this.tasksService.start(user.id, id);
+    return this.tasksService.start(
+      user.id,
+      id,
+      dto?.confirmSwitch === true,
+      dto?.confirmEarlyStart === true,
+    );
   }
 
   /** PATCH /tasks/:id/toggle — быстрое переключение completed */

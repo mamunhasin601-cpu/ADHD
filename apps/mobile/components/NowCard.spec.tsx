@@ -1,10 +1,12 @@
-const mockUser = { timeFormat: "H24" as "H24" | "H12" };
+const mockUser = { timeFormat: "H24" as "H24" | "H12", timezone: "UTC" };
 jest.mock("../stores/auth.store", () => ({
   useAuthStore: (selector: any) => selector({ user: mockUser }),
 }));
 import React from "react";
+import { StyleSheet } from "react-native";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import type { Task } from "@focus/shared-types";
+import { ORBITS_THEMES, OrbitsThemeProvider } from "../theme/orbits";
 import { NowCard } from "./NowCard";
 
 const task: Task = {
@@ -20,17 +22,42 @@ describe("NowCard regressions", () => {
 
   it("shows known and honest unknown duration without fabricating zero", () => {
     const { rerender } = render(<NowCard task={task} mode="current" {...props} />);
-    expect(screen.getByText(/около 30 мин/)).toBeTruthy();
+    expect(screen.getByText(/30 мин/)).toBeTruthy();
     rerender(<NowCard task={{ ...task, durationMinutes: null }} mode="current" {...props} />);
-    expect(screen.getByText(/Длительность: Не знаю/)).toBeTruthy();
+    expect(screen.getByText(/Не знаю/)).toBeTruthy();
     expect(screen.queryByText(/около 0 мин/)).toBeNull();
   });
 
-  it("keeps plan editing as a secondary action with the exact task", () => {
+  it("opens plan editing by tapping the card copy with the exact task", () => {
     render(<NowCard task={task} mode="current" {...props} />);
-    fireEvent.press(screen.getByText("Изменить план"));
+    fireEvent.press(screen.getByRole("button", { name: `Изменить задачу ${task.title}` }));
     expect(props.onOpenTask).toHaveBeenCalledTimes(1);
     expect(props.onOpenTask).toHaveBeenCalledWith(task);
+  });
+
+  it("opens timeline actions from a long press without adding a visible action", () => {
+    const onShowActions = jest.fn();
+    render(<NowCard task={task} mode="current" {...props} onShowActions={onShowActions} />);
+    const copy = screen.getByRole("button", { name: `Изменить задачу ${task.title}` });
+    fireEvent(copy, "longPress");
+    expect(onShowActions).toHaveBeenCalledWith(task);
+    expect(props.onOpenTask).not.toHaveBeenCalled();
+  });
+
+  it("keeps a neutral compact card with a color rail and one full-width action", () => {
+    render(<NowCard task={task} mode="upcoming" {...props} />);
+    const cardStyle = StyleSheet.flatten(screen.getByTestId("now-card").props.style);
+    expect(cardStyle).toEqual(
+      expect.objectContaining({ marginVertical: 8, padding: 12, borderWidth: 1 }),
+    );
+    expect(cardStyle.backgroundColor).not.toBe(task.color);
+    expect(StyleSheet.flatten(screen.getByTestId("now-card-accent-rail").props.style)).toEqual(
+      expect.objectContaining({ width: 5, backgroundColor: task.color }),
+    );
+    expect(StyleSheet.flatten(screen.getByTestId("now-card-actions").props.style)).toEqual(
+      expect.objectContaining({ marginTop: 10, gap: 8 }),
+    );
+    expect(screen.queryByText("Изменить план")).toBeNull();
   });
 
   it("formats H24/H12 without mutating or reinterpreting the supplied instant", () => {
@@ -48,7 +75,7 @@ describe("NowCard regressions", () => {
 describe("NowCard explicit start", () => {
   beforeEach(() => jest.clearAllMocks());
   it.each([
-    ["current", "Запланировано сейчас"], ["upcoming", "Ближайшее действие"],
+    ["current", "Сейчас по плану"], ["upcoming", "Запланировано"],
   ] as const)("offers one explicit start for an unstarted %s task", (mode, context) => {
     render(<NowCard task={task} mode={mode} {...props} />);
     expect(screen.getByText(context)).toBeTruthy();
@@ -71,16 +98,17 @@ describe("NowCard explicit start", () => {
 
   it("shows confirmed start and delegates completion", () => {
     render(<NowCard task={{ ...task, startedAt: new Date("2026-08-12T14:31:07Z") }} mode="current" {...props} />);
-    expect(screen.getByText("Начато")).toBeTruthy();
-    fireEvent.press(screen.getByText("Завершить"));
+    expect(screen.getByText("Выполняется")).toBeTruthy();
+    fireEvent.press(screen.getByTestId("now-card-completion"));
     expect(props.onComplete).toHaveBeenCalledTimes(1);
     expect(props.onComplete).toHaveBeenCalledWith(task.id);
   });
 
   it("completion pending disables completion and plan editing", () => {
     render(<NowCard task={{ ...task, startedAt: new Date() }} mode="current" {...props} isCompleting />);
-    expect(screen.getByText("Сохраняю…")).toBeDisabled();
-    expect(screen.getByText("Изменить план")).toBeDisabled();
+    expect(screen.getByTestId("now-card-completion")).toBeDisabled();
+    expect(screen.getByTestId("now-card-completion").props.accessibilityState.busy).toBe(true);
+    expect(screen.getByRole("button", { name: `Изменить задачу ${task.title}` })).toBeDisabled();
   });
 
   it("exposes a calm start error as an alert", () => {
@@ -91,6 +119,34 @@ describe("NowCard explicit start", () => {
 
 describe("NowCard difficult start", () => {
   beforeEach(() => jest.clearAllMocks());
+  it("themes the support panel from the active background and preserves its draft across a theme change", () => {
+    const view = render(
+      <OrbitsThemeProvider theme="warm">
+        <NowCard task={task} mode="current" {...props} />
+      </OrbitsThemeProvider>,
+    );
+    fireEvent.press(screen.getByText("Мне трудно начать"));
+    fireEvent.changeText(screen.getByLabelText("Первый маленький шаг"), "Открыть заметки");
+
+    expect(StyleSheet.flatten(screen.getByTestId("difficult-start-surface").props.style).backgroundColor).toBe(ORBITS_THEMES.warm.background);
+    expect(StyleSheet.flatten(screen.getByTestId("difficult-start-scrim").props.style).backgroundColor).toBe(ORBITS_THEMES.warm.elevationShadow);
+    expect(StyleSheet.flatten(screen.getByLabelText("Первый маленький шаг").props.style)).toEqual(expect.objectContaining({
+      backgroundColor: ORBITS_THEMES.warm.surfacePrimary,
+      borderColor: ORBITS_THEMES.warm.borderSubtle,
+      color: ORBITS_THEMES.warm.textPrimary,
+    }));
+
+    view.rerender(
+      <OrbitsThemeProvider theme="dark">
+        <NowCard task={task} mode="current" {...props} />
+      </OrbitsThemeProvider>,
+    );
+
+    expect(StyleSheet.flatten(screen.getByTestId("difficult-start-surface").props.style).backgroundColor).toBe(ORBITS_THEMES.dark.background);
+    expect(StyleSheet.flatten(screen.getByTestId("difficult-start-scrim").props.style).backgroundColor).toBe(ORBITS_THEMES.dark.elevationShadow);
+    expect(screen.getByDisplayValue("Открыть заметки")).toBeTruthy();
+  });
+
   it("opens without mutation and saves a user-authored step without starting", async () => {
     const onSaveFirstStep = jest.fn().mockResolvedValue({ ...task, firstStep: "Открыть документ" });
     render(<NowCard task={task} mode="current" {...props} onSaveFirstStep={onSaveFirstStep} />);
@@ -111,26 +167,39 @@ describe("NowCard difficult start", () => {
     const onStart = jest.fn(() => new Promise<void>((done) => { resolve = done; }));
     const startedTask = { ...task, firstStep: "Открыть документ" };
     const view = render(<NowCard task={startedTask} mode="current" {...props} onStart={onStart} />);
-    fireEvent.press(screen.getByText("Мне трудно начать"));
+    fireEvent(screen.getByTestId("now-card-first-step"), "longPress");
     const start = screen.getByText("Начать с этого шага");
     fireEvent.press(start); fireEvent.press(start);
     expect(onStart).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("Начинаю…")).toBeDisabled();
+    expect(screen.getByRole("button", { name: `Начать с маленького шага задачу ${task.title}` })).toBeDisabled();
     expect(screen.getByText("Открыть документ")).toBeTruthy();
     await act(async () => resolve());
     expect(screen.getByText("Начать с этого шага")).toBeTruthy();
     view.rerender(<NowCard task={{ ...startedTask, startedAt: new Date("2026-08-14T10:20:00Z") }} mode="current" {...props} onStart={onStart} />);
     await waitFor(() => expect(screen.queryByText("Начать с малого")).toBeNull());
-    expect(screen.getByText("Начато")).toBeTruthy();
+    expect(screen.getByText("Выполняется")).toBeTruthy();
     expect(screen.queryByText("Мне трудно начать")).toBeNull();
   });
 
   it("shows a persisted step and delegates its explicit start", async () => {
     render(<NowCard task={{ ...task, firstStep: "Открыть документ" }} mode="current" {...props} />);
-    fireEvent.press(screen.getByText("Мне трудно начать"));
+    fireEvent(screen.getByTestId("now-card-first-step"), "longPress");
     expect(screen.getByText("Открыть документ")).toBeTruthy();
     await act(async () => fireEvent.press(screen.getByText("Начать с этого шага")));
     expect(props.onStart).toHaveBeenCalledTimes(1);
+    expect(props.onStart).toHaveBeenCalledWith(task.id);
+  });
+
+  it("lets the user select the visible first step before starting from it", async () => {
+    render(<NowCard task={{ ...task, firstStep: "Открыть черновик" }} mode="current" {...props} />);
+    const step = screen.getByTestId("now-card-first-step");
+    expect(step.props.accessibilityState.checked).toBe(false);
+    expect(screen.getByText("Начать")).toBeTruthy();
+
+    fireEvent.press(step);
+
+    expect(screen.getByTestId("now-card-first-step").props.accessibilityState.checked).toBe(true);
+    await act(async () => fireEvent.press(screen.getByText("Начать с шага")));
     expect(props.onStart).toHaveBeenCalledWith(task.id);
   });
 
@@ -146,7 +215,7 @@ describe("NowCard difficult start", () => {
     expect(screen.getByText("Сохраняю…")).toBeDisabled();
     expect(screen.getByLabelText("Первый маленький шаг")).toBeDisabled();
     expect(screen.getByText("Начать")).toBeDisabled();
-    expect(screen.getByText("Изменить план")).toBeDisabled();
+    expect(screen.getByRole("button", { name: `Изменить задачу ${task.title}` })).toBeDisabled();
     expect(screen.getByRole("button", { name: `Помощь с началом задачи ${task.title}` })).toBeDisabled();
     expect(screen.getByLabelText("Закрыть помощь с началом")).not.toBeDisabled();
     await act(async () => resolve({ ...task, firstStep: "Канонический шаг" }));
@@ -159,7 +228,7 @@ describe("NowCard difficult start", () => {
       .mockRejectedValueOnce(new Error("offline"))
       .mockResolvedValueOnce({ ...task, firstStep: "Ответ сервера" });
     render(<NowCard task={{ ...task, firstStep: "Старый шаг" }} mode="current" {...props} onSaveFirstStep={onSaveFirstStep} />);
-    fireEvent.press(screen.getByText("Мне трудно начать"));
+    fireEvent(screen.getByTestId("now-card-first-step"), "longPress");
     fireEvent.press(screen.getByText("Изменить маленький шаг"));
     fireEvent.changeText(screen.getByLabelText("Первый маленький шаг"), "  Мой черновик  ");
     fireEvent.press(screen.getByText("Сохранить маленький шаг"));
@@ -178,7 +247,7 @@ describe("NowCard difficult start", () => {
     const taskA = { ...task, firstStep: "Шаг A" };
     const taskB = { ...task, id: "task-2", title: "Задача B", firstStep: "Шаг B" };
     const view = render(<NowCard task={taskA} mode="current" {...props} onSaveFirstStep={onSaveFirstStep} />);
-    fireEvent.press(screen.getByText("Мне трудно начать"));
+    fireEvent(screen.getByTestId("now-card-first-step"), "longPress");
     expect(screen.getByTestId("difficult-start-keyboard-view")).toBeTruthy();
     expect(screen.getByTestId("difficult-start-scroll-view").props.keyboardShouldPersistTaps).toBe("handled");
     fireEvent.press(screen.getByText("Изменить маленький шаг"));
@@ -188,11 +257,11 @@ describe("NowCard difficult start", () => {
     view.rerender(<NowCard task={taskB} mode="current" {...props} onSaveFirstStep={onSaveFirstStep} />);
     await waitFor(() => expect(screen.queryByText("Начать с малого")).toBeNull());
     expect(screen.queryByText("Ошибка A")).toBeNull();
-    fireEvent.press(screen.getByText("Мне трудно начать"));
+    fireEvent(screen.getByTestId("now-card-first-step"), "longPress");
     expect(screen.getByText("Шаг B")).toBeTruthy();
     view.rerender(<NowCard task={taskA} mode="current" {...props} onSaveFirstStep={onSaveFirstStep} />);
     await waitFor(() => expect(screen.queryByText("Начать с малого")).toBeNull());
-    fireEvent.press(screen.getByText("Мне трудно начать"));
+    fireEvent(screen.getByTestId("now-card-first-step"), "longPress");
     expect(screen.getByText("Шаг A")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
   });
@@ -210,7 +279,7 @@ describe("NowCard difficult start", () => {
   it("closes an open support surface on canonical completion", async () => {
     const completedTask = { ...task, firstStep: "Открыть документ" };
     const view = render(<NowCard task={completedTask} mode="current" {...props} />);
-    fireEvent.press(screen.getByText("Мне трудно начать"));
+    fireEvent(screen.getByTestId("now-card-first-step"), "longPress");
     expect(screen.getByText("Начать с малого")).toBeTruthy();
     view.rerender(<NowCard task={{ ...completedTask, completedAt: new Date() }} mode="current" {...props} />);
     await waitFor(() => expect(screen.queryByText("Начать с малого")).toBeNull());
@@ -229,12 +298,12 @@ describe("NowCard difficult start", () => {
 
     view.rerender(<NowCard task={{ ...task, startedAt: new Date("2026-08-14T12:00:00Z") }} mode="current" {...props} onSaveFirstStep={onSaveFirstStep} />);
     await waitFor(() => expect(screen.queryByText("Начать с малого")).toBeNull());
-    expect(screen.getByText("Начато")).toBeTruthy();
-    expect(screen.getByText("Завершить")).not.toBeDisabled();
+    expect(screen.getByText("Выполняется")).toBeTruthy();
+    expect(screen.getByTestId("now-card-completion")).not.toBeDisabled();
 
     await act(async () => resolveSave({ ...task, firstStep: "Устаревший ответ" }));
     expect(screen.queryByText("Устаревший ответ")).toBeNull();
-    expect(screen.getByText("Завершить")).not.toBeDisabled();
+    expect(screen.getByTestId("now-card-completion")).not.toBeDisabled();
   });
 
   it("clears invalidated save pending on canonical completion and ignores its late rejection", async () => {
@@ -247,11 +316,11 @@ describe("NowCard difficult start", () => {
 
     view.rerender(<NowCard task={{ ...task, completedAt: new Date("2026-08-14T12:05:00Z") }} mode="current" {...props} onSaveFirstStep={onSaveFirstStep} />);
     await waitFor(() => expect(screen.queryByText("Начать с малого")).toBeNull());
-    expect(screen.getByText("Изменить план")).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: `Изменить задачу ${task.title}` })).not.toBeDisabled();
     await act(async () => rejectSave(new Error("late failure")));
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByText("Черновик до завершения")).toBeNull();
-    expect(screen.getByText("Изменить план")).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: `Изменить задачу ${task.title}` })).not.toBeDisabled();
   });
 
   it("remains mounted and saves when rendered inside React StrictMode", async () => {
@@ -327,10 +396,10 @@ describe("NowCard difficult start", () => {
       else resolveB = resolve;
     }));
     const view = render(<NowCard task={taskA} mode="current" {...props} onStart={onStart} />);
-    fireEvent.press(screen.getByText("Мне трудно начать"));
+    fireEvent(screen.getByTestId("now-card-first-step"), "longPress");
     fireEvent.press(screen.getByText("Начать с этого шага"));
     view.rerender(<NowCard task={taskB} mode="current" {...props} onStart={onStart} />);
-    fireEvent.press(screen.getByText("Мне трудно начать"));
+    fireEvent(screen.getByTestId("now-card-first-step"), "longPress");
     fireEvent.press(screen.getByText("Начать с этого шага"));
     expect(onStart).toHaveBeenCalledTimes(2);
 
@@ -344,7 +413,7 @@ describe("NowCard difficult start", () => {
     await act(async () => resolveB());
     view.rerender(<NowCard task={{ ...taskB, startedAt: new Date("2026-08-14T11:00:00Z") }} mode="current" {...props} onStart={onStart} />);
     await waitFor(() => expect(screen.queryByText("Начать с малого")).toBeNull());
-    expect(screen.getByText("Начато")).toBeTruthy();
+    expect(screen.getByText("Выполняется")).toBeTruthy();
     expect(screen.queryByText("Шаг A")).toBeNull();
   });
 
@@ -360,7 +429,7 @@ describe("NowCard difficult start", () => {
 
     let rejectStart!: (error: Error) => void;
     const startView = render(<NowCard task={{ ...task, firstStep: "Шаг" }} mode="current" {...props} onStart={() => new Promise<void>((_resolve, reject) => { rejectStart = reject; })} />);
-    fireEvent.press(screen.getByText("Мне трудно начать"));
+    fireEvent(screen.getByTestId("now-card-first-step"), "longPress");
     fireEvent.press(screen.getByText("Начать с этого шага"));
     startView.unmount();
     await act(async () => rejectStart(new Error("late failure")));

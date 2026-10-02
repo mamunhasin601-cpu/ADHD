@@ -5,19 +5,34 @@
 export interface TaskReminderExpoPayload {
   readonly to: string;
   readonly title: 'Focus';
-  readonly body: 'Пора начинать';
+  readonly body: string;
   readonly sound: 'default';
   readonly data: {
     readonly type: 'task-reminder';
+    readonly taskId: string;
+    readonly scheduledFor: string;
   };
 }
 
-export function buildTaskReminderExpoPayload(token: string): TaskReminderExpoPayload {
+export interface TaskReminderContent {
+  readonly taskId: string;
+  readonly title: string;
+  readonly scheduledFor: string;
+}
+
+export function buildTaskReminderExpoPayload(
+  token: string,
+  reminder: TaskReminderContent,
+): TaskReminderExpoPayload {
   return {
     to: token,
     title: 'Focus',
-    body: 'Пора начинать',
+    body: `По плану сейчас: «${reminder.title}»`,
     sound: 'default',
-    data: { type: 'task-reminder' },
+    data: {
+      type: 'task-reminder',
+      taskId: reminder.taskId,
+      scheduledFor: reminder.scheduledFor,
+    },
   };
 }

@@ -22,6 +22,7 @@ describe('TasksService — синхронизация напоминаний', (
         findUnique: jest.fn().mockResolvedValue({ timezone: 'UTC' }),
       },
     };
+    prisma.$transaction = jest.fn((callback: any) => callback(prisma));
     notifications = {
       scheduleTaskReminder: jest.fn().mockResolvedValue(undefined),
       cancelTaskReminder: jest.fn().mockResolvedValue(undefined),

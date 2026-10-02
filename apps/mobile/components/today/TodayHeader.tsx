@@ -1,8 +1,9 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import { ProgressRing } from '../ProgressRing';
 import { WeekStrip } from '../WeekStrip';
 import { useOrbitsTheme } from '../../theme/orbits';
-import { greetingForDate, progressSupport } from './today-copy';
+import { greetingForDate } from './today-copy';
 
 type TodayHeaderProps = {
   isToday: boolean;
@@ -14,10 +15,11 @@ type TodayHeaderProps = {
   progressKnown: boolean;
   completed: number;
   total: number;
-  onPrevious: () => void;
-  onNext: () => void;
-  onToday: () => void;
+  canGoPrevious: boolean;
+  onPreviousWeek: () => void;
+  onNextWeek: () => void;
   onSelectDate: (date: string) => void;
+  onOpenDatePicker: () => void;
 };
 
 export function TodayHeader(props: TodayHeaderProps) {
@@ -25,6 +27,7 @@ export function TodayHeader(props: TodayHeaderProps) {
 
   return (
     <View
+      testID="today-header"
       style={[
         styles.header,
         {
@@ -38,57 +41,54 @@ export function TodayHeader(props: TodayHeaderProps) {
           <Text style={[styles.greeting, { color: theme.textPrimary }]}>
             {greetingForDate(props.isToday, props.now, props.profileTimezone)}
           </Text>
-          <Text style={[styles.date, { color: theme.textSecondary }]}>
+          <Text testID="today-date-label" style={[styles.date, { color: theme.textSecondary }]}>
             {props.dateLabel}
           </Text>
-          {props.progressKnown ? (
-            <Text style={[styles.support, { color: theme.textSecondary }]}>
-              {progressSupport(props.completed, props.total)}
-            </Text>
-          ) : null}
         </View>
+        <Pressable
+          testID="date-picker-button"
+          accessibilityRole="button"
+          accessibilityLabel="Выбрать дату"
+          accessibilityHint="Открывает календарь для перехода к другой дате"
+          hitSlop={8}
+          onPress={props.onOpenDatePicker}
+          style={({ pressed }) => [
+            styles.calendarButton,
+            { backgroundColor: pressed ? theme.activeSurface : theme.surfaceMuted },
+          ]}
+        >
+          <Svg width={28} height={28} viewBox="0 0 32 32" accessible={false}>
+            <Path
+              d="M8 5v4M23 5v4M5.5 11h20M19.5 26H7.5a2 2 0 0 1-2-2V8.5a2 2 0 0 1 2-2h17a2 2 0 0 1 2 2v8"
+              fill="none"
+              stroke={theme.textSecondary}
+              strokeWidth={2.2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <Path
+              d="m19.5 25.5.7-3.7 6.5-6.5 3 3-6.5 6.5-3.7.7Z"
+              fill="none"
+              stroke={theme.textSecondary}
+              strokeWidth={2.2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </Svg>
+        </Pressable>
         {props.progressKnown ? (
-          <ProgressRing completed={props.completed} total={props.total} size={72} />
+          <ProgressRing completed={props.completed} total={props.total} size={52} />
         ) : null}
-      </View>
-
-      <View style={styles.navigation}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Предыдущий день"
-          style={[styles.button, { backgroundColor: theme.surfaceMuted }]}
-          onPress={props.onPrevious}
-        >
-          <Text style={[styles.arrow, { color: theme.brand }]}>‹</Text>
-        </Pressable>
-        {!props.isToday ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Вернуться к сегодняшнему дню"
-            style={[styles.today, { backgroundColor: theme.activeSurface }]}
-            onPress={props.onToday}
-          >
-            <Text style={{ color: theme.activeSurfaceText, fontWeight: '700' }}>
-              Сегодня
-            </Text>
-          </Pressable>
-        ) : null}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Следующий день"
-          style={[styles.button, { backgroundColor: theme.surfaceMuted }]}
-          onPress={props.onNext}
-        >
-          <Text style={[styles.arrow, { color: theme.brand }]}>›</Text>
-        </Pressable>
       </View>
 
       <WeekStrip
         selectedDate={props.selectedDateKey}
         todayDate={props.todayDateKey}
+        canGoPrevious={props.canGoPrevious}
+        onPreviousWeek={props.onPreviousWeek}
+        onNextWeek={props.onNextWeek}
         onSelectDate={props.onSelectDate}
       />
-      <Text style={[styles.dayHeading, { color: theme.textPrimary }]}>Ваш день</Text>
     </View>
   );
 }
@@ -96,59 +96,33 @@ export function TodayHeader(props: TodayHeaderProps) {
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 12,
+    paddingTop: 4,
+    paddingBottom: 4,
     borderBottomWidth: 1,
   },
   hero: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  copy: { flex: 1 },
+  copy: { flexGrow: 1, flexShrink: 1, flexBasis: 168, minWidth: 0 },
   greeting: {
-    fontSize: 28,
-    lineHeight: 34,
+    fontSize: 22,
+    lineHeight: 27,
     fontWeight: '700',
   },
   date: {
-    fontSize: 15,
-    lineHeight: 21,
+    fontSize: 14,
+    lineHeight: 19,
     marginTop: 2,
     textTransform: 'capitalize',
   },
-  support: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 8,
-  },
-  navigation: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 12,
-  },
-  button: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  calendarButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  arrow: {
-    fontSize: 28,
-    fontWeight: '600',
-  },
-  today: {
-    minHeight: 44,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 22,
-  },
-  dayHeading: {
-    fontSize: 21,
-    fontWeight: '700',
-    marginTop: 18,
   },
 });

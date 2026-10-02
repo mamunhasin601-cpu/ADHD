@@ -96,7 +96,8 @@ describe('AuthService verified contact registration', () => {
       channel: 'EMAIL', destination: 'user@example.ru', verificationToken: EMAIL_TOKEN,
     }), h.transaction);
     expect(h.transaction.user.create).toHaveBeenCalledWith({ data: expect.objectContaining({
-      email: 'user@example.ru', phone: null, emailVerifiedAt: expect.any(Date), phoneVerifiedAt: null,
+      email: 'user@example.ru', phone: null, timezone: 'Europe/Moscow',
+      timezoneSyncedAt: expect.any(Date), emailVerifiedAt: expect.any(Date), phoneVerifiedAt: null,
     }) });
   });
 
@@ -104,7 +105,8 @@ describe('AuthService verified contact registration', () => {
     const h = harness();
     await h.service.register({ phone: '+79991234567', phoneVerificationToken: PHONE_TOKEN, password: 'password1' });
     expect(h.transaction.user.create).toHaveBeenCalledWith({ data: expect.objectContaining({
-      email: null, phone: '+79991234567', emailVerifiedAt: null, phoneVerifiedAt: expect.any(Date),
+      email: null, phone: '+79991234567', timezoneSyncedAt: null,
+      emailVerifiedAt: null, phoneVerifiedAt: expect.any(Date),
     }) });
   });
 

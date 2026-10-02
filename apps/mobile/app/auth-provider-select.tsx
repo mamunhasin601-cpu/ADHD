@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
@@ -11,6 +11,8 @@ import {
   type OAuthProviderAvailability,
 } from '../lib/api/auth';
 import { API_BASE_URL } from '../lib/api-client';
+import { FocusDialog, useFocusDialog } from '../components/FocusDialog';
+import { useOrbitsTheme } from '../theme/orbits';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -25,7 +27,9 @@ const PROVIDERS: Array<{ key: ProviderKey; label: string; icon: string; style: '
 const DISCOVERY_ERROR = 'Вход через сервисы сейчас недоступен. Используйте email или телефон.';
 
 export default function AuthProviderSelectScreen() {
+  const theme = useOrbitsTheme();
   const router = useRouter();
+  const { showDialog, dialogProps } = useFocusDialog();
   const authenticate = useAuthStore((s) => s.authenticate);
   const [availability, setAvailability] = useState<OAuthProviderAvailability | null>(null);
   const [discoveryFailed, setDiscoveryFailed] = useState(false);
@@ -60,13 +64,13 @@ export default function AuthProviderSelectScreen() {
       const accessToken = url.searchParams.get('accessToken');
       const refreshToken = url.searchParams.get('refreshToken');
       if (!accessToken || !refreshToken) {
-        Alert.alert('Ошибка', 'Не удалось получить токены авторизации');
+        showDialog({ title: 'Ошибка', message: 'Не удалось получить токены авторизации' });
         return;
       }
 
       await authenticate({ accessToken, refreshToken });
     } catch {
-      Alert.alert('Ошибка', 'Не удалось проверить сессию после входа');
+      showDialog({ title: 'Ошибка', message: 'Не удалось проверить сессию после входа' });
     }
   }
 
@@ -79,10 +83,10 @@ export default function AuthProviderSelectScreen() {
         'focus://auth/callback',
       );
       if (result.type === 'cancel') {
-        Alert.alert('Отменено', 'Вход через выбранный сервис был отменён');
+        showDialog({ title: 'Отменено', message: 'Вход через выбранный сервис был отменён' });
       }
     } catch {
-      Alert.alert('Ошибка', 'Не удалось войти через выбранный сервис');
+      showDialog({ title: 'Ошибка', message: 'Не удалось войти через выбранный сервис' });
     } finally {
       setIsLoading(false);
     }
@@ -93,63 +97,66 @@ export default function AuthProviderSelectScreen() {
     : [];
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style="auto" />
+    <>
+    <SafeAreaView testID="auth-provider-screen" style={[styles.container, { backgroundColor: theme.background }]}>
+      <StatusBar style={theme.name === 'dark' ? 'light' : 'dark'} />
       <View style={styles.content}>
-        <Text style={styles.title}>Войти через</Text>
-        <Text style={styles.subtitle}>Выберите удобный способ</Text>
+        <Text style={[styles.title, { color: theme.textPrimary }]}>Войти через</Text>
+        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Выберите удобный способ</Text>
 
         {discoveryFailed ? (
-          <Text testID="oauth-discovery-error" style={styles.notice}>{DISCOVERY_ERROR}</Text>
+          <Text testID="oauth-discovery-error" style={[styles.notice, { color: theme.errorPrimary }]}>{DISCOVERY_ERROR}</Text>
         ) : availability === null ? (
-          <Text testID="oauth-discovery-loading" style={styles.notice}>Проверяем доступность сервисов…</Text>
+          <Text testID="oauth-discovery-loading" style={[styles.notice, { color: theme.textSecondary }]}>Проверяем доступность сервисов…</Text>
         ) : enabledProviders.length > 0 ? (
           <View style={styles.providers}>
             {enabledProviders.map((provider) => (
               <Pressable
                 key={provider.key}
                 testID={`oauth-provider-${provider.key}`}
-                style={[styles.providerButton, styles[provider.style]]}
+                style={[styles.providerButton, { backgroundColor: theme.surfacePrimary, borderColor: theme.borderSubtle }, styles[provider.style]]}
                 onPress={() => void handleProviderLogin(provider.key)}
                 disabled={isLoading}
               >
-                <Text style={styles.providerIcon}>{provider.icon}</Text>
-                <Text style={styles.providerText}>{provider.label}</Text>
+                <Text style={[styles.providerIcon, { color: theme.textPrimary }]}>{provider.icon}</Text>
+                <Text style={[styles.providerText, { color: theme.textPrimary }]}>{provider.label}</Text>
               </Pressable>
             ))}
           </View>
         ) : null}
 
         <View style={styles.divider}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>или</Text>
-          <View style={styles.dividerLine} />
+          <View style={[styles.dividerLine, { backgroundColor: theme.borderSubtle }]} />
+          <Text style={[styles.dividerText, { color: theme.textSecondary }]}>или</Text>
+          <View style={[styles.dividerLine, { backgroundColor: theme.borderSubtle }]} />
         </View>
 
-        <Pressable testID="email-phone-button" style={styles.emailButton} onPress={() => router.back()}>
-          <Text style={styles.emailButtonText}>Email / Телефон</Text>
+        <Pressable testID="email-phone-button" style={[styles.emailButton, { backgroundColor: theme.brand }]} onPress={() => router.back()}>
+          <Text style={[styles.emailButtonText, { color: theme.retryText }]}>Email / Телефон</Text>
         </Pressable>
       </View>
     </SafeAreaView>
+    <FocusDialog {...dialogProps} />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F9FAFB' },
+  container: { flex: 1 },
   content: { flex: 1, paddingHorizontal: 32, paddingTop: 60 },
-  title: { fontSize: 28, fontWeight: '700', color: '#111827', textAlign: 'center', marginBottom: 8 },
-  subtitle: { fontSize: 16, color: '#6B7280', textAlign: 'center', marginBottom: 40 },
-  notice: { color: '#6B7280', fontSize: 15, lineHeight: 22, textAlign: 'center', marginBottom: 24 },
+  title: { fontSize: 28, fontWeight: '700', textAlign: 'center', marginBottom: 8 },
+  subtitle: { fontSize: 16, textAlign: 'center', marginBottom: 40 },
+  notice: { fontSize: 15, lineHeight: 22, textAlign: 'center', marginBottom: 24 },
   providers: { gap: 12, marginBottom: 32 },
-  providerButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#FFFFFF' },
+  providerButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, borderRadius: 12, borderWidth: 1 },
   yandex: { borderColor: '#FC3F1D' },
   vk: { borderColor: '#0077FF' },
   mailru: { borderColor: '#005FF9' },
   providerIcon: { fontSize: 24, fontWeight: '700', marginRight: 16 },
-  providerText: { fontSize: 16, fontWeight: '600', color: '#111827' },
+  providerText: { fontSize: 16, fontWeight: '600' },
   divider: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
-  dividerText: { marginHorizontal: 16, fontSize: 14, color: '#9CA3AF' },
-  emailButton: { paddingVertical: 16, paddingHorizontal: 24, borderRadius: 12, backgroundColor: '#6B5BFC', alignItems: 'center' },
-  emailButtonText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
+  dividerLine: { flex: 1, height: 1 },
+  dividerText: { marginHorizontal: 16, fontSize: 14 },
+  emailButton: { paddingVertical: 16, paddingHorizontal: 24, borderRadius: 12, alignItems: 'center' },
+  emailButtonText: { fontSize: 16, fontWeight: '600' },
 });

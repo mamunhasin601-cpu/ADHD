@@ -1,6 +1,7 @@
 import { Controller, Get, Patch, Delete, Body, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { SyncTimezoneDto } from './dto/sync-timezone.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { User } from '@prisma/client';
@@ -20,6 +21,12 @@ export class UsersController {
   @Patch('me')
   update(@CurrentUser() user: User, @Body() dto: UpdateUserDto) {
     return this.usersService.update(user.id, dto);
+  }
+
+  /** PATCH /users/me/timezone — smartphone-authoritative lifecycle sync */
+  @Patch('me/timezone')
+  syncTimezone(@CurrentUser() user: User, @Body() dto: SyncTimezoneDto) {
+    return this.usersService.syncTimezone(user.id, dto.timezone);
   }
 
   /** DELETE /users/me */

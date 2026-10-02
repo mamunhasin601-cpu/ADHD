@@ -4,14 +4,16 @@ const userId = 'owner';
 const baseTask = () => ({
   id: 'task-1', userId, title: 'Task', startTime: new Date('2026-08-14T10:00:00Z'),
   durationMinutes: 45, isRecurring: false, recurrenceRule: 'FREQ=DAILY', seriesId: 'series-1',
+  kind: 'TASK', parentTaskId: null,
   completedAt: null as Date | null, startedAt: null as Date | null,
 });
 
 function setup() {
   const prisma: any = { task: {
     findUnique: jest.fn(), updateMany: jest.fn(), update: jest.fn(),
-    create: jest.fn(), delete: jest.fn(), findMany: jest.fn(),
+    create: jest.fn(), delete: jest.fn(), findMany: jest.fn().mockResolvedValue([]),
   } };
+  prisma.$transaction = jest.fn((callback: any) => callback(prisma));
   const notifications: any = {
     cancelTaskReminder: jest.fn().mockResolvedValue(undefined),
     scheduleTaskReminder: jest.fn().mockResolvedValue(undefined),
@@ -103,6 +105,21 @@ describe('TasksService.start', () => {
     const log = jest.spyOn((service as any).logger, 'error').mockImplementation();
     await expect(service.start(userId, 'task-1')).resolves.toMatchObject({ startedAt: expect.any(Date) });
     expect(log).toHaveBeenCalledWith(expect.stringContaining('task-1'), expect.any(Error));
+  });
+
+  it('retries a serializable conflict and then rechecks active state', async () => {
+    const { service, prisma } = setup();
+    let stored: any = baseTask();
+    prisma.task.findUnique.mockImplementation(() => Promise.resolve(stored));
+    prisma.task.updateMany.mockImplementation(({ data }: any) => {
+      stored = { ...stored, ...data };
+      return Promise.resolve({ count: 1 });
+    });
+    prisma.$transaction
+      .mockRejectedValueOnce(Object.assign(new Error('write conflict'), { code: 'P2034' }))
+      .mockImplementationOnce((callback: any) => callback(prisma));
+    await expect(service.start(userId, stored.id)).resolves.toMatchObject({ startedAt: expect.any(Date) });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
   });
 
   it('generic update, completion, and reopening preserve startedAt and never reschedule', async () => {

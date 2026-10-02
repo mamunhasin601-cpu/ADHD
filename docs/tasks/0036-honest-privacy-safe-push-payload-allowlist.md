@@ -1,5 +1,13 @@
 # Task 0036 — Honest privacy-safe Expo push payload allowlist
 
+> **Superseded delivery-content boundary (2026-09-30):** Task 0041 replaces the
+> generic Expo/local body with `По плану сейчас: «Название задачи»` and adds
+> `taskId` plus `scheduledFor` for exact Today routing. The worker obtains these
+> fields from the canonical task at delivery time and suppresses stale jobs.
+> Task 0036 remains the historical record for its checkpoint; its title-free
+> BullMQ job and log boundaries remain in force. See ADR-009 D-4 and
+> [Task 0041](0041-planned-now-timeline-state.md).
+
 ## Root cause and decision
 
 The Expo request was already generic, but its privacy boundary lived inline in

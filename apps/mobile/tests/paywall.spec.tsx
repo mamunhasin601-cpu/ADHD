@@ -2,10 +2,13 @@ import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import PaywallScreen from '../app/paywall';
 import { usePlanInfo } from '../lib/api/plan';
+import { StyleSheet } from 'react-native';
+import { ORBITS_THEMES, OrbitsThemeProvider } from '../theme/orbits';
 
 const mockBack = jest.fn();
 jest.mock('expo-router', () => ({ useRouter: () => ({ back: mockBack }) }));
 jest.mock('../lib/api/plan', () => ({ usePlanInfo: jest.fn() }));
+jest.mock('expo-status-bar', () => { const React = require('react'); const { View } = require('react-native'); return { StatusBar: (props: any) => React.createElement(View, { testID: 'paywall-status-bar', ...props }) }; });
 
 const mockUsePlanInfo = usePlanInfo as jest.Mock;
 
@@ -47,5 +50,13 @@ describe('honest Free limit screen', () => {
     expect(screen.getByText('Не удалось загрузить текущее количество. Ваш план и задачи не изменились.')).toBeTruthy();
     fireEvent.press(screen.getByRole('button', { name: 'Вернуться к задачам' }));
     expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['warm', 'dark'] as const)('uses %s tokens for the limit, loading/error canvas, and StatusBar', (name) => {
+    const view = render(<OrbitsThemeProvider theme={name}><PaywallScreen /></OrbitsThemeProvider>);
+    const theme = ORBITS_THEMES[name];
+    expect(StyleSheet.flatten(view.getByTestId('paywall-screen').props.style).backgroundColor).toBe(theme.background);
+    expect(StyleSheet.flatten(view.getByTestId('paywall-card').props.style)).toMatchObject({ backgroundColor: theme.surfacePrimary, borderColor: theme.borderSubtle });
+    expect(view.getByTestId('paywall-status-bar').props.style).toBe(name === 'dark' ? 'light' : 'dark');
   });
 });

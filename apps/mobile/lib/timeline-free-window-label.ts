@@ -25,6 +25,34 @@ function minuteWord(minutes: number): string {
   return 'минут';
 }
 
+function hourWord(hours: number): string {
+  const lastTwo = hours % 100;
+  const last = hours % 10;
+  if (lastTwo >= 11 && lastTwo <= 14) return 'часов';
+  if (last === 1) return 'час';
+  if (last >= 2 && last <= 4) return 'часа';
+  return 'часов';
+}
+
+export function formatTimelineFreeWindowDuration(durationMinutes: number): string {
+  const hours = Math.floor(durationMinutes / 60);
+  const minutes = durationMinutes % 60;
+
+  if (hours > 0 && minutes > 0) return `${hours} ч ${minutes} мин`;
+  if (hours > 0) return `${hours} ч`;
+  return `${minutes} мин`;
+}
+
+function formatTimelineFreeWindowDurationSpoken(durationMinutes: number): string {
+  const hours = Math.floor(durationMinutes / 60);
+  const minutes = durationMinutes % 60;
+  const parts: string[] = [];
+
+  if (hours > 0) parts.push(`${hours} ${hourWord(hours)}`);
+  if (minutes > 0 || hours === 0) parts.push(`${minutes} ${minuteWord(minutes)}`);
+  return parts.join(' ');
+}
+
 /** Presentation-only accessibility copy derived from computed geometry. */
 export function formatTimelineFreeWindowAccessibilityLabel(
   window: TimelineFreeWindow,
@@ -32,5 +60,5 @@ export function formatTimelineFreeWindowAccessibilityLabel(
 ): string {
   const start = formatTimelineMinute(window.startMinutes, timeFormat);
   const end = formatTimelineMinute(window.endMinutes, timeFormat);
-  return `Свободное окно с ${start} до ${end}, ${window.durationMinutes} ${minuteWord(window.durationMinutes)}`;
+  return `Свободное окно с ${start} до ${end}, ${formatTimelineFreeWindowDurationSpoken(window.durationMinutes)}`;
 }

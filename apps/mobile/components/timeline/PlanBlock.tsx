@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Task, TimeFormat } from '@focus/shared-types';
-import { formatWallClock } from '../../lib/time-format';
+import { formatWallClock, keepMeridiemTogether } from '../../lib/time-format';
 import { TIMELINE_CONFIG } from '../../lib/timeline-config';
 import { getTimelineMinutesFromStart } from '../../lib/timeline-geometry';
 import { taskKind } from '../../lib/task-kind';
@@ -13,6 +13,10 @@ interface Props {
   columnIndex?: number;
   columnCount?: number;
   profileTimezone?: string | null;
+  topOffset?: number;
+  layoutTop?: number;
+  layoutHeight?: number;
+  gutterWidth?: number;
 }
 
 function minuteWord(minutes: number): string {
@@ -35,6 +39,10 @@ export function PlanBlock({
   columnIndex = 0,
   columnCount = 1,
   profileTimezone,
+  topOffset = 0,
+  layoutTop,
+  layoutHeight,
+  gutterWidth = 56,
 }: Props) {
   const theme = useOrbitsTheme();
   if (!task.startTime) return null;
@@ -44,15 +52,20 @@ export function PlanBlock({
   const startMinutes = getTimelineMinutesFromStart(new Date(task.startTime), profileTimezone);
   const duration = task.durationMinutes;
   const knownDuration = isKnownDuration(duration) ? duration : null;
-  const top = Math.max(0, (startMinutes / 60) * TIMELINE_CONFIG.hourHeight);
-  const height = Math.max(
+  const top = layoutTop ?? Math.max(0, (startMinutes / 60) * TIMELINE_CONFIG.hourHeight) + topOffset;
+  const height = layoutHeight ?? Math.max(
     TIMELINE_CONFIG.minBlockHeight,
     knownDuration === null
       ? TIMELINE_CONFIG.minBlockHeight
       : (knownDuration / 60) * TIMELINE_CONFIG.hourHeight,
   );
   const startClock = TIMELINE_CONFIG.dayStartHour * 60 + startMinutes;
-  const typeLabel = kind === 'REST' ? 'Отдых' : 'Буфер';
+  const typeLabel = 'Отдых';
+  const startLabel = keepMeridiemTogether(formatWallClock(
+    Math.floor(startClock / 60) % 24,
+    ((startClock % 60) + 60) % 60,
+    timeFormat,
+  ));
   let accessibilityLabel: string;
   if (knownDuration === null) {
     accessibilityLabel = `${typeLabel}: ${task.title}, начало ${formatWallClock(Math.floor(startClock / 60) % 24, startClock % 60, timeFormat)}, время окончания и длительность не указаны`;
@@ -63,14 +76,14 @@ export function PlanBlock({
   const columnWidthPercent = 100 / columnCount;
 
   return (
-    <View testID={`plan-block-row-${task.id}`} style={[styles.row, { top, height }]}>
+    <View testID={`plan-block-row-${task.id}`} style={[styles.row, { left: gutterWidth, top, height }]}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
         onPress={() => onOpen(task)}
         style={[
           styles.block,
-          kind === 'REST' ? { backgroundColor: theme.completionSoft, borderColor: theme.completionPrimary } : { backgroundColor: theme.surfaceMuted, borderColor: theme.timelineNeutral },
+          { backgroundColor: theme.completionSoft, borderColor: theme.completionPrimary },
           {
             left: `${columnIndex * columnWidthPercent}%`,
             width: `${columnWidthPercent}%`,
@@ -79,6 +92,9 @@ export function PlanBlock({
       >
         <Text style={[styles.kind, { color: theme.textSecondary }]}>{typeLabel}</Text>
         <Text style={[styles.title, { color: theme.textPrimary }]} numberOfLines={2}>{task.title}</Text>
+        <Text style={[styles.meta, { color: theme.textSecondary }]} numberOfLines={1}>
+          {startLabel}  •  {knownDuration === null ? 'Без длительности' : `${knownDuration} мин`}
+        </Text>
       </Pressable>
     </View>
   );
@@ -97,8 +113,7 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     justifyContent: 'center',
   },
-  rest: { backgroundColor: '#E8F3F4', borderColor: '#8FB8BC' },
-  buffer: { backgroundColor: '#F4F0E7', borderColor: '#B8AA8D' },
-  kind: { fontSize: 11, fontWeight: '700', color: '#4B5563' },
-  title: { fontSize: 14, fontWeight: '600', color: '#1F2937' },
+  kind: { fontSize: 11, fontWeight: '700' },
+  title: { fontSize: 14, fontWeight: '600' },
+  meta: { fontSize: 10, lineHeight: 14, fontWeight: '600' },
 });

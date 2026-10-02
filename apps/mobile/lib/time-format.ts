@@ -53,6 +53,11 @@ export function formatWallClock(
   return formatClockTime(date, preference, { ...options, timeZone: "UTC" });
 }
 
+/** Keeps a Latin meridiem suffix atomic inside narrow timeline gutters. */
+export function keepMeridiemTogether(label: string): string {
+  return label.replace(/\s+(AM|PM)$/i, "\u00A0$1");
+}
+
 /** Parses an unambiguous wall-clock entry for the selected convention. */
 export function parseClockInput(
   value: string,

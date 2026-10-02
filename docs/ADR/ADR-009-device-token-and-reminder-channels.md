@@ -1,7 +1,7 @@
 # ADR-009: Device Token and Reminder Channel Contract
 
-**Status:** accepted — corrected (2026-08-05, Task 0011A)
-**Packages:** Implementation Package 0011, corrected in Task 0011A
+**Status:** accepted — corrected (2026-09-30, Task 0041)
+**Packages:** Implementation Package 0011, corrected in Tasks 0011A and 0041
 
 ---
 
@@ -10,8 +10,10 @@
 Package 0001 (Guilt-Free Recovery) and the product roadmap require that a user can schedule a
 task and receive one privacy-safe reminder on their authenticated device. The legacy implementation
 stored a single `expoPushToken` directly on the `User` model and included the task title in both
-the BullMQ job payload and the push notification body. This violated privacy requirements (title
-visible on the locked screen) and prevented multi-device support.
+the BullMQ job payload and the push notification body. Under the policy accepted at that time,
+locked-screen title visibility was forbidden; the combined design also prevented multi-device
+support. Task 0041 later supersedes only the delivery-content rule after an explicit product
+decision, while preserving title-free queue storage and logs.
 
 ADR-006 already chose BullMQ/Redis for delayed job scheduling and Expo Push for remote delivery.
 This ADR records the device-token model and the local-vs-remote channel contract that completes
@@ -78,16 +80,28 @@ DELETE /notifications/devices/:id — revoke a token by record ID
 `taskTitle` and all other task/user content are excluded so Redis job storage
 and BullMQ retry logs never contain user-readable task data.
 
-### D-4: Generic push payload
+### D-4: Planned-now invitation payload (corrected in Task 0041)
 
-The Expo push body is a non-sensitive generic string ("Пора начинать") and the
-`data` object contains only `{ type: 'task-reminder' }`. No task title, notes,
-IDs, tokens, or user-owned content is present in the push payload or on the
-locked-screen notification.
+The scheduled-start body is `По плану сейчас: «Название задачи»`, not a claim
+that work started. The delivery `data` allowlist is `type`, `taskId`, and
+`scheduledFor`, enabling a tap to open the correct profile day and card.
+
+The worker resolves these fields from the canonical user-owned task immediately
+before fan-out. It suppresses deleted, rescheduled, non-TASK, started, or
+completed rows. The BullMQ job remains limited to `taskId`, `userId`, and
+`scheduledFor`; task title is never stored in Redis or retry metadata. Notes,
+contact/profile data, credentials, device tokens, and arbitrary metadata remain
+excluded from delivery content and logs.
+
+Showing the task title on a lock screen is an intentional Task 0041 product and
+privacy tradeoff so the invitation is actionable and honest. OS-level preview
+privacy remains under the user's device settings. This narrowly supersedes the
+generic payload accepted by Task 0036; it does not broaden queue or logging
+content.
 
 ### D-5: Multi-device fan-out
 
-`NotificationsService.sendPushNotification(userId)` queries all active
+`NotificationsService.sendPushNotification(userId, taskId, reminder)` queries all active
 `DeviceToken` rows for the user and sends one Expo request per token.
 
 - Per-device delivery outcome is recorded in `NotificationLog` via `deviceTokenId`.
@@ -143,9 +157,9 @@ only the channel policy above does.
 
 - `_layout.tsx` registers a `Notifications.addNotificationResponseReceivedListener` on mount and
   removes it on unmount.
-- The generic payload `{ type: 'task-reminder' }` routes taps to the Today tab
-  (`router.navigate('/(tabs)')`). No task-specific deep-link is possible (no taskId in payload);
-  this is intentional per ADR-009 D-4.
+- Task 0041 payloads route `taskId` and `scheduledFor` to Today, which selects
+  the canonical profile date and focuses the intended card. Older generic
+  `{ type: 'task-reminder' }` payloads still fall back to Today.
 - Navigation failure is non-fatal and caught.
 
 ### D-10: OS notification permission revocation (added in 0011E)
@@ -175,10 +189,11 @@ only the channel policy above does.
 Rejected: prevents two devices per user, makes token revocation all-or-nothing,
 and cannot support per-device enabled/disabled state needed for the future.
 
-**Put task title in push body for better UX**
-Rejected: violates Product Bible privacy requirements and Package 0001 §7
-("Local notification content is generic and non-sensitive; no task title on
-locked device"). Generic copy is the intentional trade-off.
+**Keep the generic delivery body after Task 0041**
+Rejected for the scheduled-start invitation: it cannot tell the user which plan
+item now needs a decision and cannot route to the exact card. The accepted
+boundary exposes only title plus task/time route identity at delivery, while
+keeping Redis, logs, notes, profile/contact data, and credentials out of scope.
 
 **Local-only channel (no remote push)**
 Simpler, avoids cross-channel duplication entirely. Deferred: requires device
@@ -240,3 +255,4 @@ All notification log lines conform to the contract in ADR-008:
 | 2026-08-07 | disposable cleanup CONFIRMED | Task 0011L cleanup follow-up: recorded the disposal state of the 0011L test resources. Cleanup command (run at end of 0011L): `docker rm -f -v focus_postgres_clean_0011l` — removes the disposable container and, via `-v`, its anonymous volume `6a9a7807c66c…`. Post-cleanup verification: `docker ps -a --filter name=focus_postgres_clean_0011l` → **empty (container absent)**; `docker volume ls --filter name=6a9a7807c66ce7a3cba4648f8ed454825c16df5e5991cd2cd2f564f276cd4928` → **empty (anonymous volume absent)**; `docker volume ls --filter dangling=true` → **empty (no orphaned volumes)**. Shared-resource preservation: `focus_postgres` **Up (healthy)** with `Created=2026-07-26T12:18:59` and volume `adhd_postgres_data:/var/lib/postgresql/data`; `focus_redis` **Up (healthy)**; `adhd_postgres_data` volume `Created=2026-07-26T12:18:59` unchanged; `focus_db` still holds **4** `_prisma_migrations` rows and identical data (users=3, tasks=0, device_tokens=0, notification_logs=0). No broad prune/reset/`down` command used; only the explicitly-named disposable container was removed. Real-device smoke remains **NOT VERIFIED**. |
 | 2026-08-07 | device smoke attempted — NOT VERIFIED | Task 0011M: an Android emulator **was** available this run — AVD `Pixel_5` booted as `emulator-5554` (Android 13, API 33, `sdk_gphone64_x86_64`, fingerprint `google/sdk_gphone64_x86_64/emu64x:13/TE1A.240213.009/12342917:userdebug/dev-keys`, `sys.boot_completed=1`), with JDK 21 (Android Studio JBR), Node v24.18.0, and Expo CLI present — so the prior 0011H "no device" blocker no longer holds. However the smoke matrix could not be executed to produce trustworthy runtime evidence and every row remains **NOT VERIFIED**. Exact blockers known at that time: (1) **no push/FCM credentials** — no `google-services.json` in repo or `android/app/` and no Expo push/FCM project in `app.json`, so the D-6 remote-primary channel cannot deliver, blocking the reminder-delivery, channel-policy, and duplicate-delivery rows; (2) **no UI-automation harness** (no Maestro/Detox/Appium) to drive OS permission grant/deny/revoke/restore dialogs, Settings navigation, device reboot, and visual notification counting reproducibly; (3) app `com.focus.adhd` not installed. The original 0011M note also claimed `apps/mobile/node_modules` was absent; 0011N later proved that claim false. A native build still yields an interactive dev client needing Metro + live API + human interaction. No source, tests, schema, migration SQL, or Product Bible policy changed to force a pass. Package 0011 remains **NOT launch-ready**; the real-device smoke matrix is the single open gate and requires push credentials plus a scripted/human-driven device session. D-10's platform claim therefore remains unconfirmed on a real device. |
 | 2026-08-09 | resume audit — NOT VERIFIED | Task 0011N corrected the inaccurate 0011M dependency blocker: `apps/mobile/node_modules` and `apps/mobile/android` both exist, and `npm ls expo expo-notifications react-native --workspace=apps/mobile --depth=0` resolves the mobile workspace packages. `apps/mobile/app.json` is strict JSON and `npx expo config --type public` succeeds. The partial evidence set remains insufficient for launch: `10-app-launched.png` is corrupt (`FF FE 19 04 50 00 4E 00`, not PNG signature), `31-ui-after-save.xml` captured the old Ionicons/`ExpoAsset.downloadAsync` RedBox, and this resumed shell has no usable `adb`/Docker in PATH to reinstall/reload and prove the warning gone on-device. A source-level fix removed `@expo/vector-icons` from the tab bar so Ionicons font download is no longer required; mobile typecheck and Jest passed. The Android smoke matrix remains **NOT VERIFIED** pending rerun in a shell with ADB/Docker/Metro/API available. |
+| 2026-09-30 | accepted — corrected | Task 0041: scheduled-start copy is the specific planned-now invitation, title/route identity are resolved from the canonical task at delivery, stale jobs are suppressed after start/completion/delete/reschedule, and taps target the correct Today date/card. Redis job payload and logs remain title-free. Live Expo delivery remains NOT VERIFIED pending working EAS project identity, credentials, and device token. |

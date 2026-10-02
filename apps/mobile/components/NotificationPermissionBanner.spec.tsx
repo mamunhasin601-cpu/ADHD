@@ -15,8 +15,10 @@ jest.mock('../lib/notification-permission', () => ({
 
 import React from 'react';
 import { render, fireEvent, act } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { NotificationPermissionBanner } from './NotificationPermissionBanner';
 import { openNotificationSettings } from '../lib/notification-permission';
+import { ORBITS_THEMES, OrbitsThemeProvider } from '../theme/orbits';
 
 const mockOpenSettings = openNotificationSettings as jest.Mock;
 
@@ -83,5 +85,19 @@ describe('NotificationPermissionBanner', () => {
   it('has a testID on the container for accessibility testing', () => {
     const { getByTestId } = render(<NotificationPermissionBanner />);
     expect(getByTestId('notification-permission-banner')).toBeTruthy();
+  });
+
+  it.each(['warm', 'dark'] as const)('uses semantic %s tokens', (name) => {
+    const view = render(<OrbitsThemeProvider theme={name}><NotificationPermissionBanner /></OrbitsThemeProvider>);
+    const theme = ORBITS_THEMES[name];
+    expect(StyleSheet.flatten(view.getByTestId('notification-permission-banner').props.style)).toMatchObject({
+      backgroundColor: theme.rewardSoft,
+      borderBottomColor: theme.rewardPrimary,
+    });
+    expect(StyleSheet.flatten(view.getByTestId('notification-permission-text').props.style).color).toBe(theme.textPrimary);
+    expect(StyleSheet.flatten(view.getByTestId('notification-permission-settings-button').props.style)).toMatchObject({
+      backgroundColor: theme.activeSurface,
+      borderColor: theme.activeBorder,
+    });
   });
 });

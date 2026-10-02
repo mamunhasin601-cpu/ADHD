@@ -1,6 +1,6 @@
 # Theme System
 
-> Статус: approved product direction; Orbits foundation and local background preference implemented, physical-device verification incomplete.
+> Статус: Phase B production rollout code-complete для warm/dark; расширенная physical-device и assistive-technology проверка остаётся незавершённой.
 >
 > Компонентная реализация, токены и архитектурные ограничения должны быть согласованы с [Frontend](../../docs/Frontend.md), [Architecture](../../docs/Architecture.md) и [Engineering Handbook v5](../../docs/Engineering-Handbook-v5.md), но не дублируются здесь.
 
@@ -24,8 +24,9 @@ alive**. Тема поддерживает ориентацию и возвра�
 
 Базовая тема — **Orbits**, бесплатная и доступная без entitlement. Направление
 фона — тёплый светлый вместо холодного чисто-белого. Semantic Orbits tokens,
-утверждённые navigation bitmap assets и локальный выбор warm/gray/dark уже
-реализованы; окончательное approval требует physical-device и accessibility review.
+утверждённые navigation bitmap assets и локальный выбор warm/dark уже
+реализованы. Gray сохранён только в истории разработки и безопасно читается как
+warm из старого локального значения; пользовательского выбора gray нет.
 
 #### 2.2 Theme packs
 
@@ -149,8 +150,9 @@ animation и несколько равнозначных CTA. Пустые и ov
 
 Fallback остаётся спокойным, читаемым и функционально полным. Настройки
 персонализации должны позволять preview/reset, но не требовать их до действия.
-Dark входит в локально выбираемые Orbits backgrounds, но ещё не имеет
-physical-device, VoiceOver, TalkBack и large-text approval.
+Dark входит в два локально выбираемых Orbits backgrounds. Основные экраны
+проверялись на физическом Android, но полный pre-auth/large-text/TalkBack/
+VoiceOver acceptance ещё не получен.
 
 ### 6. Product and monetization policy
 
@@ -172,7 +174,7 @@ Sparks и Focusiki — будущая дополнительная эмоцио�
 
 #### 6.4 Theme previews and reset
 
-Настройки уже показывают preview и локально сохраняют warm/gray/dark внутри
+Настройки показывают preview и локально сохраняют только warm/dark внутри
 бесплатного Orbits. Reset, загрузка альтернативных packs и entitlement остаются
 будущими отдельными контрактами; ошибка будущего pack должна честно возвращать Orbits.
 
@@ -204,15 +206,20 @@ Focus character используется для tips, congratulations, recovery 
 
 ## 8. Honesty boundary
 
-В Orbits уже существуют semantic tokens, утверждённые navigation bitmap assets,
-Today reference screen и локальный выбор warm/gray/dark. Этот документ не
-утверждает полный rollout на каждый экран, готовые Theme Worlds, production
+В Orbits существуют semantic tokens, утверждённые navigation bitmap assets,
+пять установленных destinations и локальный выбор warm/dark. Phase B tokens
+распространены на основные, вложенные и pre-auth маршруты, Quick Capture,
+task form и notification banner. Этот документ не утверждает готовые Theme Worlds, production
 Focus Sparks/Focusiki, billing, pricing или entitlement. Physical-device,
-VoiceOver, TalkBack и large-text approval также ещё не получены.
+VoiceOver, TalkBack и полный large-text approval также ещё не получены.
 
 ## Orbits background preference (Phase B.3, 2026-08-30)
 
-Orbits is the free/default visual pack. Its user-selectable backgrounds are exactly warm, gray and dark; warm is the default and local fail-safe. This device-local preference is neither billing nor entitlement and is not synchronized through an account or server. Focus Sparks and Focusiki remain future paid alternative packs. Implementation tests do not establish physical-device, VoiceOver, TalkBack or large-text approval, and Task 0039/Phase B remain in progress.
+Historical Phase B.3 record: at that checkpoint the selectable candidates were
+warm, gray and dark. The later Phase B.5 physical review rejected gray; the
+current user-selectable backgrounds are exactly warm and dark, with warm as the
+default and fallback for any legacy gray preference. The device-local choice is
+not billing, entitlement, account synchronization or server state.
 
 
 ## Orbits Android emulator checkpoint (Phase B.4, 2026-09-01)
@@ -233,3 +240,66 @@ or iOS approval, TalkBack, VoiceOver, large-text, reduced-motion, haptic or
 physical timeline touch-target approval. A post-fix empty-state emulator
 screenshot also remains absent because the test account has a recurring task on
 the inspected dates.
+
+## Phase B closure policy (2026-09-26)
+
+- The installed Orbits navigation is `Сегодня | План | Добавить | Успех | Профиль`;
+  Add remains an action. Recovery is rendered in Plan and its count remains on
+  the Plan orbit without a duplicated external heading.
+- The device-local warm/dark preference now covers authenticated routes,
+  Quick Capture, task form, pre-auth/provider/onboarding/paywall routes, loading
+  overlays, route transition canvases, dialogs and notification permission UI.
+  Logout does not reset it.
+- Quick Capture preserves its in-memory draft on swipe, Android Back and
+  backdrop dismissal; explicit Cancel, successful submit, logout and identity
+  change clear it.
+- `BUFFER` remains a compatibility value in persistence/API contracts. New UI
+  offers one `Отдых` choice, legacy BUFFER records render and edit as `Отдых`,
+  and editing preserves their stored value. A destructive data migration is not
+  part of Phase B.
+- Code and automated-test completion do not constitute Realme, iOS, TalkBack,
+  VoiceOver, maximum-text or Android navigation-bar approval.
+
+## Physical acceptance repair policy (2026-09-27)
+
+- Android status/navigation bars are application-controlled semantic surfaces:
+  warm uses light surfaces with dark system icons; dark uses dark surfaces with
+  light system icons. Runtime OEM verification remains a separate gate.
+- Persistent five-item navigation keeps complete single-line labels, stable
+  icons and at least 48dp targets. At large system text, its container may grow;
+  the timeline viewport yields space instead of overlaying or clipping content.
+- Timeline labels and task badges use the user's 12/24-hour preference. H12
+  meridiem stays attached to the time token and the gutter expands with text
+  scale; it must not wrap into a second line.
+- Code/tests/export evidence is not physical acceptance. Realme warm/dark,
+  maximum-text, H12 and system-bar checks remain pending until repeated on-device.
+
+## Second corrective visual/accessibility policy (2026-09-27)
+
+- Started progress is a low-contrast semantic wash inside the neutral task
+  surface, filled from top to bottom with a thin accent boundary. It is a minute
+  snapshot, not continuous motion, and never replaces the completion checkbox.
+- Timeline gutter collisions use rendered rectangles and the priority `started
+  state → Now → task time → tick`; both text and associated dot/beacon disappear
+  together. The rule applies across H12/H24/system formats and text scaling.
+- Task, Rest and focused cards reserve content-scaled minimum height through the
+  shared elastic transform. Focus-only expansion is removed when the card state
+  becomes started/completed or loses focus.
+- At the combined extreme font/display setting, WeekStrip may show five ordered
+  days around selection and Orbits may cap only its local label multiplier. This
+  is a functional fallback, not the normal/increased-text design. All targets
+  remain at least 48dp and content stays above the bottom safe/navigation inset.
+
+## Final started-task fill policy (2026-09-27)
+
+- The previously accepted semantic color and low opacity are retained, but the
+  progress geometry is diagonal: equal elapsed fractions correspond to equal
+  filled area moving from the top-left toward the bottom-right.
+- On an actual progress increase the diagonal edge may make one or two small
+  settling bends over a finite 1.1 seconds, then remains static. It is never a
+  loop and does not restart on hydration or an unrelated render.
+- Only the visible active started task is eligible for motion. Background,
+  off-screen and system Reduce Motion states update directly to a static fill.
+- The SVG overlay is behind copy and controls, ignores pointer input, and is not
+  accessibility content. Text and TalkBack remain the authoritative elapsed and
+  overtime channels in both warm and dark themes.

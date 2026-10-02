@@ -8,8 +8,10 @@
 
 import React from 'react';
 import { render, fireEvent, screen } from '@testing-library/react-native';
+import { Pressable, StyleSheet } from 'react-native';
 import InboxScreen from '../app/(tabs)/inbox';
 import { useInboxTasks, useToggleInboxTask } from '../lib/api/tasks';
+import { ORBITS_THEMES, OrbitsThemeProvider, type OrbitsThemeName } from '../theme/orbits';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -26,7 +28,7 @@ jest.mock('react-native-safe-area-context', () => {
 });
 
 jest.mock('expo-status-bar', () => ({
-  StatusBar: () => null,
+  StatusBar: (props: any) => require('react').createElement('StatusBar', { testID: 'inbox-status-bar', ...props }),
 }));
 
 jest.mock('../lib/api/tasks', () => ({
@@ -61,6 +63,18 @@ function setupToggle() {
     mutate: mockMutate,
     isPending: false,
   } as any);
+}
+
+function themedInbox(theme: OrbitsThemeName) {
+  return (
+    <OrbitsThemeProvider theme={theme}>
+      <InboxScreen />
+    </OrbitsThemeProvider>
+  );
+}
+
+function styleOf(testID: string) {
+  return StyleSheet.flatten(screen.getByTestId(testID).props.style);
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -245,5 +259,116 @@ describe('InboxScreen', () => {
     render(<InboxScreen />);
 
     expect(screen.queryByText('Здесь пока спокойно')).toBeNull();
+  });
+
+  describe('Orbits theme application', () => {
+    it.each(['warm', 'dark'] as const)(
+      'uses %s tokens for canvas, content, completed state and data color',
+      (name) => {
+        const theme = ORBITS_THEMES[name];
+        const dataColor = ORBITS_THEMES.warm.rewardPrimary;
+        const openTask = {
+          ...baseTask,
+          color: dataColor,
+          subTasks: [{ id: 'subtask-1', title: 'Подзадача' }],
+        };
+        const completedTask = {
+          ...baseTask,
+          id: 'completed-task',
+          title: 'Завершённая мысль',
+          completedAt: new Date(),
+        };
+        mockUseInboxTasks.mockReturnValue({
+          data: [openTask, completedTask],
+          isLoading: false,
+          isError: false,
+          refetch: jest.fn(),
+        } as any);
+
+        render(themedInbox(name));
+
+        expect(styleOf('inbox-screen').backgroundColor).toBe(theme.background);
+        expect(styleOf('inbox-header')).toMatchObject({
+          backgroundColor: theme.surfacePrimary,
+          borderBottomColor: theme.borderSubtle,
+        });
+        expect(styleOf('inbox-header-title').color).toBe(theme.brand);
+        expect(styleOf('inbox-header-subtitle').color).toBe(theme.textSecondary);
+        expect(screen.getByTestId('inbox-status-bar').props.style).toBe(name === 'dark' ? 'light' : 'dark');
+
+        expect(styleOf(`inbox-task-${openTask.id}`).backgroundColor).toBe(theme.surfacePrimary);
+        expect(styleOf(`inbox-task-title-${openTask.id}`).color).toBe(theme.textPrimary);
+        expect(styleOf(`inbox-task-subtasks-${openTask.id}`).color).toBe(theme.textSecondary);
+        expect(styleOf(`inbox-task-dot-${openTask.id}`).backgroundColor).toBe(dataColor);
+        expect(styleOf(`inbox-task-chevron-${openTask.id}`).color).toBe(theme.textSecondary);
+        expect(styleOf('inbox-divider').backgroundColor).toBe(theme.borderSubtle);
+
+        expect(styleOf(`inbox-task-${completedTask.id}`).backgroundColor).toBe(theme.completionSoft);
+        expect(styleOf(`inbox-task-dot-${completedTask.id}`).backgroundColor).toBe(theme.completionPrimary);
+        expect(styleOf(`inbox-task-title-${completedTask.id}`)).toMatchObject({
+          color: theme.completionPrimary,
+          textDecorationLine: 'line-through',
+        });
+      },
+    );
+
+    it.each(['warm', 'dark'] as const)('themes %s loading, empty, error and retry states', (name) => {
+      const theme = ORBITS_THEMES[name];
+      mockUseInboxTasks.mockReturnValue({
+        data: undefined,
+        isLoading: true,
+        isError: false,
+        refetch: jest.fn(),
+      } as any);
+      const view = render(themedInbox(name));
+      expect(screen.getByTestId('inbox-loading').props.color).toBe(theme.brand);
+
+      mockUseInboxTasks.mockReturnValue({
+        data: [],
+        isLoading: false,
+        isError: false,
+        refetch: jest.fn(),
+      } as any);
+      view.rerender(themedInbox(name));
+      expect(styleOf('inbox-empty-title').color).toBe(theme.textPrimary);
+      expect(styleOf('inbox-empty-text').color).toBe(theme.textSecondary);
+
+      mockUseInboxTasks.mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        isError: true,
+        refetch: jest.fn(),
+      } as any);
+      view.rerender(themedInbox(name));
+      expect(styleOf('inbox-error').color).toBe(theme.errorPrimary);
+      expect(styleOf('inbox-retry').backgroundColor).toBe(theme.brand);
+      expect(StyleSheet.flatten(screen.getByText('Повторить').props.style).color).toBe(theme.retryText);
+      const retry = screen.UNSAFE_getByType(Pressable);
+      expect(StyleSheet.flatten(retry.props.style({ pressed: true })).backgroundColor).toBe(theme.brandPressed);
+    });
+
+    it('switches warm to dark through rerender without losing data or behavior', () => {
+      const dataColor = ORBITS_THEMES.warm.rewardPrimary;
+      const task = { ...baseTask, color: dataColor };
+      mockUseInboxTasks.mockReturnValue({
+        data: [task],
+        isLoading: false,
+        isError: false,
+        refetch: jest.fn(),
+      } as any);
+      const view = render(themedInbox('warm'));
+
+      expect(styleOf('inbox-screen').backgroundColor).toBe(ORBITS_THEMES.warm.background);
+      view.rerender(themedInbox('dark'));
+      expect(styleOf('inbox-screen').backgroundColor).toBe(ORBITS_THEMES.dark.background);
+      expect(styleOf(`inbox-task-${task.id}`).backgroundColor).toBe(ORBITS_THEMES.dark.surfacePrimary);
+      expect(styleOf(`inbox-task-dot-${task.id}`).backgroundColor).toBe(dataColor);
+      expect(screen.getByText(task.title)).toBeTruthy();
+
+      fireEvent.press(screen.getByTestId(`inbox-task-${task.id}`));
+      fireEvent(screen.getByTestId(`inbox-task-${task.id}`), 'longPress');
+      expect(mockPush).toHaveBeenCalledWith(expect.objectContaining({ pathname: '/task-form' }));
+      expect(mockMutate).toHaveBeenCalledWith(task.id);
+    });
   });
 });

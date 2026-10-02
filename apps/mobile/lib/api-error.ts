@@ -23,6 +23,16 @@ export function isFreeTierLimitError(err: unknown): boolean {
   );
 }
 
+export function isTaskTimeSlotOccupiedError(err: unknown): boolean {
+  const axiosErr = err as {
+    response?: { status?: number; data?: { code?: string } };
+  };
+  return (
+    axiosErr.response?.status === 409 &&
+    axiosErr.response?.data?.code === 'TASK_TIME_SLOT_OCCUPIED'
+  );
+}
+
 export function extractErrorMessage(err: unknown): string {
   const axiosErr = err as {
     message?: string;

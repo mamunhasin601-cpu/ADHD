@@ -1,10 +1,17 @@
 import type { Task } from '@focus/shared-types';
 import { TIMELINE_CONFIG } from './timeline-config';
 import { getTimelineMinutesFromStart } from './timeline-geometry';
+import { isTaskRecord } from './task-kind';
 
 export interface TaskLayout {
   columnIndex: number;
   columnCount: number;
+}
+
+export interface TimelineConflictGroup {
+  id: string;
+  taskIds: string[];
+  labelTaskId: string;
 }
 
 /** Layout-only interval represented by the existing minimum readable height. */
@@ -86,4 +93,43 @@ export function computeTimelineLayout(
   void clusterStart;
 
   return layout;
+}
+
+/** Connected overlap groups for legacy/imported task data. */
+export function computeTimelineConflictGroups(
+  tasks: Task[],
+  profileTimezone?: string | null,
+): TimelineConflictGroup[] {
+  const intervals = tasks
+    .filter((task) => isTaskRecord(task) && task.startTime && !(task.isRecurring && !task.seriesId))
+    .map((task) => {
+      const start = getTimelineMinutesFromStart(new Date(task.startTime!), profileTimezone);
+      const duration = typeof task.durationMinutes === 'number' && Number.isFinite(task.durationMinutes) && task.durationMinutes > 0
+        ? task.durationMinutes
+        : UNKNOWN_DURATION_LAYOUT_MINUTES;
+      return { task, start, end: start + duration };
+    })
+    .sort((left, right) => left.start - right.start || left.end - right.end || left.task.id.localeCompare(right.task.id));
+
+  const groups: TimelineConflictGroup[] = [];
+  let cluster: typeof intervals = [];
+  let clusterEnd = -Infinity;
+  const flush = () => {
+    if (cluster.length > 1) {
+      const taskIds = cluster.map(({ task }) => task.id);
+      groups.push({ id: `conflict:${taskIds.join(':')}`, taskIds, labelTaskId: taskIds[0] });
+    }
+  };
+  for (const interval of intervals) {
+    if (cluster.length === 0 || interval.start < clusterEnd) {
+      cluster.push(interval);
+      clusterEnd = Math.max(clusterEnd, interval.end);
+    } else {
+      flush();
+      cluster = [interval];
+      clusterEnd = interval.end;
+    }
+  }
+  flush();
+  return groups;
 }

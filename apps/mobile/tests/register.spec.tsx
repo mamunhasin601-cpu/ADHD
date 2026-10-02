@@ -11,14 +11,15 @@ jest.mock('../lib/api/auth', () => ({
 }));
 jest.mock('../stores/auth.store', () => ({ useAuthStore: (selector: any) => selector({ authenticate: mockAuthenticate }) }));
 jest.mock('react-native-safe-area-context', () => { const { View } = require('react-native'); return { SafeAreaView: ({ children, ...props }: any) => <View {...props}>{children}</View> }; });
+jest.mock('expo-status-bar', () => { const React = require('react'); const { View } = require('react-native'); return { StatusBar: (props: any) => React.createElement(View, { testID: 'register-status-bar', ...props }) }; });
 
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import { Alert } from 'react-native';
 import RegisterScreen from '../app/register';
+import { StyleSheet } from 'react-native';
+import { ORBITS_THEMES, OrbitsThemeProvider } from '../theme/orbits';
 
 describe('RegisterScreen verified-contact flow', () => {
-  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   afterEach(() => jest.useRealTimers());
   beforeEach(() => {
     jest.clearAllMocks();
@@ -140,15 +141,27 @@ describe('RegisterScreen verified-contact flow', () => {
     mockAuthenticate.mockRejectedValue(new Error('secret token detail'));
     render(<RegisterScreen />); enterContact(); fireEvent.press(screen.getByLabelText('Получить код')); await screen.findByLabelText('Код подтверждения');
     fireEvent.changeText(screen.getByLabelText('Код подтверждения'), '123456'); fireEvent.press(screen.getByLabelText('Подтвердить и создать аккаунт'));
-    await waitFor(() => expect(alert).toHaveBeenCalledWith('Аккаунт создан', 'Аккаунт создан, но автоматически войти не удалось. Перейдите на экран входа и войдите с указанными данными.'));
-    expect(JSON.stringify(alert.mock.calls)).not.toContain('secret token detail');
+    expect(await screen.findByText('Аккаунт создан')).toBeTruthy();
+    expect(screen.getByText('Аккаунт создан, но автоматически войти не удалось. Перейдите на экран входа и войдите с указанными данными.')).toBeTruthy();
+    expect(screen.queryByText(/secret token detail/)).toBeNull();
   });
 
   it('reports an ambiguous registration network result without raw details', async () => {
     mockRegister.mockRejectedValue(new Error('socket secret'));
     render(<RegisterScreen />); enterContact(); fireEvent.press(screen.getByLabelText('Получить код')); await screen.findByLabelText('Код подтверждения');
     fireEvent.changeText(screen.getByLabelText('Код подтверждения'), '123456'); fireEvent.press(screen.getByLabelText('Подтвердить и создать аккаунт'));
-    await waitFor(() => expect(alert).toHaveBeenCalledWith('Не удалось подтвердить регистрацию', 'Не удалось получить подтверждение от сервера. Аккаунт мог быть создан. Попробуйте войти с указанными данными.'));
-    expect(JSON.stringify(alert.mock.calls)).not.toContain('socket secret'); expect(mockAuthenticate).not.toHaveBeenCalled();
+    expect(await screen.findByText('Не удалось подтвердить регистрацию')).toBeTruthy();
+    expect(screen.getByText('Не удалось получить подтверждение от сервера. Аккаунт мог быть создан. Попробуйте войти с указанными данными.')).toBeTruthy();
+    expect(screen.queryByText(/socket secret/)).toBeNull(); expect(mockAuthenticate).not.toHaveBeenCalled();
+  });
+
+  it.each(['warm', 'dark'] as const)('uses %s tokens throughout registration', (name) => {
+    render(<OrbitsThemeProvider theme={name}><RegisterScreen /></OrbitsThemeProvider>);
+    const theme = ORBITS_THEMES[name];
+    expect(StyleSheet.flatten(screen.getByTestId('register-screen').props.style).backgroundColor).toBe(theme.background);
+    const input = screen.getByLabelText('Контакт для регистрации');
+    expect(StyleSheet.flatten(input.props.style)).toMatchObject({ backgroundColor: theme.surfacePrimary, borderColor: theme.borderSubtle, color: theme.textPrimary });
+    expect(input.props.placeholderTextColor).toBe(theme.textSecondary);
+    expect(screen.getByTestId('register-status-bar').props.style).toBe(name === 'dark' ? 'light' : 'dark');
   });
 });

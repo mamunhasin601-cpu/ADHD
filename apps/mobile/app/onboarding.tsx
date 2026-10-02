@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -15,10 +15,13 @@ import type { Task, User } from '@focus/shared-types';
 import { useCreateTask } from '../lib/api/tasks';
 import { apiClient } from '../lib/api-client';
 import { useAuthStore } from '../stores/auth.store';
+import { type OrbitsThemeTokens, useOrbitsTheme } from '../theme/orbits';
 
 type FlowError = 'create' | 'complete' | 'skip' | null;
 
 export default function OnboardingScreen() {
+  const theme = useOrbitsTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const setUser = useAuthStore((state) => state.setUser);
   const profileTimezone = useAuthStore((state) => state.user?.timezone);
   const createTask = useCreateTask(new Date(), profileTimezone);
@@ -107,8 +110,8 @@ export default function OnboardingScreen() {
   const titleIsBlank = !taskTitle.trim();
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style="auto" />
+    <SafeAreaView testID="onboarding-screen" style={styles.container}>
+      <StatusBar style={theme.name === 'dark' ? 'light' : 'dark'} />
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -163,7 +166,8 @@ export default function OnboardingScreen() {
                   accessibilityLabel="Название первой задачи"
                   style={styles.input}
                   placeholder="Например: Позвонить маме"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={theme.textSecondary}
+                  selectionColor={theme.brand}
                   value={taskTitle}
                   onChangeText={setTaskTitle}
                   onSubmitEditing={handleSubmit}
@@ -212,20 +216,22 @@ export default function OnboardingScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F9FAFB' },
+function createStyles(theme: OrbitsThemeTokens) {
+return StyleSheet.create({
+  container: { flex: 1, backgroundColor: theme.background },
   content: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, paddingVertical: 40 },
   emoji: { fontSize: 64, marginBottom: 24 },
-  title: { fontSize: 28, fontWeight: '700', color: '#111827', textAlign: 'center', marginBottom: 16 },
-  description: { fontSize: 16, color: '#6B7280', textAlign: 'center', lineHeight: 24, marginBottom: 16 },
+  title: { fontSize: 28, fontWeight: '700', color: theme.textPrimary, textAlign: 'center', marginBottom: 16 },
+  description: { fontSize: 16, color: theme.textSecondary, textAlign: 'center', lineHeight: 24, marginBottom: 16 },
   form: { width: '100%', marginTop: 16, marginBottom: 16 },
-  label: { fontSize: 14, fontWeight: '600', color: '#374151', marginBottom: 8 },
-  input: { width: '100%', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16, color: '#111827', backgroundColor: '#FFFFFF' },
-  button: { backgroundColor: '#6B5BFC', paddingHorizontal: 32, paddingVertical: 16, borderRadius: 12, marginTop: 16, width: '100%', alignItems: 'center' },
-  buttonDisabled: { backgroundColor: '#D1D5DB' },
-  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  label: { fontSize: 14, fontWeight: '600', color: theme.textPrimary, marginBottom: 8 },
+  input: { width: '100%', borderWidth: 1, borderColor: theme.borderSubtle, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16, color: theme.textPrimary, backgroundColor: theme.surfacePrimary },
+  button: { backgroundColor: theme.brand, paddingHorizontal: 32, paddingVertical: 16, borderRadius: 12, marginTop: 16, width: '100%', alignItems: 'center' },
+  buttonDisabled: { backgroundColor: theme.surfaceMuted, borderWidth: 1, borderColor: theme.borderSubtle },
+  buttonText: { color: theme.retryText, fontSize: 16, fontWeight: '600' },
   secondaryButton: { marginTop: 16, paddingVertical: 12, paddingHorizontal: 16 },
-  secondaryButtonText: { color: '#6B7280', fontSize: 15 },
-  error: { width: '100%', color: '#9B2C2C', backgroundColor: '#FEF2F2', borderRadius: 10, padding: 12, lineHeight: 20, marginTop: 8 },
-  saved: { width: '100%', color: '#276749', backgroundColor: '#F0FFF4', borderRadius: 10, padding: 12, lineHeight: 20, marginTop: 8 },
+  secondaryButtonText: { color: theme.textSecondary, fontSize: 15 },
+  error: { width: '100%', color: theme.errorPrimary, backgroundColor: theme.errorSoft, borderRadius: 10, padding: 12, lineHeight: 20, marginTop: 8 },
+  saved: { width: '100%', color: theme.completionPrimary, backgroundColor: theme.completionSoft, borderRadius: 10, padding: 12, lineHeight: 20, marginTop: 8 },
 });
+}
