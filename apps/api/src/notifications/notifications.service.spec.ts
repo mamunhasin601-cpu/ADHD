@@ -31,6 +31,7 @@ describe('NotificationsService', () => {
       getJob: jest.fn().mockResolvedValue(null),
     };
     prisma = {
+      task: { findFirst: jest.fn() },
       user: { findUnique: jest.fn(), update: jest.fn() },
       deviceToken: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -113,6 +114,24 @@ describe('NotificationsService', () => {
 
     it('не ставит напоминание, если startTime не задан', async () => {
       await service.scheduleTaskReminder(baseTask);
+      expect(queue.getJob).toHaveBeenCalledWith('task-reminder-task-1');
+      expect(queue.add).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['already started', { startedAt: new Date('2026-07-25T09:45:00.000Z') }],
+      ['already completed', { completedAt: new Date('2026-07-25T09:50:00.000Z') }],
+    ])('cancels stale delivery when the task is %s', async (_name, state) => {
+      const stale = { remove: jest.fn().mockResolvedValue(undefined) };
+      queue.getJob.mockResolvedValueOnce(stale);
+
+      await service.scheduleTaskReminder({
+        ...baseTask,
+        ...state,
+        startTime: new Date('2026-07-25T10:30:00.000Z'),
+      });
+
+      expect(stale.remove).toHaveBeenCalledTimes(1);
       expect(queue.add).not.toHaveBeenCalled();
     });
 
@@ -170,21 +189,91 @@ describe('NotificationsService', () => {
 
   // ── sendPushNotification (multi-device fan-out) ───────────────────────────
 
-  describe('sendPushNotification', () => {
-    const expectedPayload = (token: string) => ({
-      to: token,
-      title: 'Focus',
-      body: 'Пора начинать',
-      sound: 'default',
-      data: { type: 'task-reminder' },
+  describe('resolveTaskReminder', () => {
+    const job = {
+      taskId: 'task-1',
+      userId: 'user-1',
+      scheduledFor: '2026-07-25T10:30:00.000Z',
+    };
+
+    it('returns honest delivery content only for the unchanged canonical task', async () => {
+      prisma.task.findFirst.mockResolvedValue({
+        id: 'task-1',
+        title: 'Позвонить клиенту',
+        kind: 'TASK',
+        startTime: new Date(job.scheduledFor),
+        startedAt: null,
+        completedAt: null,
+      });
+      await expect(service.resolveTaskReminder(job)).resolves.toEqual({
+        taskId: 'task-1',
+        title: 'Позвонить клиенту',
+        scheduledFor: job.scheduledFor,
+      });
+      expect(prisma.task.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: 'task-1', userId: 'user-1' },
+      }));
     });
 
-    it('builds the exact allowlisted Expo payload and accepts only a token', () => {
-      const payload = buildTaskReminderExpoPayload('ExponentPushToken[test]');
+    it.each([
+      ['deleted', null],
+      ['started', { id: 'task-1', title: 'x', kind: 'TASK', startTime: new Date(job.scheduledFor), startedAt: new Date(), completedAt: null }],
+      ['completed', { id: 'task-1', title: 'x', kind: 'TASK', startTime: new Date(job.scheduledFor), startedAt: null, completedAt: new Date() }],
+      ['rescheduled', { id: 'task-1', title: 'x', kind: 'TASK', startTime: new Date('2026-07-25T11:00:00.000Z'), startedAt: null, completedAt: null }],
+    ])('suppresses %s canonical state', async (_name, row) => {
+      prisma.task.findFirst.mockResolvedValue(row);
+      await expect(service.resolveTaskReminder(job)).resolves.toBeNull();
+    });
+  });
+
+  describe('sendPushNotification', () => {
+    const reminder = {
+      taskId: 'task-1',
+      title: 'Тестовая задача',
+      scheduledFor: '2026-07-25T10:30:00.000Z',
+    };
+    const expectedPayload = (token: string, content = reminder) => ({
+      to: token,
+      title: 'Focus',
+      body: `По плану сейчас: «${content.title}»`,
+      sound: 'default',
+      data: {
+        type: 'task-reminder',
+        taskId: content.taskId,
+        scheduledFor: content.scheduledFor,
+      },
+    });
+    const send = (userId = 'user-1', taskId = 'task-1') => service.sendPushNotification(
+      userId,
+      taskId,
+      { ...reminder, taskId },
+    );
+
+    it('builds the exact planned-now Expo payload from canonical delivery content', () => {
+      const payload = buildTaskReminderExpoPayload('ExponentPushToken[test]', reminder);
       expect(payload).toEqual(expectedPayload('ExponentPushToken[test]'));
       expect(Object.keys(payload).sort()).toEqual(['body', 'data', 'sound', 'title', 'to']);
-      expect(Object.keys(payload.data)).toEqual(['type']);
+      expect(Object.keys(payload.data).sort()).toEqual(['scheduledFor', 'taskId', 'type']);
       expect(payload.data.type).toBe('task-reminder');
+    });
+
+    it('builds the planned-now copy and canonical Today route at delivery time', () => {
+      const payload = buildTaskReminderExpoPayload('ExponentPushToken[test]', {
+        taskId: 'task-1',
+        title: 'Позвонить клиенту',
+        scheduledFor: '2026-07-25T10:30:00.000Z',
+      });
+      expect(payload).toEqual({
+        to: 'ExponentPushToken[test]',
+        title: 'Focus',
+        body: 'По плану сейчас: «Позвонить клиенту»',
+        sound: 'default',
+        data: {
+          type: 'task-reminder',
+          taskId: 'task-1',
+          scheduledFor: '2026-07-25T10:30:00.000Z',
+        },
+      });
     });
 
     it('возвращает no-tokens, если нет ни DeviceToken записей, ни legacy expoPushToken', async () => {
@@ -193,7 +282,7 @@ describe('NotificationsService', () => {
       // wasRecentlyDelivered not called when no tokens
       prisma.notificationLog.findFirst.mockResolvedValue(null);
 
-      const result = await service.sendPushNotification('user-1', 'task-1');
+      const result = await send();
       expect(result).toEqual({ status: 'no-tokens' });
     });
 
@@ -207,7 +296,7 @@ describe('NotificationsService', () => {
         json: async () => ({ data: { status: 'ok' } }),
       }) as any;
 
-      const result = await service.sendPushNotification('user-1', 'task-1');
+      const result = await send();
       expect(result.status).toBe('sent');
       expect(global.fetch).toHaveBeenCalledTimes(2);
       expect(externalHttp.requestJson).toHaveBeenCalledWith(expect.objectContaining({ operation: 'expo.push', retry: 'none' }));
@@ -221,7 +310,7 @@ describe('NotificationsService', () => {
         json: async () => ({ data: { status: 'ok' } }),
       }) as any;
 
-      const result = await service.sendPushNotification('user-1', 'task-1');
+      const result = await send();
       expect(result.status).toBe('sent');
     });
 
@@ -236,7 +325,7 @@ describe('NotificationsService', () => {
         }),
       }) as any;
 
-      await service.sendPushNotification('user-1', 'task-1');
+      await send();
 
       expect(prisma.deviceToken.update).toHaveBeenCalledWith({
         where: { id: 'dev-dead' },
@@ -254,7 +343,7 @@ describe('NotificationsService', () => {
         }),
       }) as any;
 
-      await service.sendPushNotification('user-1', 'task-1');
+      await send();
 
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: 'user-1' },
@@ -262,7 +351,7 @@ describe('NotificationsService', () => {
       });
     });
 
-    it('serializes the exact generic payload and excludes task/user/contact content', async () => {
+    it('serializes the exact invitation payload without unrelated user/contact content', async () => {
       prisma.deviceToken.findMany.mockResolvedValue([
         { id: 'dev-1', token: 'ExponentPushToken[tok1]' },
       ]);
@@ -271,13 +360,13 @@ describe('NotificationsService', () => {
         json: async () => ({ data: { status: 'ok' } }),
       }) as any;
 
-      await service.sendPushNotification('user-1', 'task-1');
+      await send();
 
       const fetchBody = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
       expect(fetchBody).toEqual(expectedPayload('ExponentPushToken[tok1]'));
       expect(Object.keys(fetchBody).sort()).toEqual(['body', 'data', 'sound', 'title', 'to']);
-      expect(Object.keys(fetchBody.data)).toEqual(['type']);
-      expect(JSON.stringify(fetchBody)).not.toMatch(/task-1|user-1|Тестовая задача|notes|email|phone|123456|ticket/i);
+      expect(Object.keys(fetchBody.data).sort()).toEqual(['scheduledFor', 'taskId', 'type']);
+      expect(JSON.stringify(fetchBody)).not.toMatch(/user-1|notes|email|phone|123456|ticket/i);
       expect(externalHttp.requestJson).toHaveBeenCalledWith(expect.objectContaining({
         operation: 'expo.push',
         retry: 'none',
@@ -285,7 +374,7 @@ describe('NotificationsService', () => {
       }));
     });
 
-    it('cannot forward a sensitive-looking task fixture into the Expo body', async () => {
+    it('includes only the intentional task title/route fields from a sensitive-looking fixture', async () => {
       const sensitiveTask = {
         ...baseTask,
         id: 'task-private-identifier',
@@ -305,12 +394,17 @@ describe('NotificationsService', () => {
       prisma.notificationLog.findFirst.mockResolvedValue(null);
       global.fetch = jest.fn().mockResolvedValue({ json: async () => ({ data: { status: 'ok' } }) }) as any;
 
-      await service.sendPushNotification(sensitiveTask.userId, sensitiveTask.id);
+      const sensitiveReminder = {
+        taskId: sensitiveTask.id,
+        title: sensitiveTask.title,
+        scheduledFor: sensitiveTask.startTime!.toISOString(),
+      };
+      await service.sendPushNotification(sensitiveTask.userId, sensitiveTask.id, sensitiveReminder);
 
       const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
-      expect(body).toEqual(expectedPayload('ExponentPushToken[fixture]'));
+      expect(body).toEqual(expectedPayload('ExponentPushToken[fixture]', sensitiveReminder));
       expect(JSON.stringify(body)).not.toMatch(
-        /task-private-identifier|user-private-identifier|Врач и диагноз|private notes|private@example\.ru|79990000000|654321|verification-ticket-secret/,
+        /user-private-identifier|private notes|private@example\.ru|79990000000|654321|verification-ticket-secret/,
       );
     });
 
@@ -322,12 +416,13 @@ describe('NotificationsService', () => {
       prisma.notificationLog.findFirst.mockResolvedValue(null);
       global.fetch = jest.fn().mockResolvedValue({ json: async () => ({ data: { status: 'ok' } }) }) as any;
 
-      await service.sendPushNotification('user-1', 'sensitive-task-id');
+      await send('user-1', 'sensitive-task-id');
 
       const bodies = (global.fetch as jest.Mock).mock.calls.map(([, options]) => JSON.parse(options.body));
+      const routedReminder = { ...reminder, taskId: 'sensitive-task-id' };
       expect(bodies).toEqual([
-        expectedPayload('ExponentPushToken[first]'),
-        expectedPayload('ExponentPushToken[second]'),
+        expectedPayload('ExponentPushToken[first]', routedReminder),
+        expectedPayload('ExponentPushToken[second]', routedReminder),
       ]);
       expect(bodies[0]).toEqual({ ...bodies[1], to: 'ExponentPushToken[first]' });
     });
@@ -338,7 +433,7 @@ describe('NotificationsService', () => {
       prisma.notificationLog.findFirst.mockResolvedValue(null);
       global.fetch = jest.fn().mockResolvedValue({ json: async () => ({ data: { status: 'ok' } }) }) as any;
 
-      await service.sendPushNotification('user-1', 'task-1');
+      await send();
 
       const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
       expect(body).toEqual(expectedPayload('ExponentPushToken[legacy]'));
@@ -351,7 +446,7 @@ describe('NotificationsService', () => {
       prisma.notificationLog.findFirst.mockResolvedValue(null);
       global.fetch = jest.fn().mockRejectedValue(new Error('network down')) as any;
 
-      const result = await service.sendPushNotification('user-1', 'task-1');
+      const result = await send();
       expect(result.status).toBe('all-failed');
     });
 
@@ -362,7 +457,7 @@ describe('NotificationsService', () => {
         prisma.notificationLog.findFirst.mockResolvedValue(null);
         externalHttp.requestJson.mockRejectedValueOnce(new ExternalHttpError(failureClass, 'expo.push'));
 
-        const result = await service.sendPushNotification('user-1', 'task-1');
+        const result = await send();
 
         expect(result).toEqual({ status: 'all-failed', devices: [{ tokenId: 'dev-1', outcome: 'error', errorMessage: failureClass }] });
         expect(JSON.stringify(result)).not.toMatch(/provider|secret|URL/i);
@@ -375,7 +470,7 @@ describe('NotificationsService', () => {
       externalHttp.requestJson.mockRejectedValueOnce(new ExternalHttpError('timeout', 'expo.push'));
       const error = jest.spyOn((service as any).logger, 'error');
 
-      const result = await service.sendPushNotification('user-1', 'task-1');
+      const result = await send();
 
       expect(result).toEqual({ status: 'all-failed', devices: [{ tokenId: 'dev-1', outcome: 'error', errorMessage: 'timeout' }] });
       expect(error).not.toHaveBeenCalled();
@@ -394,7 +489,7 @@ describe('NotificationsService', () => {
         jest.spyOn(logger, method),
       );
 
-      await service.sendPushNotification('user-private', 'task-private');
+      await send('user-private', 'task-private');
 
       const logged = JSON.stringify(spies.flatMap((spy) => spy.mock.calls));
       expect(logged).not.toContain(token);
@@ -411,7 +506,7 @@ describe('NotificationsService', () => {
         .mockResolvedValueOnce({ json: async () => ({ data: { status: 'ok' } }) })
         .mockRejectedValueOnce(new Error('network blip')) as any;
 
-      const result = await service.sendPushNotification('user-1', 'task-1');
+      const result = await send();
 
       // Overall result is sent because at least one device succeeded.
       expect(result.status).toBe('sent');
@@ -434,7 +529,7 @@ describe('NotificationsService', () => {
           }),
         }) as any;
 
-      const result = await service.sendPushNotification('user-1', 'task-1');
+      const result = await send();
 
       expect(result.status).toBe('sent');
       // Invalid token is revoked — only this device's row updated.
@@ -460,7 +555,7 @@ describe('NotificationsService', () => {
         json: async () => ({ data: { status: 'ok' } }),
       }) as any;
 
-      const result = await service.sendPushNotification('user-1', 'task-1');
+      const result = await send();
 
       expect(result.status).toBe('sent');
       // Only dev-new was actually sent; dev-already was skipped

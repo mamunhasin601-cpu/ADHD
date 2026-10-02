@@ -13,6 +13,7 @@ import {
   taskElapsedVisualLabel,
 } from '../../lib/task-elapsed';
 import { TaskElapsedFill } from './TaskElapsedFill';
+import { plannedTaskStateLabel, type PlannedTaskPresentationState } from '../../lib/planned-now-state';
 
 interface Props {
   task: Task;
@@ -32,6 +33,11 @@ interface Props {
   nowMs?: number;
   animateElapsed?: boolean;
   onMeasuredHeight?: (taskId: string, height: number) => void;
+  presentationState?: PlannedTaskPresentationState;
+  showScheduleConflict?: boolean;
+  onStart?: (taskId: string) => Promise<void> | void;
+  isStarting?: boolean;
+  startError?: string | null;
 }
 
 /**
@@ -57,6 +63,11 @@ export function TaskBlock({
   nowMs = Date.now(),
   animateElapsed = false,
   onMeasuredHeight,
+  presentationState,
+  showScheduleConflict = false,
+  onStart,
+  isStarting = false,
+  startError = null,
 }: Props) {
   const theme = useOrbitsTheme();
   const now = new Date(nowMs);
@@ -103,6 +114,12 @@ export function TaskBlock({
   const isDone = Boolean(task.completedAt);
   const elapsed = getTaskElapsedState(task, now);
   const isExplicitlyStarted = Boolean(task.startedAt && !task.completedAt);
+  const state: PlannedTaskPresentationState = presentationState ?? (
+    isDone ? 'completed' : isExplicitlyStarted ? 'started' : isCurrent ? 'planned-now' : 'upcoming'
+  );
+  const stateLabel = plannedTaskStateLabel(state);
+  const canStartHere = Boolean(onStart && !isDone && !isExplicitlyStarted &&
+    (state === 'planned-now' || state === 'not-started'));
   const currentWallClock = getTimelineWallClock(now, profileTimezone);
   const currentTimeLabel = keepMeridiemTogether(formatWallClock(
     currentWallClock.hours,
@@ -121,7 +138,7 @@ export function TaskBlock({
   const subTasks = task.subTasks ?? [];
   const completedParts = subTasks.filter((subtask) => subtask.completedAt).length;
   const isCompact = height <= 40 && !isExplicitlyStarted;
-  const showMeta = !isCompact;
+  const showMeta = !isCompact || showScheduleConflict || Boolean(startError);
   const columnWidthPercent = 100 / columnCount;
 
   return (
@@ -146,7 +163,7 @@ export function TaskBlock({
         >
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`${task.title}. Запланировано на ${timeLabel}, ${durationLabel}${isDone ? '. Выполнено' : ''}${isCurrent && !isExplicitlyStarted ? '. Сейчас по плану' : ''}${isExplicitlyStarted ? `. Сейчас ${currentTimeLabel}` : ''}${elapsed ? `. ${taskElapsedAccessibilityLabel(elapsed)}` : isExplicitlyStarted ? '. Задача начата' : ''}`}
+            accessibilityLabel={`${task.title}. ${stateLabel}. Запланировано на ${timeLabel}, ${durationLabel}${isExplicitlyStarted ? `. Сейчас ${currentTimeLabel}` : ''}${elapsed ? `. ${taskElapsedAccessibilityLabel(elapsed)}` : isExplicitlyStarted ? '. Задача начата' : ''}${showScheduleConflict ? '. Задачи пересекаются' : ''}`}
             accessibilityHint="Нажмите, чтобы открыть задачу. Удерживайте для переноса или отправки в Мысли"
             delayLongPress={520}
             onPress={() => onOpen(task)}
@@ -156,7 +173,8 @@ export function TaskBlock({
               isCompact && styles.compactBlock,
               {
                 backgroundColor: theme.surfacePrimary,
-                borderColor: isCurrent ? accent : accentBorder,
+                borderColor: state === 'planned-now' || state === 'started' ? accent : state === 'not-started' ? theme.borderSubtle : accentBorder,
+                borderWidth: state === 'planned-now' ? 2 : 1,
                 shadowColor: theme.elevationShadow,
                 transform: [{ scale: pressed ? 0.985 : 1 }],
               },
@@ -188,12 +206,15 @@ export function TaskBlock({
               }}
             >
               <View style={styles.primaryLine}>
-                {isCurrent && !isExplicitlyStarted ? (
+                {state !== 'upcoming' ? (
                   <Text
                     testID={`task-current-cue-${task.id}`}
-                    style={[styles.currentState, { color: accent, backgroundColor: accentSoft }]}
+                    style={[styles.currentState, {
+                      color: state === 'not-started' ? theme.textSecondary : state === 'completed' ? theme.completionPrimary : accent,
+                      backgroundColor: state === 'not-started' ? theme.surfaceMuted : state === 'completed' ? theme.completionSoft : accentSoft,
+                    }]}
                   >
-                    Сейчас
+                    {stateLabel}
                   </Text>
                 ) : null}
                 <Text
@@ -225,9 +246,43 @@ export function TaskBlock({
                       {completedParts}/{subTasks.length} шагов
                     </Text>
                   ) : null}
+                  {showScheduleConflict ? (
+                    <Text
+                      testID={`task-conflict-label-${task.id}`}
+                      accessibilityLabel="Задачи пересекаются"
+                      style={[styles.conflictLabel, { color: theme.textSecondary, backgroundColor: theme.surfaceMuted }]}
+                    >
+                      Задачи пересекаются
+                    </Text>
+                  ) : null}
+                  {startError ? (
+                    <Text accessibilityRole="alert" style={[styles.startError, { color: theme.errorPrimary }]}>{startError}</Text>
+                  ) : null}
                 </View>
               ) : null}
             </View>
+
+            {canStartHere ? (
+              <Pressable
+                testID={`task-start-${task.id}`}
+                accessibilityRole="button"
+                accessibilityLabel={`Начать задачу ${task.title}`}
+                accessibilityState={{ disabled: isStarting, busy: isStarting }}
+                disabled={isStarting}
+                onPress={(event) => {
+                  event?.stopPropagation?.();
+                  void onStart?.(task.id);
+                }}
+                style={({ pressed }) => [
+                  styles.startButton,
+                  { backgroundColor: accent },
+                  pressed && styles.startButtonPressed,
+                  isStarting && styles.startButtonDisabled,
+                ]}
+              >
+                <Text style={[styles.startButtonText, { color: buttonInk }]}>{isStarting ? 'Начинаю…' : 'Начать'}</Text>
+              </Pressable>
+            ) : null}
 
             <Pressable
               testID={`task-completion-${task.id}`}
@@ -385,6 +440,32 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     fontWeight: '700',
   },
+  conflictLabel: {
+    alignSelf: 'flex-start',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '700',
+  },
+  startError: {
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '700',
+  },
+  startButton: {
+    minWidth: 62,
+    minHeight: 36,
+    borderRadius: 18,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 3,
+  },
+  startButtonPressed: { opacity: 0.82 },
+  startButtonDisabled: { opacity: 0.55 },
+  startButtonText: { fontSize: 12, lineHeight: 16, fontWeight: '800' },
   durationRail: {
     position: 'absolute',
     left: 0,

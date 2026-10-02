@@ -77,7 +77,7 @@ export async function scheduleLocalReminder(
   // Remote-primary channel policy: after cleanup, skip scheduling new local notification.
   if (!localOnly) return;
 
-  if (!task.startTime) return;
+  if (!task.startTime || task.startedAt || task.completedAt) return;
 
   const startTime = new Date(task.startTime);
   const now = Date.now();
@@ -91,11 +91,14 @@ export async function scheduleLocalReminder(
     const scheduledIdentifier = await Notifications.scheduleNotificationAsync({
       identifier: requestedIdentifier,
       content: {
-        // Generic, non-sensitive (ADR-009): no task title visible on locked screen.
         title: 'Focus',
-        body: 'Пора начинать',
+        body: `По плану сейчас: «${task.title}»`,
         sound: true,
-        data: { type: 'task-reminder' }, // no taskId or userId in data
+        data: {
+          type: 'task-reminder',
+          taskId: task.id,
+          scheduledFor: startTime.toISOString(),
+        },
       },
       trigger: {
         date: startTime,
@@ -158,7 +161,7 @@ export async function reconcileLocalReminders(
   const now = Date.now();
 
   const future = tasks.filter((t) => {
-    if (!isTaskRecord(t) || !t.startTime || t.completedAt) return false;
+    if (!isTaskRecord(t) || !t.startTime || t.completedAt || t.startedAt) return false;
     const ms = new Date(t.startTime).getTime();
     return ms > now + MIN_LEAD_MS && ms <= horizon;
   });

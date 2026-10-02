@@ -104,6 +104,22 @@ it('routes safe task-reminder taps to Today and ignores unrelated payloads', () 
   expect(mockNavigate).toHaveBeenCalledWith('/(tabs)/today');
 });
 
+it('routes an identified task reminder to the correct Today date and card', () => {
+  render(<RootLayout />);
+  act(() => mockTapHandler?.({ notification: { request: { content: { data: {
+    type: 'task-reminder',
+    taskId: 'task-7',
+    scheduledFor: '2026-09-28T15:00:00.000Z',
+  } } } } }));
+  expect(mockNavigate).toHaveBeenCalledWith({
+    pathname: '/(tabs)/today',
+    params: {
+      notificationTaskId: 'task-7',
+      notificationScheduledFor: '2026-09-28T15:00:00.000Z',
+    },
+  });
+});
+
 it('removes the notification-tap listener on unmount', () => {
   const { unmount } = render(<RootLayout />);
   unmount();

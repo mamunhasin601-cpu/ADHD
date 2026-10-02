@@ -6,7 +6,7 @@ import { TASK_REMINDERS_QUEUE, JOBS } from './notifications.constants';
 import type { Task } from '@prisma/client';
 import { ExternalHttpService } from '../external-http/external-http.service';
 import { ExternalHttpError } from '../external-http/external-http.error';
-import { buildTaskReminderExpoPayload } from './notifications.payload';
+import { buildTaskReminderExpoPayload, type TaskReminderContent } from './notifications.payload';
 
 /**
  * Compact job payload (ADR-009): only task/user IDs needed for worker lookup.
@@ -59,11 +59,10 @@ export class NotificationsService {
   async scheduleTaskReminder(task: Task): Promise<void> {
     // Legacy fixtures and cached callers can omit kind; the storage default and
     // compatibility contract treat that shape as an ordinary task.
-    if (task.kind && task.kind !== 'TASK') {
+    if ((task.kind && task.kind !== 'TASK') || !task.startTime || task.startedAt || task.completedAt) {
       await this.cancelTaskReminder(task.id);
       return;
     }
-    if (!task.startTime) return;
 
     const now = Date.now();
     const startMs = task.startTime.getTime();
@@ -167,14 +166,43 @@ export class NotificationsService {
   // ── Push delivery (multi-device fan-out) ──────────────────────────────────
 
   /**
-   * Sends a generic, privacy-safe push notification to ALL active device tokens
-   * for the given user. Checks per-device dedup before sending each token so a
+   * Revalidates the canonical task at delivery time. A delayed/retried job is
+   * suppressed after start, completion, deletion, or rescheduling.
+   */
+  async resolveTaskReminder(data: TaskReminderJobData): Promise<TaskReminderContent | null> {
+    const task = await this.prisma.task.findFirst({
+      where: { id: data.taskId, userId: data.userId },
+      select: {
+        id: true,
+        title: true,
+        kind: true,
+        startTime: true,
+        startedAt: true,
+        completedAt: true,
+      },
+    });
+    if (!task || (task.kind && task.kind !== 'TASK') || !task.startTime || task.startedAt || task.completedAt) {
+      return null;
+    }
+    const scheduledFor = task.startTime.toISOString();
+    if (scheduledFor !== data.scheduledFor) return null;
+    return { taskId: task.id, title: task.title, scheduledFor };
+  }
+
+  /**
+   * Sends the delivery-time-resolved planned-now invitation to ALL active
+   * device tokens for the given user. Checks per-device dedup before sending so a
    * retry only reaches devices that have not yet received the delivery.
    *
    * @param userId  Owner of the device tokens.
    * @param taskId  Used as the per-device dedup key (0011B blocker 4).
+   * @param reminder Canonical title and route identity resolved by the worker.
    */
-  async sendPushNotification(userId: string, taskId: string): Promise<PushSendResult> {
+  async sendPushNotification(
+    userId: string,
+    taskId: string,
+    reminder: TaskReminderContent,
+  ): Promise<PushSendResult> {
     const t0 = Date.now();
 
     const deviceTokens = await this.prisma.deviceToken.findMany({
@@ -209,7 +237,7 @@ export class NotificationsService {
         continue;
       }
 
-      const result = await this._sendToToken(device.token);
+      const result = await this._sendToToken(device.token, reminder);
 
       if (result.status === 'sent') {
         devices.push({ tokenId: device.id, outcome: 'sent' });
@@ -240,7 +268,7 @@ export class NotificationsService {
     return { status: 'all-failed', devices };
   }
 
-  private async _sendToToken(token: string): Promise<TokenDeliveryResult> {
+  private async _sendToToken(token: string, reminder: TaskReminderContent): Promise<TokenDeliveryResult> {
     try {
       const result = await this.externalHttp.requestJson<{
         data?: { status: string; details?: { error?: string } };
@@ -258,7 +286,7 @@ export class NotificationsService {
             ? { 'Authorization': `Bearer ${process.env.EXPO_ACCESS_TOKEN}` }
             : {}),
         },
-        body: JSON.stringify(buildTaskReminderExpoPayload(token)),
+        body: JSON.stringify(buildTaskReminderExpoPayload(token, reminder)),
         },
       });
       const ticket = result.data;

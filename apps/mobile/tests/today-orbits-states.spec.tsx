@@ -10,7 +10,7 @@ let mockQueryState: {
   error?: unknown;
 };
 
-jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }), useFocusEffect: jest.fn() }));
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }), useFocusEffect: jest.fn(), useLocalSearchParams: () => ({}) }));
 jest.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ refetchQueries: jest.fn() }),
 }));

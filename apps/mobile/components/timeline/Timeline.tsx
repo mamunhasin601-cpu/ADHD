@@ -9,7 +9,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { TIMELINE_CONFIG } from "../../lib/timeline-config";
-import { computeTimelineLayout } from "../../lib/timeline-layout";
+import { computeTimelineConflictGroups, computeTimelineLayout } from "../../lib/timeline-layout";
 import { NowIndicator } from "./NowIndicator";
 import { TaskBlock } from "./TaskBlock";
 import type { Task } from "@focus/shared-types";
@@ -32,6 +32,7 @@ import {
   timelineNowMarkerBounds,
   type GutterLabelBounds,
 } from "../../lib/timeline-gutter-collisions";
+import type { PlannedTaskPresentationState } from "../../lib/planned-now-state";
 
 interface Props {
   tasks: Task[];
@@ -46,6 +47,10 @@ interface Props {
   focusedTaskId?: string;
   renderFocusedTask?: (task: Task, onShowActions: () => void) => ReactNode;
   nowMs?: number;
+  taskStates?: ReadonlyMap<string, PlannedTaskPresentationState>;
+  onStartTask?: (taskId: string) => Promise<void> | void;
+  isStartingTask?: boolean;
+  startErrorForTask?: (taskId: string) => string | null;
 }
 
 const { dayStartHour, dayEndHour, hourHeight } = TIMELINE_CONFIG;
@@ -71,6 +76,10 @@ export function Timeline({
   focusedTaskId,
   renderFocusedTask,
   nowMs = Date.now(),
+  taskStates,
+  onStartTask,
+  isStartingTask = false,
+  startErrorForTask,
 }: Props) {
   const theme = useOrbitsTheme();
   const { fontScale } = useWindowDimensions();
@@ -98,6 +107,10 @@ export function Timeline({
   const layout = useMemo(
     () => computeTimelineLayout(tasks, profileTimezone),
     [tasks, profileTimezone],
+  );
+  const conflictLabelTaskIds = useMemo(
+    () => new Set(computeTimelineConflictGroups(tasks, profileTimezone).map((group) => group.labelTaskId)),
+    [profileTimezone, tasks],
   );
   const freeWindows = useMemo(
     () => computeTimelineFreeWindows(tasks, profileTimezone),
@@ -444,6 +457,11 @@ export function Timeline({
               columnIndex={taskLayout?.columnIndex}
               columnCount={taskLayout?.columnCount}
               isCurrent={task.id === currentTaskId}
+              presentationState={taskStates?.get(task.id)}
+              showScheduleConflict={conflictLabelTaskIds.has(task.id)}
+              onStart={onStartTask}
+              isStarting={isStartingTask}
+              startError={startErrorForTask?.(task.id) ?? null}
               profileTimezone={profileTimezone}
               layoutTop={elasticGeometry?.top}
               layoutHeight={elasticGeometry?.height}

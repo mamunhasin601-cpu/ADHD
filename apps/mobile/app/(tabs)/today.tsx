@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Timeline } from '../../components/timeline/Timeline';
 import { NowCard } from '../../components/NowCard';
 import { EmptyState } from '../../components/EmptyState';
@@ -31,7 +31,6 @@ import {
   toCanonicalDateParam,
 } from '../../lib/timezone';
 import type { Task } from '@focus/shared-types';
-import { findCurrentTask } from '../../lib/current-task';
 import { NotificationInvitation } from '../../components/NotificationInvitation';
 import { TodayHeader } from '../../components/today/TodayHeader';
 import { useGlobalCapture } from '../../components/GlobalCapture';
@@ -45,6 +44,7 @@ import {
   formatTaskActionSchedule,
   isFutureUnstartedTask,
 } from '../../lib/task-action-confirmation';
+import { derivePlannedTaskStates } from '../../lib/planned-now-state';
 
 /**
  * Экран "Сегодня" — главный экран таймлайна дня.
@@ -52,6 +52,10 @@ import {
  */
 export default function TodayScreen() {
   const router = useRouter();
+  const routeParams = useLocalSearchParams<{
+    notificationTaskId?: string | string[];
+    notificationScheduledFor?: string | string[];
+  }>();
   const { setGlobalCaptureDateContext } = useGlobalCapture();
   const theme = useOrbitsTheme();
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -83,6 +87,25 @@ export default function TodayScreen() {
 
   const selectedDateKey = toCanonicalDateParam(selectedDate, profileTimezone);
   const todayDateKey = toCanonicalDateParam(currentTime, profileTimezone);
+  const notificationTaskId = Array.isArray(routeParams.notificationTaskId)
+    ? routeParams.notificationTaskId[0]
+    : routeParams.notificationTaskId;
+  const notificationScheduledFor = Array.isArray(routeParams.notificationScheduledFor)
+    ? routeParams.notificationScheduledFor[0]
+    : routeParams.notificationScheduledFor;
+  const consumedNotificationRoute = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!notificationTaskId || !notificationScheduledFor) return;
+    const identity = `${notificationTaskId}:${notificationScheduledFor}`;
+    if (consumedNotificationRoute.current === identity) return;
+    const instant = new Date(notificationScheduledFor);
+    if (Number.isNaN(instant.getTime())) return;
+    consumedNotificationRoute.current = identity;
+    setSelectedDate(instantForCalendarDay(toCanonicalDateParam(instant, profileTimezone)));
+  // instantForCalendarDay is intentionally evaluated only for a newly consumed route.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notificationScheduledFor, notificationTaskId, profileTimezone]);
 
   useEffect(() => {
     setGlobalCaptureDateContext({ selectedDate, selectedDateKey });
@@ -119,7 +142,6 @@ export default function TodayScreen() {
   } = useTasksForDate(selectedDate, profileTimezone);
 
   const taskRecords = tasks.filter(isTaskRecord);
-  const scheduledTasks = taskRecords.filter((task: Task) => task.startTime && !task.completedAt);
   const unscheduledTasks = taskRecords.filter((task: Task) => !task.startTime);
   const timelineEntries = tasks.filter((task: Task) => task.startTime);
 
@@ -128,31 +150,36 @@ export default function TodayScreen() {
   const totalCount = taskRecords.length;
   const hasPlanEntries = tasks.length > 0;
 
-  // Known durations use their real end. Unknown durations remain current until
-  // the next scheduled task (or the end of the profile-local Today view).
-  const currentTask = useMemo(() => {
-    if (!isToday) return null;
-    const currentDay = toCanonicalDateParam(currentTime, profileTimezone);
-    const dayEnd = profileTimezone && isValidIANATimezone(profileTimezone)
-      ? localMidnightToInstant(addCalendarDays(currentDay, 1), profileTimezone)
-      : (() => {
-          const deviceDayEnd = new Date(currentTime);
-          deviceDayEnd.setHours(24, 0, 0, 0);
-          return deviceDayEnd;
-        })();
-    return findCurrentTask(tasks, currentTime, dayEnd);
-  }, [tasks, currentTime, isToday, profileTimezone]);
-
-  // Следующая задача: startTime > now, ближайшая
-  const nextTask = useMemo(() => {
-    if (!isToday) return null;
-    const now = currentTime.getTime();
-    const upcoming = scheduledTasks
-      .filter((task: Task) => new Date(task.startTime!).getTime() > now)
-      .sort((a: Task, b: Task) => new Date(a.startTime!).getTime() - new Date(b.startTime!).getTime());
-    return upcoming[0] || null;
-  }, [scheduledTasks, currentTime, isToday]);
-  const focusedTask = currentTask ?? nextTask;
+  const selectedDayEndMs = useMemo(
+    () => instantForCalendarDay(addCalendarDays(selectedDateKey, 1)).getTime(),
+    // selectedDateKey and profile timezone fully determine the canonical boundary.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [profileTimezone, selectedDateKey],
+  );
+  const plannedStates = useMemo(
+    () => derivePlannedTaskStates(tasks, nowMs, selectedDayEndMs),
+    [nowMs, selectedDayEndMs, tasks],
+  );
+  const taskStates = useMemo(
+    () => new Map(plannedStates.map(({ task, state }) => [task.id, state] as const)),
+    [plannedStates],
+  );
+  const plannedNowTask = isToday
+    ? plannedStates.find(({ state }) => state === 'planned-now')?.task ?? null
+    : null;
+  const nextTask = isToday
+    ? plannedStates.find(({ state }) => state === 'upcoming')?.task ?? null
+    : null;
+  const activeStartedTaskInInterval = isToday
+    ? plannedStates.find(({ state, startMs, endMs }) => state === 'started' && startMs <= nowMs && nowMs < endMs)?.task ?? null
+    : null;
+  const activeStartedTask = isToday
+    ? plannedStates.find(({ state }) => state === 'started')?.task ?? null
+    : null;
+  const notificationFocusedTask = notificationTaskId
+    ? plannedStates.find(({ task, state }) => task.id === notificationTaskId && state !== 'completed' && state !== 'started')?.task ?? null
+    : null;
+  const focusedTask = notificationFocusedTask ?? plannedNowTask ?? activeStartedTaskInInterval ?? nextTask ?? activeStartedTask;
   // Same canonical key as the Today query and Recovery invalidation (0007A).
   const createTask = useCreateTask(selectedDate, profileTimezone);
   const toggleTask = useToggleTask(selectedDate, profileTimezone);
@@ -493,12 +520,22 @@ export default function TodayScreen() {
               })}
               shouldAutoScroll={isToday}
               profileTimezone={profileTimezone}
-              currentTaskId={currentTask?.id}
-              focusedTaskId={isToday ? focusedTask?.id : undefined}
-              renderFocusedTask={isToday && focusedTask ? (task, onShowActions) => (
+              currentTaskId={plannedNowTask?.id}
+              focusedTaskId={notificationFocusedTask?.id ?? (isToday ? focusedTask?.id : undefined)}
+              taskStates={taskStates}
+              onStartTask={handleStart}
+              isStartingTask={startTask.isPending}
+              startErrorForTask={(taskId) => startError && startError.taskId === taskId && startError.dateKey === selectedDateKey
+                ? startError.message
+                : null}
+              renderFocusedTask={(isToday || notificationFocusedTask) && focusedTask ? (task, onShowActions) => (
                 <NowCard
                   task={task}
-                  mode={task.id === currentTask?.id ? 'current' : 'upcoming'}
+                  mode={taskStates.get(task.id) === 'planned-now'
+                    ? 'planned-now'
+                    : taskStates.get(task.id) === 'not-started'
+                      ? 'not-started'
+                      : 'upcoming'}
                   embeddedInTimeline
                   onComplete={handleToggle}
                   onStart={handleStart}

@@ -490,6 +490,25 @@ describe("Timeline focused task presentation", () => {
     expect(screen.getByTestId("task-block-row-following-transition").props.style[1].top).toBeLessThan(expandedTop);
   });
 
+  it("keeps every legacy overlap visible and labels one card per connected conflict group", () => {
+    const first = task("overlap-first", 10, 0, 60);
+    const second = task("overlap-second", 10, 15, 45);
+    const third = task("overlap-third", 10, 45, 30);
+    const states = new Map([
+      [first.id, 'planned-now' as const],
+      [second.id, 'planned-now' as const],
+      [third.id, 'planned-now' as const],
+    ]);
+
+    render(<Timeline {...props} tasks={[first, second, third]} taskStates={states} />);
+
+    expect(screen.getByTestId('task-block-row-overlap-first')).toBeTruthy();
+    expect(screen.getByTestId('task-block-row-overlap-second')).toBeTruthy();
+    expect(screen.getByTestId('task-block-row-overlap-third')).toBeTruthy();
+    expect(screen.getAllByText('Задачи пересекаются')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: /overlap-first.*Задачи пересекаются/ })).toBeTruthy();
+  });
+
   it("lets a started task own the current-time collision instead of duplicating gutter labels", () => {
     jest.useFakeTimers().setSystemTime(new Date(2026, 7, 12, 11, 30));
     const started = { ...task("started-now", 11, 30, 60), startedAt: new Date(2026, 7, 12, 11, 0) };
@@ -508,13 +527,13 @@ describe("Timeline focused task presentation", () => {
     const view = render(<Timeline {...props} tasks={[first, second]} shouldAutoScroll nowMs={before} currentTaskId={first.id} />);
     expect(screen.getByTestId("now-indicator").props.nowMs).toBe(before);
     expect(screen.getByTestId("task-elapsed-label-clock-first").props.children).toContain("Сейчас 16:19");
-    expect(screen.queryByTestId("task-current-cue-clock-first")).toBeNull();
+    expect(screen.getByTestId("task-current-cue-clock-first").props.children).toBe('Выполняется');
     const fillBefore = screen.getByTestId("task-elapsed-fill-path-clock-first").props.d;
 
     view.rerender(<Timeline {...props} tasks={[first, second]} shouldAutoScroll nowMs={boundary} currentTaskId={second.id} />);
     expect(screen.getByTestId("now-indicator").props.nowMs).toBe(boundary);
     expect(screen.getByTestId("task-elapsed-label-clock-first").props.children).toContain("Сейчас 16:20");
-    expect(screen.queryByTestId("task-current-cue-clock-first")).toBeNull();
+    expect(screen.getByTestId("task-current-cue-clock-first").props.children).toBe('Выполняется');
     expect(screen.getByTestId("task-current-cue-clock-second")).toBeTruthy();
     expect(screen.getByTestId("task-elapsed-fill-path-clock-first").props.d).not.toBe(fillBefore);
   });

@@ -16,13 +16,17 @@ export class NotificationsProcessor extends WorkerHost {
     if (job.name !== JOBS.TASK_REMINDER) return;
 
     const { taskId, userId } = job.data;
-    // taskTitle is intentionally NOT in the job payload (ADR-009 privacy contract).
+    const reminder = await this.notifications.resolveTaskReminder(job.data);
+    if (!reminder) {
+      this.logger.debug('Reminder delivery suppressed: canonical task is no longer eligible');
+      return;
+    }
 
     // No task-global dedup precheck here (0011B blocker 4 fix).
     // Per-device dedup is inside sendPushNotification: each device is checked
     // against the NotificationLog before being sent, so retries only reach
     // devices that have not yet received the delivery.
-    const result = await this.notifications.sendPushNotification(userId, taskId);
+    const result = await this.notifications.sendPushNotification(userId, taskId, reminder);
 
     if (result.status === 'no-tokens') {
       await this.notifications.logNotification(userId, taskId, false, null);

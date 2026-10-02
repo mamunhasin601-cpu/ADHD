@@ -3,7 +3,7 @@
  *
  * Key behavioral changes from 0011A:
  * - No task-global wasRecentlyDelivered precheck (removed in 0011B).
- * - sendPushNotification now takes (userId, taskId).
+ * - sendPushNotification now takes (userId, taskId, canonical reminder).
  * - Per-device outcomes logged individually; 'already-delivered' not re-logged.
  * - Retry thrown only when at least one device has a retryable 'error' outcome.
  */
@@ -16,7 +16,7 @@ import type { Job } from 'bullmq';
 describe('NotificationsProcessor', () => {
   let processor: NotificationsProcessor;
   let notifications: jest.Mocked<
-    Pick<NotificationsService, 'wasRecentlyDelivered' | 'sendPushNotification' | 'logNotification'>
+    Pick<NotificationsService, 'wasRecentlyDelivered' | 'resolveTaskReminder' | 'sendPushNotification' | 'logNotification'>
   >;
 
   const makeJob = (overrides: Partial<Job> = {}): Job =>
@@ -34,6 +34,11 @@ describe('NotificationsProcessor', () => {
   beforeEach(() => {
     notifications = {
       wasRecentlyDelivered: jest.fn().mockResolvedValue(false),
+      resolveTaskReminder: jest.fn().mockResolvedValue({
+        taskId: 'task-1',
+        title: 'Задача',
+        scheduledFor: expect.anything(),
+      }),
       sendPushNotification: jest.fn(),
       logNotification: jest.fn().mockResolvedValue(undefined),
     } as any;
@@ -56,7 +61,18 @@ describe('NotificationsProcessor', () => {
     // No task-global wasRecentlyDelivered call (0011B)
     expect(notifications.wasRecentlyDelivered).not.toHaveBeenCalled();
     // taskId forwarded so service can do per-device dedup
-    expect(notifications.sendPushNotification).toHaveBeenCalledWith('user-1', 'task-1');
+    expect(notifications.sendPushNotification).toHaveBeenCalledWith(
+      'user-1',
+      'task-1',
+      expect.objectContaining({ taskId: 'task-1', title: 'Задача' }),
+    );
+  });
+
+  it('suppresses a stale job before token fan-out', async () => {
+    notifications.resolveTaskReminder.mockResolvedValue(null);
+    await processor.process(makeJob());
+    expect(notifications.sendPushNotification).not.toHaveBeenCalled();
+    expect(notifications.logNotification).not.toHaveBeenCalled();
   });
 
   it('logs delivered=true per device on success', async () => {

@@ -230,7 +230,29 @@ Task 0039 is accepted within Visual Identity Phase B and its Timeline corrective
 packages. Push-delivery smoke remains separately blocked by the missing working
 EAS `projectId`, credentials, and device push token and is not claimed as passed.
 `Сейчас по плану / конкурентная модель` is a new product iteration outside Task
-0039 and has not been implemented.
+0039; its later implementation is tracked independently as Task 0041.
+
+### 3.7 Task 0041 — Planned Now Timeline State
+
+Task 0041 is **Accepted from 2026-10-02** as a separate package after the Task
+0039 acceptance checkpoint. The scheduled interval now produces a derived
+`Сейчас по плану` presentation, not `startedAt`. Explicit Start alone produces
+`Выполняется`, elapsed time, diagonal fill, and the single active task. An
+expired interval is calmly marked `Не начато` and later follows the existing
+Recovery policy.
+
+NowCard and Timeline share the Today-owned minute clock and one Start protocol.
+Legacy/imported overlaps retain elastic lanes and receive one neutral
+`Задачи пересекаются` cue per connected group; API schedule-conflict protection
+is unchanged. Scheduled-start reminders invite rather than claim work began,
+revalidate the canonical task on delivery, and route taps to its profile day.
+The Realme smoke confirmed the minute-boundary state transitions, absence of
+false elapsed/fill/wave, background/resume resynchronization, one-active
+Stay/Switch behavior, maximum font/display scale, and TalkBack state/action
+semantics. The legacy overlap label remains automated-only because no suitable
+legacy pair was available on the device. Live Expo delivery remains a separate
+blocked evidence gate pending working project identity, credentials, and device
+token; it does not block this acceptance. Task 0039 remains Accepted.
 
 ### 4. Phase 2: focus and body doubling
 

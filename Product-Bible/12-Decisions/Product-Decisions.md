@@ -245,5 +245,49 @@ Warm, gray and dark are included user-selectable backgrounds in the free/default
   Timeline corrective packages. Push-delivery smoke is still externally blocked
   by the missing working EAS `projectId`, credentials, and device push token and
   is not treated as passed.
-- `Сейчас по плану / конкурентная модель` is a new, unimplemented product
-  iteration outside Task 0039; it is not added retroactively to this decision.
+- `Сейчас по плану / конкурентная модель` is a new product iteration outside
+  Task 0039; its later Task 0041 implementation is not added retroactively to
+  this accepted decision.
+
+## 2026-09-30 — Planned time is not actual work (Task 0041)
+
+- `Сейчас по плану` is a derived presentation state for an unstarted task whose
+  scheduled interval contains the shared wall-clock instant. It is not stored.
+- Only explicit Start creates `startedAt`, `Выполняется`, elapsed time, diagonal
+  fill, and settling motion. Scheduled time never claims actual work.
+- When an unstarted interval ends it becomes the neutral `Не начато`; after the
+  next profile-day boundary, the existing Recovery rules remain authoritative.
+- Active A and planned-now B may coexist. A remains the only active task;
+  starting B reuses Stay/Switch and never completes A.
+- Multiple legacy overlapping tasks may be planned-now. Existing elastic lanes
+  remain visible and one `Задачи пересекаются` label describes each connected
+  group without weakening server conflict validation.
+- Scheduled-start notification copy is `По плану сейчас: «Название задачи»`.
+  Redis jobs remain title-free; the worker reloads canonical content at delivery
+  and suppresses deleted, rescheduled, started, completed, and non-task rows.
+  The task title and route identity are intentionally visible in the delivery
+  payload so the invitation is specific and opens the correct Today card.
+- This decision is Task 0041 only. Task 0039 remains Accepted from 2026-09-28.
+
+## 2026-10-02 — Task 0041 physical acceptance close-out
+
+- Task 0041 is **Accepted from 2026-10-02**. The Realme smoke physically
+  confirmed `Запланировано` → `Сейчас по плану` → `Не начато`, explicit Start as
+  the only path to `Выполняется`, and the absence of false `startedAt`, elapsed,
+  fill, or settling motion before Start.
+- Background/resume preserved the running task and resynchronized the derived
+  state at the minute boundary without manual refresh. Maximum font/display
+  scale remained operable, and TalkBack distinguished the planned, running,
+  missed, and Start-action semantics.
+- The existing Stay/Switch decision remains authoritative for active A plus
+  planned-now B. Device evidence confirmed that Stay preserves A, Switch makes B
+  the only running task, neither path falsely completes A, and the completion
+  counter is unchanged by the conflict decision.
+- The legacy overlap label is accepted on automated evidence only; no suitable
+  legacy overlap pair was available for a separate Realme smoke.
+- Real push delivery remains blocked by missing working EAS `projectId`,
+  credentials, and device push token. Programmatic copy, suppression,
+  idempotency, and routing evidence is retained, and the external device-push
+  gate does not block Task 0041 acceptance.
+- Task 0039 remains Accepted from 2026-09-28 and is not reopened or extended by
+  this close-out.

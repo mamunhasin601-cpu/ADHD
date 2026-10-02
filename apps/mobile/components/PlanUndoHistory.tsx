@@ -116,7 +116,7 @@ export function PlanUndoHistory() {
       })}
 
       {resultMessage ? (
-        <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.result, { color: theme.textSecondary }]}> 
+        <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.result, { color: theme.textSecondary }]}>
           {resultMessage}
         </Text>
       ) : null}

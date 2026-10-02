@@ -19,7 +19,7 @@ import { useOrbitsTheme } from "../theme/orbits";
 import { normalizeTaskColor, taskInkWash, taskTextColor } from "./today/task-color";
 import { isValidIANATimezone } from "../lib/timezone";
 
-type NowCardMode = "current" | "upcoming";
+type NowCardMode = "planned-now" | "not-started" | "upcoming" | "current";
 
 interface Props {
   task: Task;
@@ -128,8 +128,14 @@ export function NowCard({
         timeZone: profileTimezone && isValidIANATimezone(profileTimezone) ? profileTimezone : undefined,
       })
     : null;
-  const isCurrent = mode === "current";
   const isStarted = task.startedAt !== null;
+  const stateLabel = isStarted
+    ? 'Выполняется'
+    : mode === 'planned-now' || mode === 'current'
+      ? 'Сейчас по плану'
+      : mode === 'not-started'
+        ? 'Не начато'
+        : 'Запланировано';
   const savePending = isSavingFirstStep || localSavePending;
   const actionsDisabled = isStarting || isCompleting || savePending || modalStartPending;
   const accent = normalizeTaskColor(task.color, theme.brand);
@@ -191,7 +197,17 @@ export function NowCard({
   }
 
   return (
-    <View testID="now-card" style={[styles.card, embeddedInTimeline && styles.embeddedCard, { backgroundColor: theme.surfacePrimary, borderColor: accentBorder, shadowColor: theme.elevationShadow }]} accessibilityRole="summary">
+    <View
+      testID="now-card"
+      style={[
+        styles.card,
+        embeddedInTimeline && styles.embeddedCard,
+        (mode === 'planned-now' || mode === 'current') && styles.plannedNowCard,
+        { backgroundColor: theme.surfacePrimary, borderColor: mode === 'not-started' ? theme.borderSubtle : accentBorder, shadowColor: theme.elevationShadow },
+      ]}
+      accessibilityRole="summary"
+      accessibilityLabel={`${task.title}. ${stateLabel}${time ? `. Запланировано на ${time}` : ''}`}
+    >
       <View testID="now-card-accent-rail" style={[styles.accentRail, { backgroundColor: accent }]} />
       <View style={styles.headerRow}>
         <Pressable
@@ -205,7 +221,7 @@ export function NowCard({
           onPress={() => onOpenTask(task)}
           style={({ pressed }) => [styles.headerCopy, pressed && styles.buttonPressed]}
         >
-          <Text style={[styles.eyebrow, { color: accent }]}>{isStarted ? 'Начато' : isCurrent ? 'Сейчас' : 'Дальше'}</Text>
+          <Text style={[styles.eyebrow, { color: mode === 'not-started' ? theme.textSecondary : accent }]}>{stateLabel}</Text>
           <Text style={[styles.meta, { color: theme.textSecondary }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
             {time ?? 'Без времени'}  •  {task.durationMinutes === null ? 'Не знаю' : `${task.durationMinutes} мин`}
           </Text>
@@ -360,6 +376,10 @@ const styles = StyleSheet.create({
   embeddedCard: {
     marginHorizontal: 0,
     marginVertical: 0,
+  },
+  plannedNowCard: {
+    borderWidth: 2,
+    elevation: 4,
   },
   headerRow: {
     flexDirection: 'row',

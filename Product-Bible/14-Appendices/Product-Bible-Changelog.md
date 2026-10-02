@@ -213,5 +213,35 @@ Task 0039 идёт через Phase A (spec), Phase B (Today-first implementatio
   corrective packages without rewriting the earlier dated checkpoints.
 - Kept push-delivery smoke explicitly blocked by the missing working EAS
   `projectId`, credentials, and device push token; no push pass is claimed.
-- Recorded `Сейчас по плану / конкурентная модель` as a new, unimplemented
-  product iteration outside Task 0039.
+- Recorded `Сейчас по плану / конкурентная модель` as a new product iteration
+  outside Task 0039; its later delivery is tracked independently in Task 0041.
+
+## 2026-09-30 — Task 0041 planned-now state
+
+- Added derived `Сейчас по плану` and neutral `Не начато` presentation without a
+  persisted status, schema change, migration, automatic Start, or completion.
+- Kept `Выполняется`, elapsed/fill/wave, single-active, Stay/Switch, early Start,
+  future completion, and Recovery tied to the existing explicit lifecycle.
+- Unified NowCard and Timeline on one wall-clock state model and added one
+  accessible `Задачи пересекаются` cue per legacy overlap group without
+  weakening conflict validation.
+- Changed scheduled-start notification copy to the honest invitation
+  `По плану сейчас: «Название задачи»`; delivery revalidates canonical task
+  state and routes to the correct profile day/card while Redis stays title-free.
+- Kept Task 0039 Accepted and retained live push as an external evidence gate.
+
+## 2026-10-02 — Task 0041 physical acceptance close-out
+
+- Marked Task 0041 **Accepted from 2026-10-02** after the Realme smoke confirmed
+  the planned/current/missed transitions, explicit-only running state, and the
+  absence of inferred elapsed/fill/wave before Start.
+- Recorded minute-boundary and background/resume resynchronization, preservation
+  of the running task, readable maximum font/display scale, and TalkBack state
+  and Start-action semantics.
+- Recorded the physical Stay/Switch evidence: one running task, no false
+  completion, no second wave or duplicate CTA, and no completion-counter change.
+- Kept the legacy overlap label as automated-only evidence because no suitable
+  legacy pair was available for device smoke.
+- Kept real push delivery blocked on working EAS project identity, credentials,
+  and device token without making that external evidence gate a condition of
+  Task 0041 acceptance. Task 0039 remains Accepted from 2026-09-28.

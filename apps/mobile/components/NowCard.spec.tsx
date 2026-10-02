@@ -75,7 +75,7 @@ describe("NowCard regressions", () => {
 describe("NowCard explicit start", () => {
   beforeEach(() => jest.clearAllMocks());
   it.each([
-    ["current", "Сейчас"], ["upcoming", "Дальше"],
+    ["current", "Сейчас по плану"], ["upcoming", "Запланировано"],
   ] as const)("offers one explicit start for an unstarted %s task", (mode, context) => {
     render(<NowCard task={task} mode={mode} {...props} />);
     expect(screen.getByText(context)).toBeTruthy();
@@ -98,7 +98,7 @@ describe("NowCard explicit start", () => {
 
   it("shows confirmed start and delegates completion", () => {
     render(<NowCard task={{ ...task, startedAt: new Date("2026-08-12T14:31:07Z") }} mode="current" {...props} />);
-    expect(screen.getByText("Начато")).toBeTruthy();
+    expect(screen.getByText("Выполняется")).toBeTruthy();
     fireEvent.press(screen.getByTestId("now-card-completion"));
     expect(props.onComplete).toHaveBeenCalledTimes(1);
     expect(props.onComplete).toHaveBeenCalledWith(task.id);
@@ -177,7 +177,7 @@ describe("NowCard difficult start", () => {
     expect(screen.getByText("Начать с этого шага")).toBeTruthy();
     view.rerender(<NowCard task={{ ...startedTask, startedAt: new Date("2026-08-14T10:20:00Z") }} mode="current" {...props} onStart={onStart} />);
     await waitFor(() => expect(screen.queryByText("Начать с малого")).toBeNull());
-    expect(screen.getByText("Начато")).toBeTruthy();
+    expect(screen.getByText("Выполняется")).toBeTruthy();
     expect(screen.queryByText("Мне трудно начать")).toBeNull();
   });
 
@@ -298,7 +298,7 @@ describe("NowCard difficult start", () => {
 
     view.rerender(<NowCard task={{ ...task, startedAt: new Date("2026-08-14T12:00:00Z") }} mode="current" {...props} onSaveFirstStep={onSaveFirstStep} />);
     await waitFor(() => expect(screen.queryByText("Начать с малого")).toBeNull());
-    expect(screen.getByText("Начато")).toBeTruthy();
+    expect(screen.getByText("Выполняется")).toBeTruthy();
     expect(screen.getByTestId("now-card-completion")).not.toBeDisabled();
 
     await act(async () => resolveSave({ ...task, firstStep: "Устаревший ответ" }));
@@ -413,7 +413,7 @@ describe("NowCard difficult start", () => {
     await act(async () => resolveB());
     view.rerender(<NowCard task={{ ...taskB, startedAt: new Date("2026-08-14T11:00:00Z") }} mode="current" {...props} onStart={onStart} />);
     await waitFor(() => expect(screen.queryByText("Начать с малого")).toBeNull());
-    expect(screen.getByText("Начато")).toBeTruthy();
+    expect(screen.getByText("Выполняется")).toBeTruthy();
     expect(screen.queryByText("Шаг A")).toBeNull();
   });
 

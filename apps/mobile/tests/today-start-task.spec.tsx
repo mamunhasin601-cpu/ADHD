@@ -4,6 +4,7 @@ const mockToggle = jest.fn();
 const mockUpdate = jest.fn();
 let mockTasks: any[] = [];
 let mockProfileTimezone = 'UTC';
+let mockRouteParams: { notificationTaskId?: string; notificationScheduledFor?: string } = {};
 const mockUseTasksForDate = jest.fn((_date: Date, _timezone?: string | null) => ({
   data: mockTasks,
   isLoading: false,
@@ -17,7 +18,7 @@ let mockUpdateImplementation: (input: { id: string; dto: { firstStep: string } }
 
 let mockInvitationDisposition: 'available' | 'deferred' = 'deferred';
 jest.mock("../lib/notification-lifecycle", () => ({ useNotificationLifecycle: () => ({ permission: "not-asked", invitation: mockInvitationDisposition, busy: false, error: null, requestPermission: jest.fn(), deferInvitation: jest.fn(), openSettings: jest.fn() }) }));
-jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }), useFocusEffect: jest.fn() }));
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }), useFocusEffect: jest.fn(), useLocalSearchParams: () => mockRouteParams }));
 jest.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ refetchQueries: jest.fn() }) }));
 jest.mock('../lib/api/tasks', () => {
   const React = require('react');
@@ -111,7 +112,7 @@ describe('Today explicit task start', () => {
   beforeAll(() => { jest.useFakeTimers(); jest.setSystemTime(new Date('2026-08-14T10:15:00Z')); });
   afterAll(() => jest.useRealTimers());
   beforeEach(() => {
-    jest.clearAllMocks(); mockInvitationDisposition = 'deferred'; mockProfileTimezone = 'UTC'; mockTasks = [scheduled('current', '2026-08-14T10:00:00Z')];
+    jest.clearAllMocks(); mockInvitationDisposition = 'deferred'; mockProfileTimezone = 'UTC'; mockRouteParams = {}; mockTasks = [scheduled('current', '2026-08-14T10:00:00Z')];
     mockStartImplementation = async (input) => {
       const id = typeof input === 'string' ? input : input.id;
       const server = { ...mockTasks.find((task) => task.id === id), startedAt: new Date('2026-08-14T10:16:27.456Z') };
@@ -147,10 +148,10 @@ describe('Today explicit task start', () => {
     expect(toCanonicalDateParam(selectedDate, timezone)).toBe('2026-08-16');
     expect(toCanonicalDateParam(instant, timezone)).toBe('2026-08-16');
     expect(screen.getByText('Новый день')).toBeTruthy();
-    expect(screen.getByText('Сейчас')).toBeTruthy();
+    expect(screen.getByText('Сейчас по плану')).toBeTruthy();
     expect(screen.getByText('Начать')).toBeTruthy();
     expect(screen.getByText('Мне трудно начать')).toBeTruthy();
-    expect(screen.queryByText('Начато')).toBeNull();
+    expect(screen.queryByText('Выполняется')).toBeNull();
     expect(mockStart).not.toHaveBeenCalled();
     mockInvitationDisposition = 'available';
     const invitationView = render(<TodayScreen />);
@@ -161,10 +162,10 @@ describe('Today explicit task start', () => {
 
   it('does not auto-start when scheduled time arrives and starts once with canonical response', async () => {
     const originalStart = mockTasks[0].startTime; render(<TodayScreen />);
-    expect(mockStart).not.toHaveBeenCalled(); expect(screen.getByText('Сейчас')).toBeTruthy();
+    expect(mockStart).not.toHaveBeenCalled(); expect(screen.getByText('Сейчас по плану')).toBeTruthy();
     expect(screen.getByText('Начать')).toBeTruthy(); expect(screen.queryByText('Завершить')).toBeNull();
     await act(async () => { fireEvent.press(screen.getByText('Начать')); });
-    expect(screen.getByText('Начато')).toBeTruthy();
+    expect(screen.getByText('Выполняется')).toBeTruthy();
     expect(mockStart).toHaveBeenCalledTimes(1); expect(mockStart).toHaveBeenCalledWith('current');
     expect(mockTasks[0].startedAt).toEqual(new Date('2026-08-14T10:16:27.456Z'));
     expect(mockTasks[0].startTime).toBe(originalStart);
@@ -174,9 +175,26 @@ describe('Today explicit task start', () => {
     fireEvent.press(screen.getByTestId('now-card-completion')); expect(mockToggle).toHaveBeenCalledWith('current');
   });
 
+  it('opens a reminder tap on the canonical profile day and focuses its task', async () => {
+    mockRouteParams = {
+      notificationTaskId: 'reminded',
+      notificationScheduledFor: '2026-08-13T15:00:00.000Z',
+    };
+    mockTasks = [scheduled('reminded', '2026-08-13T15:00:00.000Z')];
+
+    render(<TodayScreen />);
+
+    await waitFor(() => {
+      const [selectedDate, timezone] = mockUseTasksForDate.mock.calls[mockUseTasksForDate.mock.calls.length - 1];
+      expect(toCanonicalDateParam(selectedDate, timezone)).toBe('2026-08-13');
+    });
+    expect(screen.getByText('Задача reminded')).toBeTruthy();
+    expect(screen.getByText('Не начато')).toBeTruthy();
+  });
+
   it('shows explicit start for an upcoming task', () => {
     mockTasks = [scheduled('upcoming', '2026-08-14T11:00:00Z')]; render(<TodayScreen />);
-    expect(screen.getByText('Дальше')).toBeTruthy(); expect(screen.getByText('Начать')).toBeTruthy();
+    expect(screen.getByText('Запланировано')).toBeTruthy(); expect(screen.getByText('Начать')).toBeTruthy();
   });
 
   it.each(['REST', 'BUFFER'] as const)(
@@ -190,7 +208,7 @@ describe('Today explicit task start', () => {
 
       render(<TodayScreen />);
 
-      expect(screen.getByText('Дальше')).toBeTruthy();
+      expect(screen.getByText('Запланировано')).toBeTruthy();
       expect(screen.getByText('Задача next')).toBeTruthy();
       expect(screen.queryByText('Задача unknown')).toBeNull();
       expect(screen.queryByText('Задача block')).toBeNull();
@@ -284,7 +302,7 @@ describe('Today explicit task start', () => {
     mockTasks = [scheduled('current', '2026-08-14T10:00:00Z')]; view.rerender(<TodayScreen />);
     mockStartImplementation = async () => { const server = { ...mockTasks[0], startedAt: new Date('2026-08-14T10:20:00Z') }; mockTasks = [server]; return server; };
     await act(async () => { fireEvent.press(screen.getByText('Начать')); });
-    expect(screen.getByText('Начато')).toBeTruthy(); expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByText('Выполняется')).toBeTruthy(); expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('does not carry errors or render a live Now Card on another selected date', async () => {
@@ -310,7 +328,7 @@ describe('Today explicit task start', () => {
     await act(async () => fireEvent.press(screen.getByText('Начать с этого шага')));
     expect(mockStart).toHaveBeenCalledTimes(1);
     expect(screen.queryByText('Начать с малого')).toBeNull();
-    expect(screen.getByText('Начато')).toBeTruthy();
+    expect(screen.getByText('Выполняется')).toBeTruthy();
   });
 
   it('retains Today save failure for retry and guards rapid duplicate saves', async () => {
@@ -346,7 +364,7 @@ describe('Today explicit task start', () => {
     expect(screen.getByText('Сохранённый шаг')).toBeTruthy();
     mockStartImplementation = async () => { const server = { ...mockTasks[0], startedAt: new Date('2026-08-14T10:30:00Z') }; mockTasks = [server]; return server; };
     await act(async () => fireEvent.press(screen.getByText('Начать с этого шага')));
-    expect(mockStart).toHaveBeenCalledTimes(2); expect(screen.getByText('Начато')).toBeTruthy();
+    expect(mockStart).toHaveBeenCalledTimes(2); expect(screen.getByText('Выполняется')).toBeTruthy();
   });
 
   it('cancels a future completion by action, backdrop, or Android back without mutation or progress flash', () => {

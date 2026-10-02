@@ -57,14 +57,24 @@ export default function RootLayout() {
     void bootstrapTheme();
   }, [bootstrapTheme]);
 
-  // Notification-tap listener: routes generic task-reminder taps to Today.
+  // Notification-tap listener: routes task reminders to their canonical Today card.
   useEffect(() => {
     const subscription = Notifications.addNotificationResponseReceivedListener(
       (response) => {
-        const data = response.notification.request.content.data as { type?: string };
+        const data = response.notification.request.content.data as {
+          type?: string;
+          taskId?: string;
+          scheduledFor?: string;
+        };
         if (data?.type === 'task-reminder' && isNavigatorMountedRef.current) {
           try {
-            routerRef.current.navigate('/(tabs)/today');
+            routerRef.current.navigate(data.taskId && data.scheduledFor ? {
+              pathname: '/(tabs)/today',
+              params: {
+                notificationTaskId: data.taskId,
+                notificationScheduledFor: data.scheduledFor,
+              },
+            } : '/(tabs)/today');
           } catch {
             // Navigation failure is non-fatal.
           }

@@ -7,7 +7,7 @@ let mockOnboarding = true;
 let mockPermission: 'not-asked' | 'granted' | 'denied' = 'not-asked';
 let mockInvitation: 'available' | 'deferred' = 'available';
 
-jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }), useFocusEffect: jest.fn() }));
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }), useFocusEffect: jest.fn(), useLocalSearchParams: () => ({}) }));
 jest.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ refetchQueries: jest.fn() }) }));
 jest.mock('../lib/notification-lifecycle', () => ({ useNotificationLifecycle: () => ({ permission: mockPermission, invitation: mockInvitation, busy: false, error: null, requestPermission: mockRequestPermission, deferInvitation: jest.fn(), openSettings: jest.fn() }) }));
 jest.mock('../lib/api/tasks', () => ({

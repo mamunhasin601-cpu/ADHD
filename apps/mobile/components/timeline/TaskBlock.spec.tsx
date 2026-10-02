@@ -53,14 +53,59 @@ describe('TaskBlock compact state treatment', () => {
     const checkbox = screen.getByRole('checkbox');
     expect(checkbox.props.accessibilityState.checked).toBe(Boolean(completedAt));
     if (state === 'current') {
-      expect(screen.getByText('Сейчас')).toBeTruthy();
-      expect(screen.getByRole('button').props.accessibilityLabel).toContain('Сейчас');
+      expect(screen.getByText('Сейчас по плану')).toBeTruthy();
+      expect(screen.getByRole('button').props.accessibilityLabel).toContain('Сейчас по плану');
     }
     if (state === 'completed') {
       expect(screen.getByText('✓')).toBeTruthy();
       expect(checkbox.props.accessibilityLabel).toContain('Вернуть');
     }
   });
+});
+
+it('offers late Start for planned-now and missed states without inferring elapsed progress', () => {
+  const onStart = jest.fn();
+  const task = makeTask('late', '2026-08-13T11:30:00.000Z', 30);
+  const view = render(
+    <TaskBlock
+      task={task}
+      presentationState="planned-now"
+      onStart={onStart}
+      onToggle={jest.fn()}
+      onOpen={jest.fn()}
+    />,
+  );
+  expect(screen.getByText('Сейчас по плану')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('task-start-late'));
+  expect(onStart).toHaveBeenCalledWith('late');
+  expect(screen.queryByTestId('task-elapsed-fill-late')).toBeNull();
+
+  view.rerender(
+    <TaskBlock
+      task={task}
+      presentationState="not-started"
+      onStart={onStart}
+      onToggle={jest.fn()}
+      onOpen={jest.fn()}
+    />,
+  );
+  expect(screen.getByText('Не начато')).toBeTruthy();
+  expect(screen.getByTestId('task-start-late')).toBeTruthy();
+});
+
+it('announces one neutral schedule-conflict cue as part of the measured card', () => {
+  const task = makeTask('overlap-label', '2026-08-13T11:30:00.000Z', 30);
+  render(
+    <TaskBlock
+      task={task}
+      showScheduleConflict
+      layoutHeight={32}
+      onToggle={jest.fn()}
+      onOpen={jest.fn()}
+    />,
+  );
+  expect(screen.getByTestId('task-conflict-label-overlap-label').props.children).toBe('Задачи пересекаются');
+  expect(screen.getByRole('button').props.accessibilityLabel).toContain('Задачи пересекаются');
 });
 
 it('separates open, completion, and long-press actions', () => {

@@ -109,16 +109,24 @@ describe('scheduleLocalReminder', () => {
     );
   });
 
-  it('uses generic non-sensitive content (no task title in payload)', async () => {
-    const task = makeTask({ id: 'task-1', title: 'Sensitive: meet client at noon' });
+  it('uses honest planned-now copy and a minimal canonical route payload', async () => {
+    const task = makeTask({ id: 'task-1', title: 'Позвонить клиенту' });
     await scheduleLocalReminder(task, true);
 
     const call = mockSchedule.mock.calls[0][0];
     expect(call.content.title).toBe('Focus');
-    expect(call.content.body).not.toMatch(/sensitive|client|noon/i);
-    expect(call.content.data).not.toHaveProperty('taskId');
+    expect(call.content.body).toBe('По плану сейчас: «Позвонить клиенту»');
+    expect(call.content.data.taskId).toBe('task-1');
+    expect(call.content.data.scheduledFor).toBe(new Date(task.startTime!).toISOString());
     expect(call.content.data).not.toHaveProperty('userId');
     expect(call.content.data.type).toBe('task-reminder');
+  });
+
+  it.each(['startedAt', 'completedAt'] as const)('cancels stale state and suppresses a task with %s', async (field) => {
+    const task = makeTask({ [field]: new Date() });
+    await scheduleLocalReminder(task, true);
+    expect(mockCancel).toHaveBeenCalledWith(`focus-task-reminder-${task.id}`);
+    expect(mockSchedule).not.toHaveBeenCalled();
   });
 
   it('is a no-op scheduling when localOnly=false, but DOES cancel stale reminder (0011B blocker 3)', async () => {
